@@ -16,7 +16,7 @@ leanzempic generates code, and its runtime uses `unsafeCoerce` and mutable buffe
 
 ## Reporting a vulnerability
 
-Please do not open a public issue for a suspected vulnerability. Email the maintainer, or use
+Please do not open a public issue for a suspected vulnerability. Email keith.adler@icloud.com, or use
 GitHub's private vulnerability reporting for this repository. Expect an acknowledgement within a
 few days; this is a single-maintainer project.
 
