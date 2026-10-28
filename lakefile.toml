@@ -77,3 +77,12 @@ srcDir = "examples"
 name = "stralias"
 root = "StringAliasing"
 srcDir = "examples"
+
+[[lean_lib]]
+name = "AES"
+srcDir = "bench/aes"
+
+[[lean_exe]]
+name = "aesbench"
+root = "AesBench"
+srcDir = "bench/aes"

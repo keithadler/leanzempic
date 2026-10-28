@@ -25,9 +25,15 @@ First complete version.
   differential fuzzer, and mutation checks of the riskiest components. CI on macOS and Linux.
 * Machine-checked facts (Tenet-verified): name mangling is injective, the `coerce` laws, the
   version and mode checks.
+* An AES-256 benchmark from a proved development (`bench/aes`, checked against OpenSSL).
 * A GHC Core plugin spike (`plugin/`), which showed no speedup and is not part of the product.
 
 ### Changed
+* A self-recursive call whose `Nat` argument is a literal up to `zempic.unroll` (default 16) is
+  specialized per count and unrolled, with branches on known numbers dropped; bodies over 60
+  bindings (counting callees) are left alone, and each function gets at most 64 copies.
+* Structure fields whose type is a reducible alias (`abbrev Byte := UInt8`) now use the aliased
+  type instead of `Any`.
 * The ownership analysis tracks constructor-cell nesting to depth 12 (was 3), so loops with many
   mutable variables get in-place array updates.
 

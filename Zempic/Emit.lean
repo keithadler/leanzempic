@@ -15,6 +15,12 @@ open Lean Compiler LCNF
 
 namespace Zempic
 
+/-- Largest literal that a recursive call's counter may have for the call to be unrolled. -/
+register_option zempic.unroll : Nat := {
+  defValue := 16
+  descr := "(leanzempic) unroll self-recursive calls whose Nat argument is a literal up to this; 0 = off"
+}
+
 /-! ## Names -/
 
 /-- Haskell name of a compiled Lean function. -/
@@ -160,6 +166,19 @@ structure St where
   destr : Std.HashSet (Name × FVarId) := {}
   /-- The function being printed (variable ids repeat across functions). -/
   cur : Name := Name.anonymous
+  /-- Variables known to be this `Nat` literal in the function being printed. -/
+  known : Std.HashMap FVarId Nat := {}
+  /-- Variables known to be this `Bool` (a comparison of known numbers). -/
+  knownB : Std.HashMap FVarId Bool := {}
+  /-- Largest literal counter a recursive call is specialized on; 0 turns specializing off. -/
+  unrollMax : Nat := 16
+  /-- Specialized copies of recursive functions still to print: function and, per parameter, the
+  literal it is fixed to. -/
+  vqueue : Array (Name × Array (Option Nat)) := #[]
+  /-- Names of the specialized copies ever queued. -/
+  vseen : Std.HashSet String := {}
+  /-- How many copies each function has, to bound code growth. -/
+  vcount : Std.HashMap Name Nat := {}
 
 /-- The emitter monad. -/
 abbrev EmitM := StateRefT St CoreM
@@ -276,6 +295,12 @@ partial def hsTyWith (env : List String) (e : Expr) : EmitM String := do
             | none => pure "Any"
           ts := ts.push (paren t)
       return if ts.isEmpty then typeName n else typeName n ++ " " ++ " ".intercalate ts.toList
+    | some (.defnInfo d) =>
+      -- A type alias (`abbrev Byte := UInt8`) has the layout of what it abbreviates.
+      if getReducibilityStatusCore (← getEnv) n == .reducible then
+        let body := (d.value.instantiateLevelParams d.levelParams e.getAppFn.constLevels!).beta e.getAppArgs
+        hsTyWith env body
+      else return "Any"
     | _ => return "Any"
   | _ => return "Any"
 
@@ -441,6 +466,109 @@ def atomT : Arg .pure → EmitM (String × String)
   | .fvar id => return (← lookup id, ← tyOf id)
   | _ => return ("erased", "Any")
 
+/-- Does the code call constant `n`? -/
+partial def callsConst (n : Name) : Code .pure → Bool
+  | .let d k => (match d.value with | .const c _ _ => c == n | _ => false) || callsConst n k
+  | .fun d k => callsConst n d.value || callsConst n k
+  | .jp d k => callsConst n d.value || callsConst n k
+  | .cases cs => cs.alts.any fun
+    | .alt _ _ k => callsConst n k
+    | .default k => callsConst n k
+  | _ => false
+
+/-- Number of bindings in the code, and the constants it calls. -/
+partial def sizeCalls (c : Code .pure) (acc : Nat × Array Name) : Nat × Array Name :=
+  match c with
+  | .let d k =>
+    let acc := (acc.1 + 1, match d.value with
+      | .const n _ _ => if acc.2.contains n then acc.2 else acc.2.push n
+      | _ => acc.2)
+    sizeCalls k acc
+  | .fun d k => sizeCalls k (sizeCalls d.value (acc.1 + 1, acc.2))
+  | .jp d k => sizeCalls k (sizeCalls d.value (acc.1 + 1, acc.2))
+  | .cases cs => cs.alts.foldl (fun a alt => match alt with
+      | .alt _ _ k => sizeCalls k (a.1 + 1, a.2)
+      | .default k => sizeCalls k (a.1 + 1, a.2)) acc
+  | _ => acc
+
+/-- Size of function `c` with everything it calls that we compile, to depth 3: GHC inlines small
+callees into an unrolled copy, so the copy's real size is theirs too. -/
+partial def deepSize (c : Name) (depth : Nat) (seen : Array Name) : EmitM (Nat × Array Name) := do
+  if seen.contains c || depth == 0 then return (0, seen)
+  let seen := seen.push c
+  let some d ← monoDecl? c | return (0, seen)
+  let .code body := d.value | return (0, seen)
+  let (n, calls) := sizeCalls body (0, #[])
+  let mut total := n
+  let mut seen := seen
+  for k in calls do
+    let (m, s') ← deepSize k (depth - 1) seen
+    total := total + m
+    seen := s'
+  return (total, seen)
+
+/-- Most bindings (counting what it calls) a function may have to be unrolled: bigger bodies
+would multiply into code GHC cannot compile in reasonable time. -/
+def unrollBudget : Nat := 60
+
+/-- Haskell name of the copy of `c` with its parameters fixed to `ks` (`none`: left free). -/
+def variantName (c : Name) (ks : Array (Option Nat)) : String :=
+  fnName c ++ "_u" ++ "_".intercalate (ks.toList.map fun | some v => toString v | none => "x")
+
+/-- Remember the value of a `let` when it is a literal or arithmetic or a comparison of known
+numbers. In word mode a value of 2^64 or more is left unknown, so it still raises `ZOverflow`. -/
+def noteKnown (d : LetDecl .pure) : EmitM Unit := do
+  let s ← get
+  let lim := if s.fast then 2 ^ 64 else 2 ^ 128
+  let kn (a : Arg .pure) : Option Nat := match a with | .fvar f => s.known[f]? | _ => none
+  match d.value with
+  | .lit (.nat n) => if n < lim then modify fun s => { s with known := s.known.insert d.fvarId n }
+  | .const c _ #[a, b] =>
+    let (some x, some y) := (kn a, kn b) | return
+    let r? : Option Nat :=
+      if c == ``Nat.add then some (x + y) else if c == ``Nat.sub then some (x - y)
+      else if c == ``Nat.mul then some (x * y) else none
+    if let some r := r? then
+      if r < lim then modify fun s => { s with known := s.known.insert d.fvarId r }
+    let b? : Option Bool :=
+      if c == ``Nat.decEq || c == ``Nat.beq then some (x == y)
+      else if c == ``Nat.decLt || c == ``Nat.blt then some (decide (x < y))
+      else if c == ``Nat.decLe || c == ``Nat.ble then some (decide (x ≤ y)) else none
+    if let some v := b? then modify fun s => { s with knownB := s.knownB.insert d.fvarId v }
+  | _ => pure ()
+
+/-- A call to a self-recursive function with a small literal for some `Nat` argument becomes a
+call to a copy of it with that argument fixed (queued for printing). Its recursive calls are then
+calls with smaller literals, so a loop that counts down from a constant unrolls completely and
+GHC sees straight-line code, as the C compiler does. Returns the copy's name, the types of the
+arguments it still takes, its result type and those arguments. -/
+def tryUnroll (c : Name) (args : Array (Arg .pure)) :
+    EmitM (Option (String × List String × String × Array (String × String))) := do
+  let s ← get
+  if s.unrollMax == 0 then return none
+  let ks : Array (Option Nat) := args.map fun
+    | .fvar f => match s.known[f]? with | some v => if v ≤ s.unrollMax then some v else none | none => none
+    | _ => none
+  unless ks.any (·.isSome) do return none
+  let some d ← monoDecl? c | return none
+  let .code body := d.value | return none
+  if args.size != d.params.size || !callsConst c body then return none
+  let name := variantName c ks
+  unless s.vseen.contains name do
+    if (← deepSize c 3 #[]).1 > unrollBudget then return none
+    let cnt := s.vcount.getD c 0
+    if cnt ≥ 64 then return none
+    modify fun s => { s with vseen := s.vseen.insert name, vqueue := s.vqueue.push (c, ks),
+                             vcount := s.vcount.insert c (cnt + 1) }
+  let tys ← d.params.toList.mapM (hsTyM ·.type)
+  let mut ptys : List String := []
+  let mut free : Array (String × String) := #[]
+  for a in args, k in ks, t in tys do
+    if k.isNone then
+      ptys := ptys ++ [t]
+      free := free.push (← atomT a)
+  return some (name, ptys, ← declRetM d, free)
+
 /-- Expression and its Haskell type. -/
 def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (String × String) :=
   match v with
@@ -472,8 +600,10 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
       let pat := s!"{ctorName c} {" ".intercalate ps}"
       return (s!"(case ({x} :: {full}) of \{ {pat} -> p{i} })", ftys.getD i "Any")
     | none => unsupported s!"projection on {t}"; return ("erased", "Any")
-  | .const c _ args => do
-    let args ← args.mapM atomT
+  | .const c _ argsRaw => do
+    if let some (hs, ptys, ret, free) ← tryUnroll c argsRaw then
+      return apply hs ptys ret free false
+    let args ← argsRaw.mapM atomT
     match ← resolve c letTy with
     | .prim hs ptys ret =>
       -- The analysis proved this array operation may update in place: use the in-place primitive.
@@ -491,6 +621,7 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
     let (rhs, ty) ← hsLetValue d.value d.type d.fvarId
     noteExpr d.fvarId d.type
     let x ← bindT d.fvarId d.binderName ty
+    noteKnown d
     let lazy := match d.value with | .const c _ _ => fuseProducers.contains c | _ => false
     let bang := if lazy then "" else "!"
     return s!"let \{ {bang}{x} = {rhs} } in\n{pad ind}{← hsCode k ind ret}"
@@ -520,6 +651,16 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
   | .return x => useAs x ret
   | .unreach _ => return "error \"leanzempic: unreachable\""
   | .cases cs =>
+    -- A test of known numbers has one possible answer: print only that branch.
+    if cs.typeName == `Bool then
+      if let some b := (← get).knownB[cs.discr]? then
+        let want := if b then `Bool.true else `Bool.false
+        let mut pick : Option (Code .pure) := none
+        for a in cs.alts do
+          match a with
+          | .alt n _ k => if n == want then pick := some k
+          | .default k => if pick.isNone then pick := some k
+        if let some k := pick then return ← hsCode k ind ret
     noteType cs.typeName
     let dty? := (← get).exprTys[cs.discr]?
     let targs ← match dty? with
@@ -564,6 +705,7 @@ end
 /-- Print one declaration as a typed Haskell function. -/
 def hsDecl (d : Decl .pure) : EmitM String := do
   let .code body := d.value | return ""
+  modify fun s => { s with known := {}, knownB := {} }
   let ps ← d.params.mapM bindP
   let n := fnName d.name
   let ret ← declRetM d
@@ -571,6 +713,30 @@ def hsDecl (d : Decl .pure) : EmitM String := do
   let sig := " -> ".intercalate (ptys ++ [ret])
   let body ← hsCode body 1 ret
   return s!"{n} :: {sig}\n{n} {" ".intercalate ps.toList} =\n{pad 1}{body}\n"
+
+/-- Print the copy of `d` whose parameters `ks` are fixed to literals. It takes only the other
+parameters; `INLINE` lets GHC splice the chain of copies of an unrolled loop into straight-line
+code. -/
+def hsVariant (d : Decl .pure) (ks : Array (Option Nat)) : EmitM String := do
+  let .code body := d.value | return ""
+  modify fun s => { s with known := {}, knownB := {} }
+  let ps ← d.params.mapM bindP
+  let tys ← d.params.toList.mapM (hsTyM ·.type)
+  let ret ← declRetM d
+  let mut sig : List String := []
+  let mut names : Array String := #[]
+  let mut pre := ""
+  for p in d.params, k in ks, nm in ps, t in tys do
+    match k with
+    | some v =>
+      modify fun s => { s with known := s.known.insert p.fvarId v }
+      pre := pre ++ s!"let \{ !{nm} = ({v} :: ZNat) } in\n{pad 1}"
+    | none =>
+      sig := sig ++ [t]
+      names := names.push nm
+  let n := variantName d.name ks
+  let body ← hsCode body 1 ret
+  return s!"{n} :: {" -> ".intercalate (sig ++ [ret])}\n{n} {" ".intercalate names.toList} =\n{pad 1}{pre}{body}\n\{-# INLINE {n} #-}\n"
 
 /-! ## Core-notation printer (for reading; GHC cannot ingest this) -/
 
@@ -671,15 +837,23 @@ def emitModule (modName : String) (roots : Array Name) (natMod : String := "Zemp
     let mut hs : Array String := #[]
     let mut core : Array String := #[]
     let mut i := 0
-    while i < (← get).queue.size do
-      let n := (← get).queue[i]!
-      i := i + 1
-      match ← monoDecl? n with
-      | some d =>
-        modify fun st => { st with cur := n }
-        hs := hs.push (← hsDecl d)
-        core := core.push (← coreDecl d)
-      | none => unsupported s!"constant {n}"
+    let mut vi := 0
+    while i < (← get).queue.size || vi < (← get).vqueue.size do
+      if i < (← get).queue.size then
+        let n := (← get).queue[i]!
+        i := i + 1
+        match ← monoDecl? n with
+        | some d =>
+          modify fun st => { st with cur := n }
+          hs := hs.push (← hsDecl d)
+          core := core.push (← coreDecl d)
+        | none => unsupported s!"constant {n}"
+      else
+        let (n, ks) := (← get).vqueue[vi]!
+        vi := vi + 1
+        if let some d ← monoDecl? n then
+          modify fun st => { st with cur := n }
+          hs := hs.push (← hsVariant d ks)
     -- Declaring a type can mention more types, so go until none are new.
     let mut datas : Array String := #[]
     let mut j := 0
@@ -705,7 +879,7 @@ def emitModule (modName : String) (roots : Array Name) (natMod : String := "Zemp
                "\n".intercalate core.toList }
   let own := zempic.own.get (← getOptions)
   let destr ← if own then Own.analyze roots else pure {}
-  act.run' { fast, destr }
+  act.run' { fast, destr, unrollMax := zempic.unroll.get (← getOptions) }
 
 /-! ## Core-plugin input (spike): LCNF as an s-expression
 

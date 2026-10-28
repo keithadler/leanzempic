@@ -125,3 +125,16 @@ if command -v python3 >/dev/null 2>&1; then
   python3 tools/fuzz.py 1 4 8 >/tmp/fuzz.out 2>&1 || { cat /tmp/fuzz.out; echo "FAIL fuzz"; exit 1; }
   echo "ok fuzz ($(tail -1 /tmp/fuzz.out))"
 fi
+
+# A real proved development: AES-256 from keithadler/lean-aes (bench/aes). Lean's C, leanzempic's Haskell
+# (with recursive-loop unrolling) and OpenSSL must give the same chained ciphertext fingerprint.
+if command -v openssl >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+  sh bench/aes/run.sh 2000 >/dev/null
+  for a in "1 1" "5 7" "40 3"; do
+    set -- $a
+    want=$(python3 tools/aes_oracle.py "$1" "$2")
+    eq "$want" "$(.lake/build/bin/aesbench "$1" "$2")" && eq "$want" "$(build/AesMain "$1" "$2")" \
+      || { echo "FAIL aes n=$1 seed=$2"; exit 1; }
+  done
+  echo "ok aes (AES-256 from lean-aes: Lean C, Haskell and OpenSSL agree)"
+fi

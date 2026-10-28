@@ -533,6 +533,7 @@ The record and multi-variable loops allocate 61 KB in total: the state lives in 
 | list, array and `Option` of pairs | 2e6 | 0.12 s | 0.35 s | 2.9x slower |
 | binary trees of pairs keyed by a closure | 3e5 | 0.79 s | 1.29 s | 1.6x slower |
 | a binary search tree of 1e6 inserts | 1e6 | 0.08 s | 0.09 s | level |
+| AES-256 from a proved development (`lean-aes`), chained blocks | 1e6 | 8.81 s | 15.63 s | 1.8x slower |
 
 Reading these honestly:
 
@@ -543,6 +544,24 @@ Reading these honestly:
   in-place reuse differ most.
 * Compile time was not optimized or compared with Lean's. GHC `-O2` on generated modules is
   slower than Lean's own backend.
+
+### A proved development: AES-256
+
+To check the numbers against something other than microbenchmarks, `bench/aes/` builds the AES-256
+specification from [lean-aes](https://github.com/keithadler/lean-aes) (the FIPS-197 cipher with its
+correctness and wide-trail theorems, 353 declarations verified by Tenet). The four spec files are
+copied unchanged and compile, proofs included, on Lean 4.29.1. Encrypting a block 1e6 times in a row
+takes 8.81 s in Lean's C backend and 15.63 s through leanzempic, and the answers match each other and
+OpenSSL (`tools/aes_oracle.py`, also part of `tests/run.sh`). Run it with `bench/aes/run.sh 100000`.
+
+This is the specification as written, with a bit-loop GF multiply, a table in an `Array` and a key
+schedule rebuilt per block, so it measures how a proved program compiles, not how fast AES can be.
+It found three real problems, now fixed or documented: a 256-bit literal silently moved the whole
+program to the exact `Natural` path (5x slower; build such values from small pieces); reducible
+type aliases such as `abbrev Byte := UInt8` were boxed; and GHC does not unroll the counted loop
+that C compilers unroll, so the emitter now specializes self-recursive calls with a literal counter
+(`set_option zempic.unroll N`, default 16, 0 turns it off; only small bodies are unrolled).
+[`BENCH.md`](BENCH.md) has the full log, including what did not help.
 
 ## Production readiness
 

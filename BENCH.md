@@ -296,3 +296,58 @@ message to stderr).
 **A mistake worth recording.** While writing these tests both programs failed to build, both
 outputs were empty, and my comparison called two empty files "identical". Every comparison in
 `tests/run.sh` now goes through `eq`, which fails on empty output.
+
+
+## A proved development: AES-256 from lean-aes
+
+Source: `keithadler/lean-aes`, AES-256 written from FIPS-197 with its correctness and the wide-trail
+bound proved (353 declarations, re-checked by Tenet). The four spec files (`Basic`, `GF`, `SBox`,
+`Spec`, about 700 lines including the proofs of the field laws) are copied unchanged into
+`bench/aes/AES/` and build under Lean 4.29.1 with all their proofs. The benchmark encrypts one block
+`n` times in a row under one key, each output feeding the next, and prints a fingerprint of the last
+block. It is the specification as written, not a tuned implementation: it recomputes the key
+schedule for every block, multiplies in GF(2^8) with a bit loop, and looks bytes up in a 256-entry
+`Array`. `bench/aes/run.sh N` builds both sides, checks they agree, and times them;
+`tools/aes_oracle.py` computes the same fingerprint with OpenSSL (six seed and length combinations
+agree with both Lean and Haskell; three are in `tests/run.sh`).
+
+| Run | n | Lean C | leanzempic |
+|---|---|---|---|
+| first attempt, key as a 256-bit literal | 1e6 | 8.7 s | 43.6 s (5x slower) |
+| key and block built from bytes, no unrolling | 1e5 | 0.85 s | 2.18 s |
+| same, with recursion unrolling | 1e5 | 0.86 s | 1.54 s |
+| same, with recursion unrolling | 1e6 | 8.81 s | 15.63 s (1.8x slower) |
+
+What each step taught:
+
+1. **A 256-bit literal silently put the whole program on the slow path.** `Key.ofNat 0x0001...1f`
+   contains a number above 2^64. In the `Word` fast path that literal is `overflow`, so the call
+   throws `ZOverflow` and auto mode reruns everything in exact `Natural` arithmetic, including the
+   hot loop. The answer was right and the speed was 5x worse, with nothing to say why. Editing the
+   generated fast module changed nothing, which is how I found it. Building the key from bytes
+   (all values small) keeps the loop on `Word`. This is a real limitation of auto mode: the
+   fallback is per call, not per use.
+2. **`abbrev` types were boxed.** `Byte` is `abbrev Byte := UInt8`, and structure fields of a
+   reducible alias were typed `Any`, so every byte was boxed. The type mapping now unfolds reducible
+   aliases (measured on the slow exact path only: 4.47 s to 3.97 s at 1e5).
+3. **GHC does not unroll recursion; the C compiler does.** `mulLoop 8 a b 0` is a recursive loop with a
+   literal count. Profiled, it took 52% of the time and 79% of the allocation (about 6,600 iterations
+   per block). A hand-unrolled `mul` brought 2.27 s to 1.19 s and 6.1 GB of allocation to 0.8 GB.
+   The emitter now specializes a self-recursive call whose `Nat` argument is a literal up to
+   `zempic.unroll` (default 16): it tracks literal values through `Nat.add/sub/mul` and comparisons,
+   drops the branch of any test of known numbers, and prints one `INLINE` copy per count
+   (`z_AES_mulLoop_u8_x_x_x`, `..._u7_...`, down to the base case), so GHC sees straight-line code.
+4. **Unrolling needs a size budget.** The first version also unrolled the 14-round loop, with each
+   round containing 16 unrolled multiplies. With a limit of 8, GHC ran for over 12 minutes on one
+   module. A function is now unrolled only if its body plus what it calls (three levels deep) has at
+   most 60 bindings, so small leaf loops unroll and the round loop does not. At most 64 copies per
+   function.
+
+Things that did not help, measured by patching the generated Haskell by hand: replacing the
+persistent-array S-box with an immutable unboxed array (2.27 s to 2.11 s, within noise of the
+remaining overhead), and rewriting `mulLoop` as a tighter local loop (no change).
+
+Remaining gap, 1.8x. I did not profile this further; the likely causes, unmeasured, are boxed `Any` elements on the S-box lookups, the key schedule held as a `List`
+of words rebuilt for every block, and `Word.map sbox` / `mapCols mixColumn` going through closures.
+The honest summary is that a proved, byte-oriented, table-driven cipher is a workload where
+the C backend wins, and where this project's strengths (Nat loops, fusion) do not apply.
