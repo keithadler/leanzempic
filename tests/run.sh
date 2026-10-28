@@ -118,3 +118,10 @@ for seed in 1 2 3 4 5 6 7 8; do
   case "$out" in *"all properties held"*) ;; *) echo "FAIL proptests seed $seed"; echo "$out" | head -8; exit 1;; esac
 done
 echo "ok proptests (8 seeds of random operation sequences against pure models)"
+
+# Differential fuzzing: random Lean programs must give the same answers under Lean and leanzempic.
+# (A short run here; run more seeds with `python3 tools/fuzz.py FIRST COUNT FUNCTIONS`.)
+if command -v python3 >/dev/null 2>&1; then
+  python3 tools/fuzz.py 1 4 8 >/tmp/fuzz.out 2>&1 || { cat /tmp/fuzz.out; echo "FAIL fuzz"; exit 1; }
+  echo "ok fuzz ($(tail -1 /tmp/fuzz.out))"
+fi

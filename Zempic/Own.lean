@@ -52,6 +52,11 @@ partial def AV.meet : AV → AV → AV
     else .top
   | _, _ => .top
 
+/-- How deeply nested constructor cells are tracked. A loop with `k` mutable variables nests its
+state `k` levels deep in `MProd` cells, so this bounds how many variables a loop may have and still
+keep ownership of an array. It exists so the fixpoint is finite, not because deeper is costly. -/
+def maxDepth : Nat := 12
+
 /-- Limit nesting, so the fixpoint is finite. -/
 partial def AV.cap (d : Nat) : AV → AV
   | .con c fs => if d == 0 then .top else .con c (fs.map (AV.cap (d - 1)))
@@ -152,9 +157,9 @@ abbrev Env := Std.HashMap FVarId AV
 /-- Meet `v` into a summary slot, noting a change. -/
 def meetOpt (old : Option AV) (v : AV) : Option AV × Bool :=
   match old with
-  | none => (some (v.cap 3), true)
+  | none => (some (v.cap maxDepth), true)
   | some o =>
-    let n := (o.meet v).cap 3
+    let n := (o.meet v).cap maxDepth
     (some n, n != o)
 
 /-- Meet what a call passes into the summary of a function's parameter. -/
@@ -283,7 +288,8 @@ partial def step (f : Name) (d : LetDecl .pure) (env : Env) (later : FVS) : OwnM
         let fields := args.extract v.numParams args.size
         let avs := fields.map (handOver env fields later)
         let env' := eraseArgs env args
-        return some (if avs.all AV.isTop then env' else env'.insert d.fvarId ((AV.con c avs).cap 3))
+        let cell := (AV.con c avs).cap maxDepth
+        return some (if avs.all AV.isTop then env' else env'.insert d.fvarId cell)
       | _ =>
         match (← get).params[c]? with
         | some ps =>

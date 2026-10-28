@@ -21,11 +21,15 @@ First complete version.
 * Strings as a shared UTF-8 buffer.
 * The Haskell runtime as a Cabal package (`runtime/zempic-runtime.cabal`) and `tools/zghc`.
 * A check for the supported Lean version (4.29.x) and for mistyped modes, with proofs.
-* Tests: 15 checks comparing with native Lean, model-based randomized tests of the runtime, and
-  mutation checks of the riskiest components. CI on macOS and Linux.
+* Tests: 16 checks comparing with native Lean, model-based randomized tests of the runtime, a
+  differential fuzzer, and mutation checks of the riskiest components. CI on macOS and Linux.
 * Machine-checked facts (Tenet-verified): name mangling is injective, the `coerce` laws, the
   version and mode checks.
 * A GHC Core plugin spike (`plugin/`), which showed no speedup and is not part of the product.
+
+### Changed
+* The ownership analysis tracks constructor-cell nesting to depth 12 (was 3), so loops with many
+  mutable variables get in-place array updates.
 
 ### Known limitations
 See the README: no `IO`, `Float`, `Int`, `ByteArray` or string-position API; arrays are slower than

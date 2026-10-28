@@ -84,6 +84,18 @@ The analysis can be wrong; these limit the damage:
   partial applications, covered by another rule), so no test reaches it. It stays as defence.
 * `tests/PropTests.hs`: random operation sequences on persistent and in-place arrays, including
   in-place operations applied to stale versions, compared with a list model at every step.
+* `tools/fuzz.py`: random Lean programs with loops, forks and snapshots, compared with Lean. It is a
+  broad net and not a sharp one: of three deliberate bugs it caught two, each in only a few percent
+  of seeds, and missed "ownership handed over though the caller still uses it" entirely. The targeted
+  tests catch all three.
+
+## Known imprecision (safe, but costs speed)
+
+* Tracking of nested constructor cells stops at depth 12; beyond that an array is treated as shared.
+* Two arrays built by the same expression are one array after Lean's CSE and are never updated in place.
+* A fork inside a loop body makes the loop-carried array shared for the whole loop.
+* Some read patterns (for example `getD` combined with a size test in the same loop body) make one
+  update persistent that could have been in place.
 
 ## What would make this stronger
 

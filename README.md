@@ -6,7 +6,8 @@ list fusion, unboxing) decides how your Lean program runs, instead of Lean's C b
 
 * License: Apache-2.0
 * Status: pre-release (v0.1.0, unreleased), private repository, single maintainer
-* Tested on: macOS arm64 (Apple M3), Lean 4.29.1, GHC 9.14.1 only
+* Tested on: macOS arm64 (Apple M3, and macOS 15 in CI) and Linux x86_64 (Ubuntu, in CI); Lean 4.29.1
+  and GHC 9.14.1 only. CI runs the full test suite on both platforms.
 * Honest one-line summary: faster than Lean's C backend on numeric loops, record loops and fused list
   pipelines; roughly level on small strings; slower on arrays at scale, allocation-heavy trees, and
   decimal string building. See [Benchmarks](#benchmarks) for every number, including the losses.
@@ -26,15 +27,16 @@ list fusion, unboxing) decides how your Lean program runs, instead of Lean's C b
 11. [Where behavior differs from Lean](#where-behavior-differs-from-lean)
 12. [What is supported and what is not](#what-is-supported-and-what-is-not)
 13. [Benchmarks](#benchmarks)
-14. [Testing](#testing)
-15. [What is proved](#what-is-proved)
-16. [Repository layout](#repository-layout)
-17. [Developing](#developing)
-18. [Troubleshooting](#troubleshooting)
-19. [Things that did not work](#things-that-did-not-work)
-20. [Roadmap](#roadmap)
-21. [Lean Studio and the linter](#lean-studio-and-the-linter)
-22. [Support](#support)
+14. [Production readiness](#production-readiness)
+15. [Testing](#testing)
+16. [What is proved](#what-is-proved)
+17. [Repository layout](#repository-layout)
+18. [Developing](#developing)
+19. [Troubleshooting](#troubleshooting)
+20. [Things that did not work](#things-that-did-not-work)
+21. [Roadmap](#roadmap)
+22. [Lean Studio and the linter](#lean-studio-and-the-linter)
+23. [Support](#support)
 
 ---
 
@@ -65,6 +67,10 @@ work for it (in-place arrays at scale). Both halves are measured below.
 | GHC | 9.14.1 | Needs `base`, `text`, `bytestring`, `array` (all ship with GHC) |
 | Cabal | any recent | Only for the optional [Core plugin spike](plugin/README.md) |
 | Python 3 | 3.9+ | Only to regenerate part of the runtime (`tools/gen_runtime.py`) |
+
+`#zempic` checks the Lean version and refuses anything but 4.29.x with a clear message
+(`set_option zempic.allowOtherLean true` tries anyway, at your own risk), and rejects an unknown mode
+instead of silently using `auto`.
 
 One environment trap: **run GHC without Lean's toolchain `bin` directory on `PATH`.** Lean bundles
 its own `clang`; if it shadows the system one, GHC's C step fails with
@@ -124,7 +130,7 @@ PATH=/opt/homebrew/bin:/usr/bin:/bin:$HOME/.elan/bin sh tests/run.sh
 ```
 
 It builds every example, compiles the generated Haskell, and checks each result against native
-Lean. Fifteen checks print `ok` (the plugin check only if Cabal is installed); any failure aborts with
+Lean. Sixteen checks print `ok` (the plugin check only if Cabal is installed); any failure aborts with
 `FAIL`.
 
 ## How it works
@@ -389,6 +395,12 @@ What the generated code does with the verdict:
 * A module that contains in-place updates is compiled with `-fno-cse -fno-full-laziness`, so GHC can
   never merge two array constructions into one shared array or float one out to top level.
 
+Precision notes. A loop with several mutable variables nests its state in `MProd` cells one level
+per variable; the analysis follows cells to depth 12, so arrays in loops with many variables still
+get in-place updates. Two arrays created by the same expression (two `#[]`) are one shared array after
+Lean's own common-subexpression elimination, so neither is updated in place. A fork of an array
+before or inside a loop makes the loop-carried array shared for the whole loop; fork after the loop.
+
 `set_option zempic.own false` turns the analysis off. [`SOUNDNESS.md`](SOUNDNESS.md) states exactly
 what is claimed, the assumptions it rests on, and what would make it stronger (it is tested and
 argued, not proved). See [Testing](#testing) for how hard it was attacked, including five
@@ -447,8 +459,8 @@ Read this section before relying on the output.
 | **Auto mode may run a call twice** | If the fast `Word` run overflows, the same pure call is re-run exactly. Invisible semantically; costs time on programs that overflow late. |
 | **`panic!` is silent** | Returns the type's default value without printing Lean's message to stderr. |
 | **Not thread safe** | Arrays and strings use mutable buffers behind `unsafeDupablePerformIO`. Do not use one value from several Haskell threads at once. |
-| **Lean 4.29.1 internals** | The backend reads LCNF and relies on compiler details (the `_redArg` suffix on specialized functions, private names such as `List.takeTR.go`, the pass names `specialize` and `eagerLambdaLifting`). Other Lean versions may break it. |
-| **Platform** | Tested on macOS arm64 only. `USize` is assumed to be 64 bits. |
+| **Lean 4.29.x internals** | The backend reads LCNF and relies on compiler details (the `_redArg` suffix on specialized functions, private names such as `List.takeTR.go`, the pass names `specialize` and `eagerLambdaLifting`). Other Lean versions may break it, which is why `#zempic` refuses them unless told otherwise. |
+| **Platform** | Tested on macOS arm64 and Linux x86_64 (CI). Windows is untested. `USize` is assumed to be 64 bits. |
 | **No `IO`** | A program's `main` cannot be compiled. You compile pure functions and call them from Haskell. |
 
 ## What is supported and what is not
@@ -532,10 +544,46 @@ Reading these honestly:
 * Compile time was not optimized or compared with Lean's. GHC `-O2` on generated modules is
   slower than Lean's own backend.
 
+## Production readiness
+
+An honest checklist, because "production" depends on what you need.
+
+**In place**
+
+| | |
+|---|---|
+| Continuous integration | GitHub Actions runs the whole suite on Ubuntu and macOS 15 for every push |
+| Fails fast | an unsupported Lean version or a mistyped mode is a clear error; an unsupported Lean constant is an error that lists it, never silently dropped code |
+| Tested against Lean itself | 16 checks compare generated code with native Lean, value by value, at several sizes |
+| Runtime tested against models | random operation sequences on arrays, strings, integers and the `Word`/`Natural` fast path, with deliberately broken runtimes caught |
+| Differential fuzzing | random Lean programs run by Lean and through leanzempic must agree (`tools/fuzz.py`) |
+| Machine-checked facts | Tenet verifies 264 of 264 declarations, including name-mangling injectivity |
+| Packaging | the runtime is a Cabal package; `tools/zghc` avoids the toolchain `PATH` trap |
+| Documentation | this README, [`BENCH.md`](BENCH.md), [`SOUNDNESS.md`](SOUNDNESS.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md), [`CHANGELOG.md`](CHANGELOG.md) |
+
+**Not in place. These are the reasons not to call it production-ready yet**
+
+| | |
+|---|---|
+| No release | nothing is tagged or published; the repository is private |
+| One Lean, one GHC | Lean 4.29.x and GHC 9.14.1 only. Windows is untested |
+| Pure functions only | no `IO`, so you compile functions and call them from Haskell; a Lean `main` cannot be compiled |
+| Missing types | `Float`, `Int`, `ByteArray`, and the `String` position and slice API |
+| In-place arrays are tested, not proved | the ownership analysis is the one component whose correctness rests on testing rather than on construction ([`SOUNDNESS.md`](SOUNDNESS.md)); `set_option zempic.own false` removes the risk at a speed cost |
+| Not thread safe | arrays and strings use mutable buffers |
+| Arrays and strings are slower than Lean's at scale | see [Benchmarks](#benchmarks) |
+| No performance tracking | benchmarks are run by hand; CI does not watch for regressions |
+| Security contact | `SECURITY.md` has no contact address yet |
+
+**What it is good for today:** compute kernels and pure algorithms (numeric loops, record-carrying
+loops, list pipelines, fixed-width arithmetic, hashing) that you call from Haskell, where you can
+check the answers against Lean's. **What it is not yet for:** a program that does I/O, uses
+`Float`, or that you cannot compare against Lean.
+
 ## Testing
 
-`tests/run.sh` is the whole suite. Every check compiles generated Haskell and compares it, value by
-value, with native Lean at several sizes:
+`tests/run.sh` is the whole suite, and CI runs it on every push (Ubuntu and macOS 15). Most checks
+compile generated Haskell and compare it, value by value, with native Lean at several sizes:
 
 | Check | What it covers |
 |---|---|
@@ -552,6 +600,38 @@ value, with native Lean at several sizes:
 | `string aliasing` | 6 programs that make versions of a string share a buffer |
 | `core plugin` | injected Core passes `-dcore-lint` and gives the same answers (needs Cabal) |
 | `proptests` | random operation sequences on arrays, strings, fixed-width integers and the `Word`/`Natural` fast path, each step compared with a pure model |
+| `fuzz` | a short differential-fuzzing run: random Lean programs must give the same answers under Lean and leanzempic |
+
+### Differential fuzzing
+
+`tools/fuzz.py FIRST COUNT FUNCTIONS` writes random Lean programs, runs each natively with
+`lean --run`, compiles the same file through leanzempic and GHC, runs that, and requires the outputs
+to be identical and non-empty. Each program is a loop with several mutable variables (`Nat`, `UInt8`,
+`UInt32`, two `Array Nat`, two `String`s), conditionals and nested loops. Half the seeds alias whole
+arrays and strings (`snap := arr`); the other half build the array linearly in the loop and fork it
+after the loop (`let f := arr.set! ..`, then use both), which is the shape that makes the ownership
+analysis choose in-place updates and then be tested on them. Every program is run at five inputs.
+
+A campaign of 60 seeds (720 programs, 3,600 comparisons) found no disagreement with Lean.
+
+How good is the net? I measured it the same way as everything else, by breaking the code:
+
+| Deliberate bug | Seeds that caught it (of 20) |
+|---|---|
+| string append ignores whether it is the newest version | 2 |
+| in-place array update ignores later uses of the array | 1 |
+| ownership handed over though the caller still uses it | **0** |
+
+So the fuzzer is a broad net, not a sharp one: each bug shows up in only a few percent of seeds, and
+one is missed entirely. The targeted aliasing tests and the property tests catch all three. Use a
+long campaign (hundreds of seeds) for confidence, and treat it as additional to the targeted tests,
+not instead of them.
+
+Two lessons from building it. A first generator never caught any of the deliberate bugs, because its
+programs used one array in a single linear flow and never kept an old version. And a later template
+declared two arrays that both started as `#[]`; Lean's compiler merges two identical constants into
+one shared array, so the analysis (correctly) refused every in-place update and the fuzzer was
+silently not testing that path.
 
 ### Tests of the tests
 
@@ -627,6 +707,7 @@ bench/                  Haskell drivers and bench/build.sh
 tests/run.sh            the test suite
 tests/PropTests.hs      model-based randomized tests of the runtime
 tools/gen_runtime.py    regenerates UInt.hs and the generated regions of Nat/*.hs
+tools/fuzz.py           differential fuzzer (random Lean programs, Lean against leanzempic)
 tools/zghc              GHC with the right flags, and without Lean's clang on PATH
 .github/workflows/      CI (macOS and Linux)
 plugin/                 GHC Core plugin spike (a separate Cabal package, see plugin/README.md)
