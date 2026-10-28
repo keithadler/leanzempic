@@ -45,18 +45,32 @@ GHC reaches the same optimized Core from either input, so the speed is identical
 slower to compile a small module because loading the `ghc` library as a plugin costs more than the
 front end it skips. It might win on very large generated modules; that was not measured.
 
+## Experiment: would demand hints help? No.
+
+The one thing a plugin could add that Haskell source cannot is stronger demand (strictness)
+information on `Id`s. To test whether any number could move, I did not write the hint machinery
+first. I measured the best case a perfect signature could reach, by making the hot array and string
+primitives `INLINE` with strict arguments by hand:
+
+| Loop (best of 3) | Before | With the best-case hints | Lean |
+|---|---|---|---|
+| sieve, 5e6 | 0.36 s, 1.40 GB | **0.28 s, 1.20 GB** | 0.10 s |
+| prefix sums, 3e6 | 0.30 s | 0.29 s | 0.04 s |
+| map and fold, 3e6 | 0.31 s | 0.29 s | 0.05 s |
+| reverse with swaps, 2e6 | 0.14 s | 0.13 s | 0.04 s |
+| push characters, 1e7 | 0.18 s, 1.71 GB | 0.17 s, 1.71 GB | 0.05 s |
+| append decimals, 3e6 | 0.50 s, 3.86 GB | 0.49 s, 3.86 GB | 0.12 s |
+
+The cost is structural. A bare Haskell loop calling the persistent array's `aSet` 5,000,000 times
+allocates 112 bytes per call (the mutable cell, the new version, the undo record), the same figure
+as the generated sieve. No signature removes that. The only visible gain, 20% on the sieve, came
+from a runtime change that needs no plugin, so I kept that (inline plus strict arguments on
+`arrSet`, `arrGetD`, `arrPush`, `arrUSet`) and dropped the string change, which did nothing.
+
 ## Recommendation
 
-Do not build the rest of this yet. The case for a plugin would be things Haskell source cannot
-say, not things it already says well:
-
-* Attach strictness, arity and unfolding information to `Id`s directly. Lean is strict, so every
-  argument is known strict. But GHC's own demand analysis already finds this in every benchmark
-  here (loops allocate 61 KB), so the gain is unproven.
-* Join points as real `JoinId`s. GHC already turns tail-called local functions into joins.
-* Typed casts for the `Any` values with a plugin-provenance coercion instead of `unsafeCoerce`.
-  Same cost at run time.
-
-A better next experiment than finishing the printer: use a plugin only to set demand signatures on
-a benchmark GHC currently does not unbox (the array and string loops), and measure. If that moves
-a number, the plugin earns its place; if not, the Haskell route is the product.
+The Haskell source route is the product. Leave the plugin as a spike. Reasons to revisit it would
+be new ones, such as a very large generated module where GHC's front end is the compile-time
+bottleneck (not measured), or a Core feature Haskell cannot express. The performance gaps that
+remain (arrays, strings, closure-heavy code) are allocation and ownership problems, not
+information GHC is missing.

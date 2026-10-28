@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 -- Copyright 2026 Keith Adler. Licensed under the Apache License, Version 2.0.
 --
 -- Exact Lean Nat as Haskell Natural (arbitrary precision).
@@ -134,12 +135,12 @@ arrUSize :: Any -> Any -> Word
 arrUSize _ a = fromIntegral (aLength (zu a :: Arr))
 
 arrPush :: Any -> Any -> Any -> Any
-arrPush _ a v = arrIO (zo <$> aPush (zu a) v)
-{-# NOINLINE arrPush #-}
+arrPush _ !a !v = arrIO (zo <$> aPush (zu a) v)
+{-# INLINE arrPush #-}
 
 arrGetD :: Any -> Any -> Any -> ZNat -> Any
-arrGetD _ d a i = arrIO (aGet (zu a) (arrIdx i) d)
-{-# NOINLINE arrGetD #-}
+arrGetD _ !d !a !i = arrIO (aGet (zu a) (arrIdx i) d)
+{-# INLINE arrGetD #-}
 
 arrGetI :: Any -> Any -> ZNat -> Any -> Any
 arrGetI _ a i _ = arrIO (aGet (zu a) (arrIdx i) (error "leanzempic: array index out of range"))
@@ -150,12 +151,12 @@ arrUGet _ a i _ = arrIO (aGet (zu a) (fromIntegral i) (error "leanzempic: array 
 {-# NOINLINE arrUGet #-}
 
 arrSet :: Any -> Any -> ZNat -> Any -> Any
-arrSet _ a i v = arrIO (zo <$> aSet (zu a) (arrIdx i) v)
-{-# NOINLINE arrSet #-}
+arrSet _ !a !i !v = arrIO (zo <$> aSet (zu a) (arrIdx i) v)
+{-# INLINE arrSet #-}
 
 arrUSet :: Any -> Any -> Word -> Any -> Any -> Any
 arrUSet _ a i v _ = arrIO (zo <$> aSet (zu a) (fromIntegral i) v)
-{-# NOINLINE arrUSet #-}
+{-# INLINE arrUSet #-}
 
 arrSwap :: Any -> Any -> ZNat -> ZNat -> Any
 arrSwap _ a i j = arrIO (zo <$> aSwap (zu a) (arrIdx i) (arrIdx j))
