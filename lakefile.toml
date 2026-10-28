@@ -43,3 +43,13 @@ srcDir = "examples"
 name = "ints"
 root = "Ints"
 srcDir = "examples"
+
+[[lean_exe]]
+name = "arrays"
+root = "Arrays"
+srcDir = "examples"
+
+[[lean_exe]]
+name = "arrays2"
+root = "Arrays2"
+srcDir = "examples"

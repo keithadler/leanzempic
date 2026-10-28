@@ -102,3 +102,15 @@ checked by tests, not by Lean).
 Every module is checked with Lean Studio's `check_file`/`build`. Next: use
 `verify` (Tenet) on the Lean side and `profile` to compare Lean-native and GHC
 timings per declaration.
+
+## Support
+
+leanzempic is free software under Apache-2.0, built and maintained by one person. If it saves you
+time or you just want to see the work continue, donations in Ethereum are welcome and appreciated:
+
+```
+0x88adFCaa8FFaC62618b34F87FBede6394C829B1e
+```
+
+ETH on Ethereum mainnet. Nothing is expected, and the project stays free either way. Bug reports,
+benchmarks on your own code and pull requests help just as much.

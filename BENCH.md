@@ -133,3 +133,37 @@ The loops allocate nothing: the record lives in registers. Not faster (allocatio
 nature): a 1e6-element binary tree insert (0.09 s vs 0.08 s, 505 MB allocated) and an
 `Option` search (0.08 s both). Lean already reuses a uniquely-held record in place, which is
 why its record loops are fast too. All five tests print identical values at n = 1000 and 100000.
+
+# Fixed-width integers and arrays
+
+**Integers** (`examples/Ints.lean`, n = 2e8, best of 3). Identical values to Lean, including
+shifts at and above the width, division by zero and wraparound.
+
+| Test | Lean | Haskell | Speedup | Haskell heap |
+|---|---|---|---|---|
+| 64-bit FNV hash, one mutable variable | 0.34 s | 0.32 s | 1.1x | 62 KB |
+| UInt32 to UInt8/16/64/USize conversions | 0.90 s | 0.63 s | 1.4x | 62 KB |
+| Char arithmetic (n = 1e8) | 0.41 s | 0.27 s | 1.5x | 62 KB |
+| UInt8 arithmetic, two mutable variables | 1.50 s | 0.83 s | 1.8x | 6.4 GB |
+| xorshift32, two mutable variables | 1.31 s | 1.21 s | 1.1x | 6.4 GB |
+
+The two tests that allocate 6.4 GB carry two mutable variables through a `for` loop in Lean's
+polymorphic `MProd` structure, whose fields are still boxed `Any` here. Specializing generic
+structures by their type arguments would remove that.
+
+**Arrays** (`examples/Arrays.lean`). Here Lean wins, and clearly. Lean mutates an array in place
+when it holds the only reference, which it knows from reference counts. GHC has none, so the
+Haskell side uses a persistent array (Baker's scheme: a mutable buffer plus undo records), which
+is correct for every use but pays for it.
+
+| Test | n | Lean | Haskell (Baker) | Haskell (first try: Data.Sequence) |
+|---|---|---|---|---|
+| sieve of Eratosthenes | 5e6 | 0.11 s | 0.36 s | 4.66 s |
+| push, then in-place prefix sums | 3e6 | 0.04 s | 0.30 s | 1.29 s |
+| map and fold | 3e6 | 0.05 s | 0.31 s | 1.73 s |
+| reverse with swaps | 2e6 | 0.05 s | 0.14 s | 3.20 s |
+| stack of push and pop | 5e6 | 0.08 s | 0.21 s | 0.14 s |
+
+So arrays are 3x to 10x slower than Lean's, down from 15x to 90x with the sequence. Every array
+test matches Lean's value. Closing the gap needs ownership information (which array is
+uniquely held), which the Haskell backend does not have.

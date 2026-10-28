@@ -4,6 +4,8 @@
 module Zempic.Nat.Exact where
 
 import Data.Word (Word16, Word32, Word64, Word8)
+import System.IO.Unsafe (unsafeDupablePerformIO)
+import Zempic.Arr
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import GHC.Exts (build)
 import Numeric.Natural (Natural)
@@ -105,6 +107,73 @@ uszToNat :: Word -> ZNat
 uszToNat = fromIntegral
 {-# INLINE uszOfNat #-}
 {-# INLINE uszToNat #-}
+-- Lean's Array as a Baker persistent array (see Zempic.Arr): O(1) at the newest version.
+arrIdx :: ZNat -> Int
+arrIdx i = fromIntegral (min i 4611686018427387903)
+{-# INLINE arrIdx #-}
+
+arrIO :: IO a -> a
+arrIO = unsafeDupablePerformIO
+{-# INLINE arrIO #-}
+
+arrMkEmpty :: Any -> ZNat -> Any
+arrMkEmpty _ c = arrIO (zo <$> aEmpty (arrIdx c))
+{-# NOINLINE arrMkEmpty #-}
+
+arrReplicate :: Any -> ZNat -> Any -> Any
+arrReplicate _ n v = arrIO (zo <$> aReplicate (arrIdx n) v)
+{-# NOINLINE arrReplicate #-}
+
+arrSize :: Any -> Any -> ZNat
+arrSize _ a = fromIntegral (aLength (zu a :: Arr))
+
+arrUSize :: Any -> Any -> Word
+arrUSize _ a = fromIntegral (aLength (zu a :: Arr))
+
+arrPush :: Any -> Any -> Any -> Any
+arrPush _ a v = arrIO (zo <$> aPush (zu a) v)
+{-# NOINLINE arrPush #-}
+
+arrGetD :: Any -> Any -> Any -> ZNat -> Any
+arrGetD _ d a i = arrIO (aGet (zu a) (arrIdx i) d)
+{-# NOINLINE arrGetD #-}
+
+arrGetI :: Any -> Any -> ZNat -> Any -> Any
+arrGetI _ a i _ = arrIO (aGet (zu a) (arrIdx i) (error "leanzempic: array index out of range"))
+{-# NOINLINE arrGetI #-}
+
+arrUGet :: Any -> Any -> Word -> Any -> Any
+arrUGet _ a i _ = arrIO (aGet (zu a) (fromIntegral i) (error "leanzempic: array index out of range"))
+{-# NOINLINE arrUGet #-}
+
+arrSet :: Any -> Any -> ZNat -> Any -> Any
+arrSet _ a i v = arrIO (zo <$> aSet (zu a) (arrIdx i) v)
+{-# NOINLINE arrSet #-}
+
+arrUSet :: Any -> Any -> Word -> Any -> Any -> Any
+arrUSet _ a i v _ = arrIO (zo <$> aSet (zu a) (fromIntegral i) v)
+{-# NOINLINE arrUSet #-}
+
+arrSwap :: Any -> Any -> ZNat -> ZNat -> Any
+arrSwap _ a i j = arrIO (zo <$> aSwap (zu a) (arrIdx i) (arrIdx j))
+{-# NOINLINE arrSwap #-}
+
+arrPop :: Any -> Any -> Any
+arrPop _ a = arrIO (zo <$> aPop (zu a))
+{-# NOINLINE arrPop #-}
+
+arrSwapP :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
+arrSwapP _ a i j _ _ = arrIO (zo <$> aSwap (zu a) (arrIdx i) (arrIdx j))
+{-# NOINLINE arrSwapP #-}
+
+arrOfList :: Any -> [Any] -> Any
+arrOfList _ xs = arrIO (zo <$> aFromList xs)
+{-# NOINLINE arrOfList #-}
+
+arrToList :: Any -> Any -> [Any]
+arrToList _ a = arrIO (aToList (zu a))
+{-# NOINLINE arrToList #-}
+
 charOfNat :: ZNat -> Word32
 charOfNat n = if n < 55296 || (n > 57343 && n < 1114112) then fromIntegral n else 0
 charOfNatAux :: ZNat -> Any -> Word32
