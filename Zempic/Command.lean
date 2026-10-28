@@ -22,6 +22,17 @@ syntax (name := zempicCmd) "#zempic " ident+ (" to " str)? (&" mode " ident)? : 
     | some p => (System.FilePath.mk p).fileStem.getD "Out"
     | none => "Out"
   let mode := (stx[3].getArgs[1]?.map (·.getId.toString)).getD "auto"
+  if mode == "core" then
+    let (stub, zc) ← liftCoreM <| emitCore modName roots
+    match path? with
+    | some p =>
+      let fp := System.FilePath.mk p
+      IO.FS.createDirAll (fp.parent.getD ".")
+      IO.FS.writeFile fp stub
+      IO.FS.writeFile (fp.withExtension "zc") zc
+      logInfo m!"leanzempic: wrote the stub {p} and {fp.withExtension "zc"} for the Core plugin"
+    | none => logInfo m!"{stub}\n{zc}"
+    return
   let (files, core) ← liftCoreM <| emitFiles modName roots mode
   match path? with
   | some p =>

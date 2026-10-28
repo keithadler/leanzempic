@@ -75,3 +75,18 @@ for n in 10 1000 20000; do
   [ "$(.lake/build/bin/generics $n)" = "$(build/GenericsMain $n)" ] || { echo "FAIL generics n=$n"; exit 1; }
 done
 echo "ok generics (polymorphic data keeps one layout across instantiations)"
+
+# Core plugin spike: Lean writes a stub and an s-expression; the plugin injects real Core;
+# -dcore-lint checks it; the answers must match the Haskell route's.
+if command -v cabal >/dev/null 2>&1; then
+  lake build CoreSpike >/dev/null
+  (cd plugin && cabal build --offline >/dev/null)
+  DB=$PWD/plugin/dist-newstyle/packagedb/ghc-9.14.1
+  rm -rf build/oc; mkdir -p build/oc
+  ghc --make -O2 -dcore-lint -package-db "$DB" -plugin-package zempic-plugin -fplugin=Zempic.Plugin \
+    -fplugin-opt=Zempic.Plugin:build/CoreSpike.zc -iruntime -ibuild -ispike -outputdir build/oc \
+    -o build/corespike spike/CoreSpikeMain.hs >/dev/null
+  got="$(build/corespike fact 20) $(build/corespike sum 10000000) $(build/corespike collatz 27)"
+  [ "$got" = "2432902008176640000 50000005000000 111" ] && echo "ok core plugin (injected Core passes Core Lint, answers match)" \
+    || { echo "FAIL core plugin: $got"; exit 1; }
+fi

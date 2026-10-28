@@ -1,0 +1,12 @@
+cabal-version:      2.4
+name:               zempic-plugin
+version:            0.1.0
+synopsis:           GHC Core plugin for leanzempic: builds Core directly from Lean's compiled terms
+license:            Apache-2.0
+build-type:         Simple
+
+library
+  exposed-modules:  Zempic.Plugin
+  build-depends:    base, ghc, containers, directory
+  default-language: Haskell2010
+  ghc-options:      -Wall -Wno-name-shadowing

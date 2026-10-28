@@ -63,3 +63,7 @@ srcDir = "examples"
 name = "generics"
 root = "Generics"
 srcDir = "examples"
+
+[[lean_lib]]
+name = "CoreSpike"
+srcDir = "examples"

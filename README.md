@@ -27,8 +27,9 @@ strict evaluation order. The printer keeps that structure:
 | structure `proj` | single-constructor `case` |
 
 Two outputs per run: a compilable `.hs` module, and a `.core` text dump in
-Core notation for reading. GHC cannot ingest Core text, so real Core injection
-(a GHC plugin) is on the roadmap.
+Core notation for reading. GHC cannot ingest Core text. A spike in `plugin/` shows a GHC plugin
+can inject real Core instead (`mode core`); it ran correctly and passed Core Lint, but gave no
+speedup, because GHC reaches the same optimized Core either way. See `plugin/README.md`.
 
 ## Use
 
