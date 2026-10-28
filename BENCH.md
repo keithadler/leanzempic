@@ -61,3 +61,18 @@ never exist. That is 9x faster than Lean's idiomatic version.
   into a join-point argument).
 * Intermediate `let`s of fusible stages are emitted lazy, not strict. Results are identical
   for total functions; a panic inside a stage may happen in a different order or never.
+
+## Auto-fusion (`examples/AutoFusion.lean`)
+
+Same pipeline, written as plain `List.range n |>.map |>.filter |>.foldl`, with
+`set_option zempic.fuse true` at the top of the file. n = 2e7, best of 3:
+
+| | Time |
+|---|---|
+| Lean native, option off (idiomatic) | 0.38 s |
+| Lean native, option on | 0.59 s |
+| leanzempic, word Nat, auto-fused | **0.04 s** (57 KB allocated) |
+| leanzempic, exact Nat, auto-fused | 0.40 s |
+
+All four print the same value. The option costs native Lean about 55% on this
+pipeline (closure calls replace specialized loops), which is why it is off by default.

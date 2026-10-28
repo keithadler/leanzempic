@@ -25,3 +25,14 @@ for m in natural word; do
     [ "$got" = "$want" ] && echo "ok fusion $m $w" || { echo "FAIL fusion $m $w: $got vs $want"; exit 1; }
   done
 done
+
+# Auto-fusion: plain Lean list code + `set_option zempic.fuse true`.
+lake build autofusion >/dev/null
+want=$(.lake/build/bin/autofusion 100000)
+for m in natural word; do
+  mkdir -p build/oa-$m
+  (cd bench && ghc -O2 -i../runtime -i../runtime/$m -i../build -outputdir ../build/oa-$m -o ../build/auto-$m AutoMain.hs >/dev/null)
+  got=$(build/auto-$m 100000)
+  [ "$got" = "$want" ] && echo "ok autofusion $m" || { echo "FAIL autofusion $m: $got vs $want"; exit 1; }
+done
+grep -q "zMap" build/AutoFusion.hs && grep -q "zFoldl" build/AutoFusion.hs && echo "ok autofusion rewrote the pipeline"

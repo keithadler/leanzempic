@@ -48,7 +48,14 @@ def pipe (n : Nat) : Nat :=
     (Zempic.Fuse.map (fun x => x * x % 1000) (Zempic.Fuse.range n)))
 ```
 
-These are normal Lean functions (still run and prove in Lean). The Haskell backend
+Or skip the rewrite: put `set_option zempic.fuse true` at the top of the file and write
+ordinary `List.range n |>.map f |>.filter p |>.foldl g 0`. A compiler pass
+(`Zempic/AutoFuse.lean`, installed with `@[cpass]`) swaps `List.map`/`filter`/`foldl`/`range`
+for the `Zempic.Fuse` calls just before Lean specializes them. It is off by default
+because the rewritten code runs slower in native Lean (closure calls, 0.59 s vs 0.38 s in
+`BENCH.md`), so enable it only in files that target Haskell.
+
+The `Zempic.Fuse` functions are normal Lean functions (still run and prove in Lean). The Haskell backend
 swaps them for GHC's fusible `map`/`filter`/`foldl'`/`build`, and the three stages
 become one loop with no lists. 9x faster than Lean's own version in word mode.
 
@@ -66,7 +73,7 @@ Pick one by include path when compiling the generated module:
 * Types beyond `Nat`/`Bool`, so GHC cannot unbox structures or list elements yet.
 * Fixed-width ints, `String`/`Array` ops, `IO`, `Float`, `Thunk`/`Task`.
   Unsupported constants are listed in a compile error, never silently dropped.
-* Fusion of ordinary Lean list code. Only pipelines written with `Zempic.Fuse.*` fuse (see `BENCH.md`); more combinators (`length`, `zip`, `take`, `append`, ...) are not mapped yet.
+* More fusible combinators. Only `map`, `filter`, `foldl`, `range` are mapped (by hand or by `zempic.fuse`); `length`, `sum`, `zip`, `take`, `append`, `foldr`, `any`/`all` are not, and `Array`/`for` loops are untouched.
 * Benchmarks beyond three loops. See `BENCH.md` for what is and is not measured.
 
 ## Lean Studio

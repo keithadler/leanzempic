@@ -18,3 +18,8 @@ srcDir = "examples"
 name = "fusion"
 root = "Fusion"
 srcDir = "examples"
+
+[[lean_exe]]
+name = "autofusion"
+root = "AutoFusion"
+srcDir = "examples"
