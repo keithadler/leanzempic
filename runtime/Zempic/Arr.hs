@@ -9,6 +9,7 @@
 -- the buffer back to it, which is slower but always correct.
 module Zempic.Arr
   ( Arr, aEmpty, aReplicate, aLength, aGet, aSet, aPush, aPop, aSwap, aToList, aFromList
+  , aSetU, aPushU, aPopU, aSwapU
   ) where
 
 import Control.Monad (forM_)
@@ -139,3 +140,59 @@ aFromList xs = do
   buf <- newBuf (max 4 n) filler
   forM_ (zip [0 ..] xs) $ \(k, x) -> unsafeWrite buf k x
   Arr n <$> newIORef (Direct buf)
+
+-- * In-place variants
+--
+-- The compiler calls these only where its ownership analysis proved the array has exactly one
+-- reference and is not used again. They update the live buffer directly with no undo record. As a
+-- safety net, if the array turns out not to be the live version they fall back to the persistent
+-- operation, which is always correct.
+
+aSetU :: Arr -> Int -> Any -> IO Arr
+aSetU arr i v
+  | i < 0 || i >= aLen arr = return arr
+  | otherwise = do
+      node <- readIORef (aRef arr)
+      case node of
+        Direct buf -> unsafeWrite buf i v >> return arr
+        Diff _ _ -> aSet arr i v
+
+aPushU :: Arr -> Any -> IO Arr
+aPushU arr v = do
+  node <- readIORef (aRef arr)
+  case node of
+    Diff _ _ -> aPush arr v
+    Direct buf -> do
+      cap <- getNumElements buf
+      let n = aLen arr
+      if n < cap
+        then unsafeWrite buf n v
+        else do
+          b <- newBuf (max 4 (2 * cap)) filler
+          forM_ [0 .. n - 1] $ \k -> unsafeRead buf k >>= unsafeWrite b k
+          unsafeWrite b n v
+          writeIORef (aRef arr) (Direct b)
+      return (Arr (n + 1) (aRef arr))
+
+aPopU :: Arr -> IO Arr
+aPopU arr
+  | aLen arr == 0 = return arr
+  | otherwise = do
+      node <- readIORef (aRef arr)
+      case node of
+        Direct _ -> return (Arr (aLen arr - 1) (aRef arr))
+        Diff _ _ -> aPop arr
+
+aSwapU :: Arr -> Int -> Int -> IO Arr
+aSwapU arr i j
+  | i < 0 || j < 0 || i >= aLen arr || j >= aLen arr = return arr
+  | otherwise = do
+      node <- readIORef (aRef arr)
+      case node of
+        Direct buf -> do
+          x <- unsafeRead buf i
+          y <- unsafeRead buf j
+          unsafeWrite buf i y
+          unsafeWrite buf j x
+          return arr
+        Diff _ _ -> aSwap arr i j

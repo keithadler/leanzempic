@@ -207,3 +207,53 @@ would make such a call read the wrong layout.) Best of 3, auto mode.
 The last two are slower than Lean: they are dominated by list and persistent-array traffic and by
 calling a closure from an out-of-line generic function, not by the structures. All four tests print
 Lean's values at n = 10, 1000 and 20000.
+
+# Ownership analysis: in-place arrays (`Zempic/Own.lean`)
+
+Lean updates an array in place when it holds the only reference, which it knows from reference
+counts. GHC has none, so a static analysis over LCNF proves it instead: an operation updates in
+place only if its array is uniquely held and nothing can see it afterwards. Everything else keeps
+the persistent array. Loop state is tracked through constructor cells (a `for` loop with two mutable
+variables carries them in an `MProd`), and facts about function parameters, results and join points
+are met over every call site to a fixpoint. Roots, functions used as values, partial applications,
+closure captures, and any use the analysis does not recognize all forget ownership.
+
+Best of 3, auto mode. "Before" is the persistent array alone.
+
+| Test | n | Lean | Before | With ownership | Heap before to after |
+|---|---|---|---|---|---|
+| sieve of Eratosthenes | 5e6 | 0.10 s | 0.28 s | **0.17 s** | 1.20 GB to 40 MB |
+| push, then in-place prefix sums | 3e6 | 0.04 s | 0.29 s | **0.11 s** | 906 MB to 283 MB |
+| map and fold | 3e6 | 0.05 s | 0.30 s | **0.12 s** | 1.21 GB to 275 MB |
+| reverse with swaps | 2e6 | 0.04 s | 0.13 s | **0.05 s** | 609 MB to 121 MB |
+| stack of push and pop | 5e6 | 0.08 s | 0.20 s | **0.13 s** | 753 MB (unchanged) |
+| sieve | 2e7 | 0.38 s | not run | 0.72 s | 160 MB |
+| prefix sums | 1e7 | 0.08 s | not run | 0.51 s | 988 MB |
+
+The gap to Lean closed from 3x to 10x down to about 1x to 3x. The reverse is level with Lean.
+It is still slower: values are still boxed `Any`, and unmatched constructs fall back to the
+persistent array. The stack test is unchanged because its pushes and pops are interleaved with
+reads of the back element in a way the analysis cannot prove.
+
+**Soundness is the point, so it was tested hard** (`examples/Aliasing.lean`, 15 programs, 8 sizes
+each, every value equal to Lean's): updates while the old array is still read, the same array
+given to a function by one caller that keeps it and another that does not, two identical
+constructions that must not become one array, closures and structures holding the array while it
+is updated, nested arrays, arrays in lists, join points merging old and new versions, and loops
+that keep a snapshot. I then broke the analysis on purpose five ways and checked the tests notice:
+
+| Deliberate bug | Caught |
+|---|---|
+| ignore whether the array is used later | yes |
+| hand over ownership though the caller still uses the array | yes |
+| partial application keeps ownership of its arguments | yes |
+| constructor application keeps ownership of the stored array | yes |
+| ignore closure capture in a local function | **no** |
+
+The last rule guards a case that never arises: Lean's compiler lifts every closure I could write
+into a separate function (covered by the partial-application rule above), so a local-function node
+with a captured array does not occur in these programs. The rule stays as defence.
+Two further safeguards: modules that use in-place updates are compiled with `-fno-cse
+-fno-full-laziness` so GHC cannot share two array constructions or float one to top level, and each
+in-place primitive checks that its array is the live version and otherwise falls back to the
+persistent operation. `set_option zempic.own false` turns the analysis off.

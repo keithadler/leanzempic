@@ -77,6 +77,11 @@ and generic ones like `MProd`) are typed, with strict typed fields so GHC unboxe
 Generic inductives become polymorphic Haskell types, so every instantiation has one layout.
 Lists, pairs, functions and the builtin `Array`/`String` are still `Any` (opaque to GHC).
 
+Arrays are persistent (correct for any use), but an ownership analysis (`Zempic/Own.lean`)
+updates them in place wherever it can prove an array is uniquely held and not used again, which
+is what Lean does at run time with reference counts. `set_option zempic.own false` disables it.
+See `BENCH.md` for results and for how it was tested.
+
 ## Proved
 
 Checked by Lean Studio and re-checked by Tenet, an independent kernel (142 of 142 declarations,

@@ -67,3 +67,8 @@ srcDir = "examples"
 [[lean_lib]]
 name = "CoreSpike"
 srcDir = "examples"
+
+[[lean_exe]]
+name = "aliasing"
+root = "Aliasing"
+srcDir = "examples"

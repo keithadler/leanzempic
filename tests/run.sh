@@ -3,7 +3,7 @@
 # Needs lake and ghc on PATH; if Lean's bundled clang shadows the system one, GHC's C step fails.
 set -e
 cd "$(dirname "$0")/.."
-lake build Examples bench fusion autofusion combinators combinators-plain structs ints arrays arrays2 strings generics >/dev/null
+lake build Examples bench fusion autofusion combinators combinators-plain structs ints arrays arrays2 strings generics aliasing >/dev/null
 mkdir -p build/o
 ghc_() { (cd "$1" && ghc -O2 -i../runtime -i../build -outputdir ../build/o -o ../build/$2 $3 >/dev/null); }
 
@@ -90,3 +90,12 @@ if command -v cabal >/dev/null 2>&1; then
   [ "$got" = "2432902008176640000 50000005000000 111" ] && echo "ok core plugin (injected Core passes Core Lint, answers match)" \
     || { echo "FAIL core plugin: $got"; exit 1; }
 fi
+
+# Ownership analysis: in-place array updates must never change a program's meaning. These programs
+# update arrays while other references to them are live; every sharing pattern must match Lean.
+ghc_ bench AliasingMain AliasingMain.hs
+for n in 0 1 2 3 10 11 1000 4097; do
+  [ "$(.lake/build/bin/aliasing $n)" = "$(build/AliasingMain $n)" ] || { echo "FAIL aliasing n=$n"; exit 1; }
+done
+grep -q "arrSetU\|arrPushU" build/Aliasing/Fast.hs || { echo "FAIL: analysis chose no in-place update"; exit 1; }
+echo "ok aliasing (ownership analysis keeps shared arrays intact)"

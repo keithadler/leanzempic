@@ -170,6 +170,31 @@ arrSwapP :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
 arrSwapP _ a i j _ _ = arrIO (zo <$> aSwap (zu a) (arrIdx i) (arrIdx j))
 {-# NOINLINE arrSwapP #-}
 
+-- In-place variants, used only where the compiler proved the array unshared (see Zempic.Own).
+arrSetU :: Any -> Any -> ZNat -> Any -> Any
+arrSetU _ a i v = arrIO (zo <$> aSetU (zu a) (arrIdx i) v)
+{-# NOINLINE arrSetU #-}
+
+arrUSetU :: Any -> Any -> Word -> Any -> Any -> Any
+arrUSetU _ a i v _ = arrIO (zo <$> aSetU (zu a) (fromIntegral i) v)
+{-# NOINLINE arrUSetU #-}
+
+arrPushU :: Any -> Any -> Any -> Any
+arrPushU _ a v = arrIO (zo <$> aPushU (zu a) v)
+{-# NOINLINE arrPushU #-}
+
+arrPopU :: Any -> Any -> Any
+arrPopU _ a = arrIO (zo <$> aPopU (zu a))
+{-# NOINLINE arrPopU #-}
+
+arrSwapU :: Any -> Any -> ZNat -> ZNat -> Any
+arrSwapU _ a i j = arrIO (zo <$> aSwapU (zu a) (arrIdx i) (arrIdx j))
+{-# NOINLINE arrSwapU #-}
+
+arrSwapPU :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
+arrSwapPU _ a i j _ _ = arrIO (zo <$> aSwapU (zu a) (arrIdx i) (arrIdx j))
+{-# NOINLINE arrSwapPU #-}
+
 arrOfList :: Any -> [Any] -> Any
 arrOfList _ xs = arrIO (zo <$> aFromList xs)
 {-# NOINLINE arrOfList #-}
