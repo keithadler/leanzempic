@@ -4,7 +4,7 @@ A Haskell backend for Lean 4. It prints Lean's compiled terms (LCNF, mono
 phase) as Haskell shaped like GHC Core, so GHC's optimizer decides the
 execution order and the code generator.
 
-Licensed under Apache-2.0. Status: v0.1, private, early.
+Licensed under Apache-2.0. Status: v0.1, private, early. Checked with Lean Studio (`check_file`, `style_check`, `project_health`).
 
 ## Why
 
@@ -37,7 +37,7 @@ import Zempic
 #zempic fact sumL to "build/Out.hs"
 ```
 
-Compile with `ghc -O2 -iruntime -ibuild`. See `tests/run.sh` for the full loop.
+Compile with `ghc -O2 -iruntime -ibuild`, then `import Out`. See `tests/run.sh` for the full loop.
 
 ## Fusion
 
@@ -59,12 +59,17 @@ The `Zempic.Fuse` functions are normal Lean functions (still run and prove in Le
 swaps them for GHC's fusible `map`/`filter`/`foldl'`/`build`, and the three stages
 become one loop with no lists. 9x faster than Lean's own version in word mode.
 
-## Nat modes
+## Exact Nat, at word speed (auto mode, the default)
 
-Pick one by include path when compiling the generated module:
+`#zempic` writes three files: `Out.hs` (wrapper), `Out/Fast.hs` (Nat as 64-bit `Word`, any
+overflow throws) and `Out/Exact.hs` (Nat as `Natural`). A call runs the fast version; if it
+overflows, the same pure call reruns on the exact one. Results are always exact (25! and 3000!
+both check out) and the common case runs at word speed.
 
-* `-iruntime/natural`: exact, Nat is `Natural`. Same semantics as Lean, slower.
-* `-iruntime/word`: Nat is `Word`; results above 2^64-1 abort with an error, never wrap. Fast (see `BENCH.md`).
+* The wrapper covers functions whose arguments and result are only `Nat`/`Bool`. Others are
+  left to import from `Out.Fast` / `Out.Exact` directly.
+* Worst case a call that overflows late does the work twice.
+* Other modes: `#zempic f to "x.hs" mode word` (fast only, aborts on overflow) or `mode exact`.
 
 `Nat` and `Bool` are typed in signatures; other values are still `Any` (free casts).
 

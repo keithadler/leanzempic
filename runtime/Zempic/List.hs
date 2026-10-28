@@ -6,8 +6,6 @@
 module Zempic.List where
 
 import Data.List (foldl')
-import GHC.Exts (build)
-import Zempic.Nat
 import Zempic.Runtime
 
 zNil :: Any -> [Any]
@@ -29,9 +27,3 @@ zFilter p = filter (\x -> zu (p x) :: Bool)
 zFoldl :: (Any -> Any -> Any) -> Any -> [Any] -> Any
 zFoldl = foldl'
 {-# INLINE zFoldl #-}
-
--- Explicit build so GHC's foldr/build fusion always sees the producer.
-zRange :: ZNat -> [Any]
-zRange n = map zo (build (\c nil ->
-  let go !i = if i >= n then nil else i `c` go (i + 1) in go 0))
-{-# INLINE zRange #-}

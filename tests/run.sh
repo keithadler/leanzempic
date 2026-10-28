@@ -1,38 +1,28 @@
 #!/bin/sh
-# Build the examples (writes build/Examples.hs), compile with GHC in both Nat modes, check results.
+# Build every example, compile the generated Haskell (auto mode), compare with Lean-native values.
 # Needs lake and ghc on PATH; if Lean's bundled clang shadows the system one, GHC's C step fails.
 set -e
 cd "$(dirname "$0")/.."
-lake build Examples
+lake build Examples bench fusion autofusion >/dev/null
+mkdir -p build/o
+ghc_() { (cd "$1" && ghc -O2 -i../runtime -i../build -outputdir ../build/o -o ../build/$2 $3 >/dev/null); }
+
+ghc_ tests t Main.hs
 expected="2432902008176640000
 50000005000000
-111"
-for m in natural word; do
-  mkdir -p build/o-$m
-  (cd tests && ghc -O2 -i../runtime -i../runtime/$m -i../build -outputdir ../build/o-$m -o ../build/t-$m Main.hs >/dev/null)
-  out=$(build/t-$m)
-  [ "$out" = "$expected" ] && echo "ok $m" || { echo "FAIL $m"; echo "$out"; exit 1; }
-done
+111
+15511210043330985984000000"
+out=$(build/t)
+[ "$out" = "$expected" ] && echo "ok examples (incl. exact fallback: 25! is $(echo "$out" | tail -1))" || { echo "FAIL examples"; echo "$out"; exit 1; }
 
-# Fusion pipeline: Lean-native value must match Haskell value in both modes.
-lake build fusion >/dev/null
+ghc_ bench FusionMain FusionMain.hs
+ghc_ bench AutoMain AutoMain.hs
 want=$(.lake/build/bin/fusion lean 100000)
-for m in natural word; do
-  mkdir -p build/of-$m
-  (cd bench && ghc -O2 -i../runtime -i../runtime/$m -i../build -outputdir ../build/of-$m -o ../build/fusion-$m FusionMain.hs >/dev/null)
-  for w in lean fused; do
-    got=$(build/fusion-$m $w 100000)
-    [ "$got" = "$want" ] && echo "ok fusion $m $w" || { echo "FAIL fusion $m $w: $got vs $want"; exit 1; }
-  done
+for w in lean fused; do
+  got=$(build/FusionMain $w 100000)
+  [ "$got" = "$want" ] && echo "ok fusion $w" || { echo "FAIL fusion $w: $got vs $want"; exit 1; }
 done
-
-# Auto-fusion: plain Lean list code + `set_option zempic.fuse true`.
-lake build autofusion >/dev/null
 want=$(.lake/build/bin/autofusion 100000)
-for m in natural word; do
-  mkdir -p build/oa-$m
-  (cd bench && ghc -O2 -i../runtime -i../runtime/$m -i../build -outputdir ../build/oa-$m -o ../build/auto-$m AutoMain.hs >/dev/null)
-  got=$(build/auto-$m 100000)
-  [ "$got" = "$want" ] && echo "ok autofusion $m" || { echo "FAIL autofusion $m: $got vs $want"; exit 1; }
-done
-grep -q "zMap" build/AutoFusion.hs && grep -q "zFoldl" build/AutoFusion.hs && echo "ok autofusion rewrote the pipeline"
+got=$(build/AutoMain 100000)
+[ "$got" = "$want" ] && echo "ok autofusion" || { echo "FAIL autofusion: $got vs $want"; exit 1; }
+grep -q zMap build/AutoFusion/Fast.hs && grep -q zFoldl build/AutoFusion/Fast.hs && echo "ok autofusion rewrote the pipeline"

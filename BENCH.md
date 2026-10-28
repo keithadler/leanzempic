@@ -28,8 +28,8 @@ binaries run with `-A128m` (bigger GC allocation area).
 
 ```sh
 lake build bench
-PATH=/opt/homebrew/bin:/usr/bin:/bin bench/build.sh natural   # or word
-.lake/build/bin/bench 0; build/hsbench-word 0
+PATH=/opt/homebrew/bin:/usr/bin:/bin bench/build.sh Main
+.lake/build/bin/bench 0; build/Main 0
 ```
 
 (Run `build.sh` without Lean's toolchain on PATH, or GHC's C step picks up
@@ -76,3 +76,19 @@ Same pipeline, written as plain `List.range n |>.map |>.filter |>.foldl`, with
 
 All four print the same value. The option costs native Lean about 55% on this
 pipeline (closure calls replace specialized loops), which is why it is off by default.
+
+# Auto mode: exact Nat at word speed
+
+Default output now runs `Word` first and falls back to `Natural` on overflow, so the answers
+are exact. Best of 3, same functions as above.
+
+| Workload | Lean C backend | auto mode |
+|---|---|---|
+| sum loop, 2e8 iterations | 0.46 s | **0.18 s** |
+| collatz over 1..1e6 | 0.33 s | **0.23 s** |
+| build + sum 5e6-element list | 0.08 s | 0.10 s |
+| fused pipeline, n = 2e7 (Fuse API or plain code + `zempic.fuse`) | 0.35 s | **0.04 s** |
+
+Overflow check: `fact 25` (above 2^64) and `fact 3000 % 1000000007` both return the exact
+value, the latter verified against Python (341406877). The earlier "exact Nat" column (3x to
+5x slower than Lean) is superseded; `mode exact` still gives that behavior if you want it.

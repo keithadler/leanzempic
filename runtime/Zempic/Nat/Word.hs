@@ -1,19 +1,28 @@
 -- Copyright 2026 Keith Adler. Licensed under the Apache License, Version 2.0.
 --
--- FAST MODE: Lean Nat as Word (64-bit). Arithmetic that would exceed 2^64 - 1
--- aborts with an error instead of wrapping, so wrong answers cannot happen
--- silently. Use only for programs whose numbers stay below 2^64.
+-- FAST PATH: Lean Nat as Word (64-bit). Arithmetic that would exceed 2^64 - 1
+-- throws `ZOverflow` instead of wrapping, so a wrong answer cannot happen
+-- silently. In auto mode the wrapper catches it and reruns with Zempic.Nat.Exact.
 {-# LANGUAGE MagicHash, UnboxedTuples, BangPatterns #-}
-module Zempic.Nat where
+module Zempic.Nat.Word where
 
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
+import Control.Exception (Exception (..), throw)
 import GHC.Exts
+import Zempic.Runtime (Any, zo)
 import GHC.Word (Word(W#))
 
 type ZNat = Word
 
+data ZOverflow = ZOverflow
+
+instance Show ZOverflow where
+  show _ = "leanzempic: Nat overflow (value exceeds 2^64-1 in word mode)"
+
+instance Exception ZOverflow
+
 overflow :: a
-overflow = error "leanzempic: Nat overflow (word mode: value exceeds 2^64-1)"
+overflow = throw ZOverflow
 {-# NOINLINE overflow #-}
 
 natZero :: ZNat
@@ -26,7 +35,10 @@ natSub x y = if x >= y then x - y else 0
 natMul (W# a) (W# b) = case timesWord2# a b of (# 0##, lo #) -> W# lo; _ -> overflow
 natDiv x y = if y == 0 then 0 else quot x y
 natMod x y = if y == 0 then x else rem x y
-natPow x y = go 1 y
+natPow x y
+  | y == 0 = 1
+  | x <= 1 = x
+  | otherwise = go 1 y
   where go !acc 0 = acc
         go !acc n = go (natMul acc x) (n - 1)
 natShr x y = if y >= 64 then 0 else shiftR x (fromIntegral y)
@@ -57,3 +69,9 @@ natSucc x = natAdd x 1
 {-# INLINE natLt #-}
 {-# INLINE natLe #-}
 {-# INLINE natSucc #-}
+
+-- Explicit build so GHC's foldr/build fusion always sees the producer.
+zRange :: ZNat -> [Any]
+zRange n = map zo (build (\c nil ->
+  let go !i = if i >= n then nil else i `c` go (i + 1) in go 0))
+{-# INLINE zRange #-}

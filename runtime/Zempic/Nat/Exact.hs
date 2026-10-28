@@ -1,10 +1,12 @@
 -- Copyright 2026 Keith Adler. Licensed under the Apache License, Version 2.0.
 --
 -- Exact Lean Nat as Haskell Natural (arbitrary precision).
-module Zempic.Nat where
+module Zempic.Nat.Exact where
 
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
+import GHC.Exts (build)
 import Numeric.Natural (Natural)
+import Zempic.Runtime (Any, zo)
 
 type ZNat = Natural
 
@@ -50,3 +52,9 @@ natSucc = (+ 1)
 {-# INLINE natLt #-}
 {-# INLINE natLe #-}
 {-# INLINE natSucc #-}
+
+-- Explicit build so GHC's foldr/build fusion always sees the producer.
+zRange :: ZNat -> [Any]
+zRange n = map zo (build (\c nil ->
+  let go i = if i >= n then nil else i `c` go (i + 1) in go 0))
+{-# INLINE zRange #-}
