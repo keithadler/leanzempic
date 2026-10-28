@@ -1,0 +1,10 @@
+name = "leanzempic"
+version = "0.1.0"
+defaultTargets = ["Zempic"]
+
+[[lean_lib]]
+name = "Zempic"
+
+[[lean_lib]]
+name = "Examples"
+srcDir = "examples"

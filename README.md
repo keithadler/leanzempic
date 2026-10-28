@@ -1,0 +1,54 @@
+# leanzempic 🙂
+
+A Haskell backend for Lean 4. It prints Lean's compiled terms (LCNF, mono
+phase) as Haskell shaped like GHC Core, so GHC's optimizer decides the
+execution order and the code generator.
+
+Licensed under Apache-2.0. Status: v0.1, private, early.
+
+## Why
+
+Lean's C backend is slow next to OCaml and Haskell on many programs. Two
+reasons: reference counting on every value, and no fusion or deforestation
+across function boundaries. GHC has strictness analysis, worker/wrapper,
+case-of-case, and foldr/build fusion. leanzempic hands it Lean programs in a
+form it can use.
+
+## How it works
+
+LCNF is already erased, in A-normal form, with explicit join points and Lean's
+strict evaluation order. The printer keeps that structure:
+
+| LCNF | Emitted |
+|---|---|
+| `let x := v` | strict binding (`let !x = v`, a `case` in Core) |
+| `jp j x := ...` | local function in tail position (GHC makes it a join point) |
+| `cases` | `case` on a generated `data` type, or `Bool` |
+| structure `proj` | single-constructor `case` |
+
+Two outputs per run: a compilable `.hs` module, and a `.core` text dump in
+Core notation for reading. GHC cannot ingest Core text, so real Core injection
+(a GHC plugin) is on the roadmap.
+
+## Use
+
+```lean
+import Zempic
+#zempic fact sumL to "build/Out.hs"
+```
+
+Compile with `ghc -O2 -iruntime -ibuild`. See `tests/run.sh` for the full loop.
+
+## Not yet
+
+* Typed output. Every value is `Any` (free casts), so GHC cannot unbox yet.
+* Fixed-width ints, `String`/`Array` ops, `IO`, `Float`, `Thunk`/`Task`.
+  Unsupported constants are listed in a compile error, never silently dropped.
+* Fusion. Needs mapping Lean list functions onto GHC's fusible combinators.
+* Benchmarks against the C backend. None run yet, so no speed claims.
+
+## Lean Studio
+
+Every module is checked with Lean Studio's `check_file`/`build`. Next: use
+`verify` (Tenet) on the Lean side and `profile` to compare Lean-native and GHC
+timings per declaration.
