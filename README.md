@@ -389,8 +389,10 @@ What the generated code does with the verdict:
 * A module that contains in-place updates is compiled with `-fno-cse -fno-full-laziness`, so GHC can
   never merge two array constructions into one shared array or float one out to top level.
 
-`set_option zempic.own false` turns the analysis off. See [Testing](#testing) for how hard it was
-attacked, including five deliberately broken versions of the analysis.
+`set_option zempic.own false` turns the analysis off. [`SOUNDNESS.md`](SOUNDNESS.md) states exactly
+what is claimed, the assumptions it rests on, and what would make it stronger (it is tested and
+argued, not proved). See [Testing](#testing) for how hard it was attacked, including five
+deliberately broken versions of the analysis.
 
 ## Strings
 
@@ -630,6 +632,10 @@ tools/zghc              GHC with the right flags, and without Lean's clang on PA
 plugin/                 GHC Core plugin spike (a separate Cabal package, see plugin/README.md)
 spike/                  small drivers for the plugin spike
 BENCH.md                the benchmark log
+SOUNDNESS.md            the ownership analysis: claim, argument, assumptions, tests
+CHANGELOG.md            what changed
+CONTRIBUTING.md         how to contribute
+SECURITY.md             what to trust and how to report a problem
 ```
 
 ## Developing
