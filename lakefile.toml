@@ -8,3 +8,8 @@ name = "Zempic"
 [[lean_lib]]
 name = "Examples"
 srcDir = "examples"
+
+[[lean_exe]]
+name = "bench"
+root = "Bench"
+srcDir = "examples"
