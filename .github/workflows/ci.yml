@@ -17,7 +17,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # macos-latest moved to an image whose Command Line Tools SDK the linker cannot read.
+        os: [ubuntu-latest, macos-15]
     steps:
       - uses: actions/checkout@v4
 
@@ -31,6 +32,13 @@ jobs:
         with:
           ghc-version: '9.14.1'
           cabal-version: 'latest'
+
+      - name: Toolchain diagnostics (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          sw_vers
+          xcode-select -p
+          xcrun --sdk macosx --show-sdk-path
 
       - name: Versions
         run: |
