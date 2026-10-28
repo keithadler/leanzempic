@@ -12,9 +12,13 @@ stage may happen in a different order or not at all.
 -/
 namespace Zempic.Fuse
 
+/-- List map. Replaced by GHC's fusible `map` in the Haskell backend. -/
 @[noinline] def map (f : α → β) (xs : List α) : List β := List.map f xs
+/-- List filter. Replaced by GHC's fusible `filter`. -/
 @[noinline] def filter (p : α → Bool) (xs : List α) : List α := List.filter p xs
+/-- Left fold. Replaced by GHC's strict, fusible `foldl'`. -/
 @[noinline] def foldl (f : β → α → β) (init : β) (xs : List α) : β := List.foldl f init xs
+/-- `[0, n)`. Replaced by an explicit `build` so GHC can fuse it. -/
 @[noinline] def range (n : Nat) : List Nat := List.range n
 
 end Zempic.Fuse

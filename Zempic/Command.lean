@@ -12,6 +12,7 @@ namespace Zempic
 `#zempic f g to "path/Name.hs"` writes it (module name = file stem), and also writes `Name.core`. -/
 syntax (name := zempicCmd) "#zempic " ident+ (" to " str)? (&" mode " ident)? : command
 
+/-- Elaborate `#zempic`: emit the Haskell files and the Core dump for the named constants. -/
 @[command_elab zempicCmd] def elabZempic : CommandElab := fun stx => do
   let ids := stx[1].getArgs
   let path? := stx[2].getArgs[1]?.map (·.isStrLit?.get!)

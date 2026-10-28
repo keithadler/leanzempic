@@ -12,6 +12,7 @@ import Zempic.Fuse
 
 open Lean Compiler LCNF
 
+/-- Turn on the list-fusion rewrite for the declarations compiled under this option. -/
 register_option zempic.fuse : Bool := {
   defValue := false
   descr := "(leanzempic) rewrite List.map/filter/foldl/range into fusible Zempic.Fuse calls"
@@ -45,9 +46,11 @@ def rewrite (v : LetValue .pure) : CompilerM (Option (LetValue .pure)) := do
   return none
 
 mutual
+/-- Rewrite the body of a local function or join point. -/
 partial def goFun (d : FunDecl .pure) : CompilerM (FunDecl .pure) := do
   d.updateValue (← go d.value)
 
+/-- Rewrite every recognized list call in `c`, leaving the rest unchanged. -/
 partial def go (c : Code .pure) : CompilerM (Code .pure) := do
   match c with
   | .let d k =>
@@ -63,6 +66,7 @@ partial def go (c : Code .pure) : CompilerM (Code .pure) := do
   | _ => return c
 end
 
+/-- The pass: a no-op unless `zempic.fuse` is set. -/
 def pass : Pass where
   phase := .base
   name := `zempicFuse
@@ -73,6 +77,7 @@ def pass : Pass where
       | .code c => return { d with value := .code (← go c) }
       | _ => return d
 
+/-- Install `pass` just before Lean's `specialize`. -/
 @[cpass] def installer : PassInstaller :=
   PassInstaller.installBefore .base `specialize (fun _ => pass)
 
