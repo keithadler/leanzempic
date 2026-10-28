@@ -557,7 +557,7 @@ An honest checklist, because "production" depends on what you need.
 | Tested against Lean itself | 16 checks compare generated code with native Lean, value by value, at several sizes |
 | Runtime tested against models | random operation sequences on arrays, strings, integers and the `Word`/`Natural` fast path, with deliberately broken runtimes caught |
 | Differential fuzzing | random Lean programs run by Lean and through leanzempic must agree (`tools/fuzz.py`) |
-| Machine-checked facts | Tenet verifies 264 of 264 declarations, including name-mangling injectivity |
+| Machine-checked facts | Tenet verifies 265 of 265 declarations, including name-mangling injectivity |
 | Packaging | the runtime is a Cabal package; `tools/zghc` avoids the toolchain `PATH` trap |
 | Documentation | this README, [`BENCH.md`](BENCH.md), [`SOUNDNESS.md`](SOUNDNESS.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md), [`CHANGELOG.md`](CHANGELOG.md) |
 
