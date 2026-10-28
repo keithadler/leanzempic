@@ -257,3 +257,38 @@ Two further safeguards: modules that use in-place updates are compiled with `-fn
 -fno-full-laziness` so GHC cannot share two array constructions or float one to top level, and each
 in-place primitive checks that its array is the live version and otherwise falls back to the
 persistent operation. `set_option zempic.own false` turns the analysis off.
+
+# Strings, second pass: a runtime fix, not an analysis (`runtime/Zempic/Str.hs`)
+
+I planned to extend the ownership analysis to strings. Measuring first changed the plan. A bare
+Haskell loop calling the string push 10 million times allocated exactly what the generated program
+did (1.71 GB, 0.17 s): all of the cost was inside the push itself, 171 bytes per call against an
+intrinsic 32 (one record). It was overhead in my implementation: a closure per append,
+`withForeignPtr` bookkeeping, and a boxed counter in a separate mutable cell. Moving the byte
+count into the buffer, giving the one-byte case a closure-free path, and writing decimal digits
+straight into a fresh buffer (instead of through `Text` and `ByteString`) fixed it:
+
+| Test | n | Lean | Before | After |
+|---|---|---|---|---|
+| push characters | 1e7 | 0.05 s | 0.18 s, 1.71 GB | **0.06 s**, 353 MB |
+| append `toString i ++ ","` | 3e6 | 0.12 s | 0.50 s | **0.23 s** |
+| equality and ordering of `toString` pairs | 1e6 | 0.07 s | 0.24 s | **0.09 s** |
+| `toList`, `ofList`, reverse | 2e6 | 0.02 s | 0.02 s | 0.02 s |
+| length and byte size of non-ASCII text | 2e7 | 0.02 s | 0.02 s | 0.02 s |
+
+Pushing is now level with Lean and the other string tests are within about 2x. An ownership
+analysis would save only the small record per push, where the loop is already at parity, and would
+add soundness risk, so strings stay persistent (every version a prefix of a shared buffer).
+
+The buffer's one subtle rule is that an append may write in place only if the string is the newest
+version of its buffer, and otherwise must copy. `examples/StringAliasing.lean` (6 programs, 7
+sizes each) pushes to an old version twice, appends strings to themselves, extends one literal in
+several places, grows across the starting capacity with multi-byte characters, keeps snapshots,
+and compares versions that share a buffer; all match Lean. Removing the newest-version check from
+either the one-byte push or the general append makes every size differ, so the tests would notice.
+`panicCore` is a runtime primitive that returns the default value silently (Lean also prints a
+message to stderr).
+
+**A mistake worth recording.** While writing these tests both programs failed to build, both
+outputs were empty, and my comparison called two empty files "identical". Every comparison in
+`tests/run.sh` now goes through `eq`, which fails on empty output.

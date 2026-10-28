@@ -100,7 +100,7 @@ checked by tests, not by Lean).
 ## Not yet
 
 * Unboxed list elements and pair components (they are `Any`), and typed values across the auto-mode wrapper (it covers only `Nat`/`Bool` signatures, so a structure-typed function is used from `Out.Fast`/`Out.Exact` directly).
-* `IO`, `Float`, `Thunk`/`Task`, `ByteArray`, and string positions and slices (`String.get`, `s.foldl`, `splitOn` and the rest of the `String.Pos` API).
+* `IO`, `Float`, `Thunk`/`Task`, `ByteArray`, and string positions and slices (`String.get`, `s.foldl`, `splitOn` and the rest of the `String.Pos` API). `panic!` returns the default value without printing Lean's message.
   Unsupported constants are listed in a compile error, never silently dropped.
 * More fusible combinators. Mapped (by hand or by `zempic.fuse`): `map`, `filter`, `foldl`, `foldr`, `range`, `length`, `sum` (Nat), `take`, `append`, `zip`, `any`, `all`. Not mapped: `reverse`, `filterMap`, `join`, `zipWith`, `Array`, `for` loops. `zip` fuses on its first list only.
 * Benchmarks beyond three loops. See `BENCH.md` for what is and is not measured.

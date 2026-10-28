@@ -79,6 +79,8 @@ def prims : List (Name × String × List String × String) :=
   , (`String.length, "strLen", ["Any"], "ZNat")
   , (`String.utf8ByteSize, "strBytes", ["Any"], "ZNat")
   , (`String.append, "strAppend", ["Any", "Any"], "Any")
+  , (`String.Internal.append, "strAppend", ["Any", "Any"], "Any")
+  , (`panicCore, "panicCore", ["Any", "Any", "Any"], "Any")
   , (`String.push, "strPush", ["Any", "Word32"], "Any")
   , (`String.decEq, "strEq", ["Any", "Any"], "Bool")
   , (`String.decidableLT, "strLt", ["Any", "Any"], "Bool")

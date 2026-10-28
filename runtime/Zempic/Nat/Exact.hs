@@ -235,8 +235,13 @@ strOfList cs = strIO (zo <$> sFromText (T.pack (map (\c -> chr (fromIntegral (zu
 {-# NOINLINE strOfList #-}
 
 natRepr :: ZNat -> Any
-natRepr n = strIO (zo <$> sFromText (T.pack (show n)))
+natRepr n = strIO (zo <$> sFromIntegral n)
 {-# NOINLINE natRepr #-}
+
+-- Lean's panic prints a message to stderr and carries on with the default value. This carries on
+-- with the default silently (the message is not reproduced).
+panicCore :: Any -> Any -> Any -> Any
+panicCore _ d _ = d
 
 strLit :: String -> Any
 strLit lit = strIO (zo <$> sFromText (T.pack lit))

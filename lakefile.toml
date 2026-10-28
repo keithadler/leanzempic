@@ -72,3 +72,8 @@ srcDir = "examples"
 name = "aliasing"
 root = "Aliasing"
 srcDir = "examples"
+
+[[lean_exe]]
+name = "stralias"
+root = "StringAliasing"
+srcDir = "examples"
