@@ -1,10 +1,9 @@
 import Bench
-import Zempic.Runtime
-import Numeric.Natural (Natural)
+import Zempic.Nat
 import System.Environment (getArgs)
 
 main :: IO ()
 main = do
   a <- getArgs
-  let w = case a of (x:_) -> read x; _ -> 2 :: Natural
-  print (zu (z_runBench (zo w)) :: Natural)
+  let w = case a of (x:_) -> fromInteger (read x); _ -> 2 :: ZNat
+  print (z_runBench w)

@@ -39,13 +39,22 @@ import Zempic
 
 Compile with `ghc -O2 -iruntime -ibuild`. See `tests/run.sh` for the full loop.
 
+## Nat modes
+
+Pick one by include path when compiling the generated module:
+
+* `-iruntime/natural`: exact, Nat is `Natural`. Same semantics as Lean, slower.
+* `-iruntime/word`: Nat is `Word`; results above 2^64-1 abort with an error, never wrap. Fast (see `BENCH.md`).
+
+`Nat` and `Bool` are typed in signatures; other values are still `Any` (free casts).
+
 ## Not yet
 
-* Typed output. Every value is `Any` (free casts), so GHC cannot unbox yet.
+* Types beyond `Nat`/`Bool`, so GHC cannot unbox structures or list elements yet.
 * Fixed-width ints, `String`/`Array` ops, `IO`, `Float`, `Thunk`/`Task`.
   Unsupported constants are listed in a compile error, never silently dropped.
 * Fusion. Needs mapping Lean list functions onto GHC's fusible combinators.
-* Benchmarks against the C backend. None run yet, so no speed claims.
+* Benchmarks beyond three loops. See `BENCH.md` for what is and is not measured.
 
 ## Lean Studio
 

@@ -35,17 +35,20 @@ def hsStr (s : String) : String :=
 
 /-! ## Primitives that the runtime implements -/
 
-/-- Lean constants implemented by `runtime/Zempic/Runtime.hs`: name, Haskell name, arity. -/
-def prims : List (Name × String × Nat) :=
-  [ (`Nat.add, "natAdd", 2), (`Nat.sub, "natSub", 2), (`Nat.mul, "natMul", 2)
-  , (`Nat.div, "natDiv", 2), (`Nat.mod, "natMod", 2), (`Nat.pow, "natPow", 2)
-  , (`Nat.decEq, "natEq", 2), (`Nat.beq, "natEq", 2)
-  , (`Nat.decLt, "natLt", 2), (`Nat.blt, "natLt", 2)
-  , (`Nat.decLe, "natLe", 2), (`Nat.ble, "natLe", 2)
-  , (`Nat.shiftRight, "natShr", 2), (`Nat.shiftLeft, "natShl", 2), (`Nat.land, "natAnd", 2)
-  , (`Nat.lor, "natOr", 2), (`Nat.xor, "natXor", 2), (`Nat.gcd, "natGcd", 2)
-  , (`Nat.succ, "natSucc", 1), (`Nat.zero, "natZero", 0)
-  , (`Bool.true, "hsTrue", 0), (`Bool.false, "hsFalse", 0) ]
+/-- Lean constants implemented by `runtime/Zempic/Runtime.hs`: Haskell name, argument types, result type. -/
+def prims : List (Name × String × List String × String) :=
+  let n2 := ["ZNat", "ZNat"]
+  [ (`Nat.add, "natAdd", n2, "ZNat"), (`Nat.sub, "natSub", n2, "ZNat")
+  , (`Nat.mul, "natMul", n2, "ZNat"), (`Nat.div, "natDiv", n2, "ZNat")
+  , (`Nat.mod, "natMod", n2, "ZNat"), (`Nat.pow, "natPow", n2, "ZNat")
+  , (`Nat.decEq, "natEq", n2, "Bool"), (`Nat.beq, "natEq", n2, "Bool")
+  , (`Nat.decLt, "natLt", n2, "Bool"), (`Nat.blt, "natLt", n2, "Bool")
+  , (`Nat.decLe, "natLe", n2, "Bool"), (`Nat.ble, "natLe", n2, "Bool")
+  , (`Nat.shiftRight, "natShr", n2, "ZNat"), (`Nat.shiftLeft, "natShl", n2, "ZNat")
+  , (`Nat.land, "natAnd", n2, "ZNat"), (`Nat.lor, "natOr", n2, "ZNat")
+  , (`Nat.xor, "natXor", n2, "ZNat"), (`Nat.gcd, "natGcd", n2, "ZNat")
+  , (`Nat.succ, "natSucc", ["ZNat"], "ZNat"), (`Nat.zero, "natZero", [], "ZNat")
+  , (`Bool.true, "True", [], "Bool"), (`Bool.false, "False", [], "Bool") ]
 
 /-- Types with a builtin runtime representation; building or matching them is not supported yet. -/
 def builtinTypes : List Name :=
@@ -56,6 +59,8 @@ def builtinTypes : List Name :=
 
 structure St where
   names : Std.HashMap FVarId String := {}
+  tys : Std.HashMap FVarId String := {}
+  jpTys : Std.HashMap FVarId (List String) := {}
   jps : Std.HashSet FVarId := {}
   next : Nat := 0
   queue : Array Name := #[]
@@ -68,17 +73,40 @@ abbrev EmitM := StateRefT St CoreM
 def unsupported (what : String) : EmitM Unit :=
   modify fun s => if s.unsupported.contains what then s else { s with unsupported := s.unsupported.push what }
 
-def bind (id : FVarId) (base : Name) : EmitM String := do
+def bindT (id : FVarId) (base : Name) (ty : String) : EmitM String := do
   let s ← get
   let short := (base.toString.toList.filter (fun c => c.isAlphanum && c.toNat < 128)).take 10 |> String.ofList
   let nm := s!"v{s.next}_{short}"
-  set { s with next := s.next + 1, names := s.names.insert id nm }
+  set { s with next := s.next + 1, names := s.names.insert id nm, tys := s.tys.insert id ty }
   return nm
+
+def bind (id : FVarId) (base : Name) : EmitM String := bindT id base "Any"
+
+/-- Haskell type for a Lean type: only `Nat` and `Bool` are typed so far; everything else is `Any`. -/
+def hsTy : Expr → String
+  | .const `Nat _ => "ZNat"
+  | .const `Bool _ => "Bool"
+  | _ => "Any"
+
+def bindP (p : Param .pure) : EmitM String := bindT p.fvarId p.binderName (hsTy p.type)
 
 def lookup (id : FVarId) : EmitM String := do
   match (← get).names[id]? with
   | some n => return n
   | none => unsupported s!"unbound variable {id.name}"; return "undefined"
+
+def tyOf (id : FVarId) : EmitM String := do
+  return (← get).tys[id]?.getD "Any"
+
+/-- Cast `x` of Haskell type `have` to `want`. Casts between `Any` and a real type are free in Core. -/
+def coerce (x have_ want : String) : String :=
+  if have_ == want then x
+  else if want == "Any" then s!"(zo {x})"
+  else if have_ == "Any" then s!"(zu {x})"
+  else s!"(zu (zo {x}))"
+
+def useAs (id : FVarId) (want : String) : EmitM String := do
+  return coerce (← lookup id) (← tyOf id) want
 
 def noteType (t : Name) : EmitM Unit := do
   if t == `Bool then return
@@ -99,13 +127,15 @@ def monoDecl? (n : Name) : EmitM (Option (Decl .pure)) := do
 
 /-- How a constant is called. -/
 inductive Head
-  | prim (hs : String) (arity : Nat)
+  | prim (hs : String) (ptys : List String) (ret : String)
   | ctor (hs : String) (arity numParams : Nat)
-  | decl (hs : String) (arity : Nat)
+  | decl (hs : String) (ptys : List String) (ret : String)
   | bad
 
+def declRet (d : Decl .pure) : String := hsTy (d.type.getForallBodyMaxDepth d.params.size)
+
 def resolve (c : Name) : EmitM Head := do
-  if let some (_, hs, a) := prims.find? (·.1 == c) then return .prim hs a
+  if let some (_, hs, ptys, ret) := prims.find? (·.1 == c) then return .prim hs ptys ret
   match (← getEnv).find? c with
   | some (.ctorInfo v) =>
     noteType v.induct
@@ -114,20 +144,24 @@ def resolve (c : Name) : EmitM Head := do
     match ← monoDecl? c with
     | some d =>
       match d.value with
-      | .code _ => request c; return .decl (fnName c) d.params.size
+      | .code _ => request c; return .decl (fnName c) (d.params.toList.map (hsTy ·.type)) (declRet d)
       | .extern _ => unsupported s!"extern {c}"; return .bad
     | none => unsupported s!"constant {c}"; return .bad
 
-def apply (head : String) (arity : Nat) (args : Array String) (ctor : Bool) : String :=
-  let call (h : String) (xs : Array String) :=
-    if xs.isEmpty then h else h ++ " " ++ " ".intercalate xs.toList
+/-- Apply `head` (parameter types `ptys`, result `ret`) to typed atoms; returns expression and its type. -/
+def apply (head : String) (ptys : List String) (ret : String) (args : Array (String × String))
+    (ctor : Bool) : String × String :=
+  let arity := ptys.length
+  let call (xs : List String) := if xs.isEmpty then head else head ++ " " ++ " ".intercalate xs
+  let cast := fun (i : Nat) (a : String × String) => coerce a.1 a.2 (ptys.getD i "Any")
   if args.size ≤ arity then
-    let e := call head args
-    if ctor || args.size < arity then s!"(zo ({e}))" else e
+    let e := call ((args.toList.zipIdx.map fun (a, i) => cast i a))
+    if ctor || args.size < arity then (s!"(zo ({e}))", "Any")
+    else if arity == 0 then (head, ret) else (e, ret)
   else
-    let sat := call head (args.extract 0 arity)
-    let sat := if ctor then s!"(zo ({sat}))" else sat
-    (args.extract arity args.size).foldl (fun acc a => s!"(zap {acc} {a})") sat
+    let sat := call (((args.extract 0 arity).toList.zipIdx.map fun (a, i) => cast i a))
+    let sat := if ctor || ret != "Any" then s!"(zo ({sat}))" else sat
+    ((args.extract arity args.size).foldl (fun acc a => s!"(zap {acc} {coerce a.1 a.2 "Any"})") sat, "Any")
 
 def single (t : Name) : EmitM (Option (Name × Nat)) := do
   noteType t
@@ -144,57 +178,66 @@ def pad (n : Nat) : String := "".pushn ' ' (2 * n)
 
 /-! ## Haskell printer -/
 
-def hsLetValue : LetValue .pure → EmitM String
-  | .lit (.nat n) => return s!"(zo ({n} :: Natural))"
-  | .lit (.str s) => return s!"(zo ({hsStr s} :: String))"
-  | .lit _ => do unsupported "fixed-width integer literal"; return "erased"
-  | .erased => return "erased"
+def atomT : Arg .pure → EmitM (String × String)
+  | .fvar id => return (← lookup id, ← tyOf id)
+  | _ => return ("erased", "Any")
+
+/-- Expression and its Haskell type. -/
+def hsLetValue : LetValue .pure → EmitM (String × String)
+  | .lit (.nat n) => return (s!"({n} :: ZNat)", "ZNat")
+  | .lit (.str s) => return (s!"(zo ({hsStr s} :: String))", "Any")
+  | .lit _ => do unsupported "fixed-width integer literal"; return ("erased", "Any")
+  | .erased => return ("erased", "Any")
   | .fvar f args => do
-    let f ← lookup f
-    let args ← args.mapM atom
-    return args.foldl (fun acc a => s!"(zap {acc} {a})") f
+    let f ← useAs f "Any"
+    let args ← args.mapM atomT
+    return (args.foldl (fun acc a => s!"(zap {acc} {coerce a.1 a.2 "Any"})") f, "Any")
   | .proj t i x => do
-    let x ← lookup x
+    let x ← useAs x "Any"
     match ← single t with
     | some (c, n) =>
       let ps := (List.range n).map (s!"p{·}")
-      return s!"(case (zu {x} :: {typeName t}) of \{ {ctorName c} {" ".intercalate ps} -> p{i} })"
-    | none => unsupported s!"projection on {t}"; return "erased"
+      return (s!"(case (zu {x} :: {typeName t}) of \{ {ctorName c} {" ".intercalate ps} -> p{i} })", "Any")
+    | none => unsupported s!"projection on {t}"; return ("erased", "Any")
   | .const c _ args => do
-    let args ← args.mapM atom
+    let args ← args.mapM atomT
     match ← resolve c with
-    | .prim hs a => return apply hs a args false
-    | .decl hs a => return apply hs a args false
-    | .ctor hs a np => return apply hs a (args.extract np args.size) true
-    | .bad => return "erased"
+    | .prim hs ptys ret => return apply hs ptys ret args false
+    | .decl hs ptys ret => return apply hs ptys ret args false
+    | .ctor hs a np => return apply hs (List.replicate a "Any") "Any" (args.extract np args.size) true
+    | .bad => return ("erased", "Any")
 
 mutual
-partial def hsCode (c : Code .pure) (ind : Nat) : EmitM String := do
+partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String := do
   match c with
   | .let d k =>
-    let rhs ← hsLetValue d.value
-    let x ← bind d.fvarId d.binderName
-    return s!"let \{ !{x} = {rhs} } in\n{pad ind}{← hsCode k ind}"
+    let (rhs, ty) ← hsLetValue d.value
+    let x ← bindT d.fvarId d.binderName ty
+    return s!"let \{ !{x} = {rhs} } in\n{pad ind}{← hsCode k ind ret}"
   | .fun d k =>
     let ps ← d.params.mapM fun p => bind p.fvarId p.binderName
     let f ← bind d.fvarId d.binderName
-    let body ← hsCode d.value (ind + 2)
-    return s!"let \{ {f} = zo (\\{" ".intercalate ps.toList} ->\n{pad (ind + 2)}{body}) } in\n{pad ind}{← hsCode k ind}"
+    let body ← hsCode d.value (ind + 2) "Any"
+    return s!"let \{ {f} = zo (\\{" ".intercalate ps.toList} ->\n{pad (ind + 2)}{body}) } in\n{pad ind}{← hsCode k ind ret}"
   | .jp d k =>
-    let ps ← d.params.mapM fun p => bind p.fvarId p.binderName
+    let tys := d.params.toList.map (hsTy ·.type)
+    let ps ← d.params.mapM fun p => bindP p
+    let ps := (ps.toList.zip tys).map fun (p, t) => s!"({p} :: {t})"
     let j ← bind d.fvarId d.binderName
-    modify fun s => { s with jps := s.jps.insert d.fvarId }
-    let body ← hsCode d.value (ind + 2)
-    return s!"let \{ {j} {" ".intercalate ps.toList} =\n{pad (ind + 2)}{body} } in\n{pad ind}{← hsCode k ind}"
+    modify fun s => { s with jps := s.jps.insert d.fvarId, jpTys := s.jpTys.insert d.fvarId tys }
+    let body ← hsCode d.value (ind + 2) ret
+    return s!"let \{ {j} {" ".intercalate ps} =\n{pad (ind + 2)}{body} } in\n{pad ind}{← hsCode k ind ret}"
   | .jmp j args =>
+    let tys := (← get).jpTys[j]?.getD []
     let j ← lookup j
-    let args ← args.mapM atom
-    return " ".intercalate (j :: args.toList)
-  | .return x => lookup x
+    let args ← args.mapM atomT
+    let args := args.toList.zipIdx.map fun (a, i) => coerce a.1 a.2 (tys.getD i "Any")
+    return " ".intercalate (j :: args)
+  | .return x => useAs x ret
   | .unreach _ => return "error \"leanzempic: unreachable\""
   | .cases cs =>
-    let x ← lookup cs.discr
     let ty := if cs.typeName == `Bool then "Bool" else typeName cs.typeName
+    let x ← useAs cs.discr ty
     noteType cs.typeName
     let mut alts : Array String := #[]
     for a in cs.alts do
@@ -206,18 +249,19 @@ partial def hsCode (c : Code .pure) (ind : Nat) : EmitM String := do
           else do
             let bs ← ps.mapM fun p => bind p.fvarId p.binderName
             pure (" ".intercalate (ctorName n :: bs.toList))
-        alts := alts.push s!"{pat} ->\n{pad (ind + 2)}{← hsCode k (ind + 2)}"
-      | .default k => alts := alts.push s!"_ ->\n{pad (ind + 2)}{← hsCode k (ind + 2)}"
+        alts := alts.push s!"{pat} ->\n{pad (ind + 2)}{← hsCode k (ind + 2) ret}"
+      | .default k => alts := alts.push s!"_ ->\n{pad (ind + 2)}{← hsCode k (ind + 2) ret}"
     let sep := s!";\n{pad (ind + 1)}"
-    return s!"case (zu {x} :: {ty}) of \{\n{pad (ind + 1)}{sep.intercalate alts.toList} }"
+    return s!"case ({x} :: {ty}) of \{\n{pad (ind + 1)}{sep.intercalate alts.toList} }"
 end
 
 def hsDecl (d : Decl .pure) : EmitM String := do
   let .code body := d.value | return ""
-  let ps ← d.params.mapM fun p => bind p.fvarId p.binderName
+  let ps ← d.params.mapM bindP
   let n := fnName d.name
-  let sig := " -> ".intercalate ((ps.toList.map fun _ => "Any") ++ ["Any"])
-  let body ← hsCode body 1
+  let ret := declRet d
+  let sig := " -> ".intercalate ((d.params.toList.map (hsTy ·.type)) ++ [ret])
+  let body ← hsCode body 1 ret
   return s!"{n} :: {sig}\n{n} {" ".intercalate ps.toList} =\n{pad 1}{body}\n"
 
 /-! ## Core-notation printer (for reading; GHC cannot ingest this) -/
@@ -312,7 +356,7 @@ def emitModule (modName : String) (roots : Array Name) : CoreM Output := do
     let bad := (← get).unsupported
     unless bad.isEmpty do
       throwError "leanzempic: unsupported in this version:\n  {"\n  ".intercalate bad.toList}"
-    let header := s!"\{-# LANGUAGE BangPatterns #-}\n\{-# OPTIONS_GHC -Wno-unused-matches -Wno-unused-imports #-}\n-- Generated by leanzempic. Do not edit.\nmodule {modName} where\n\nimport Zempic.Runtime\nimport Numeric.Natural (Natural)\n\n"
+    let header := s!"\{-# LANGUAGE BangPatterns, ScopedTypeVariables #-}\n\{-# OPTIONS_GHC -Wno-unused-matches -Wno-unused-imports #-}\n-- Generated by leanzempic. Do not edit.\nmodule {modName} where\n\nimport Zempic.Runtime\nimport Zempic.Nat\n\n"
     return { haskell := header ++ "\n".intercalate (datas ++ hs).toList
              core := "-- leanzempic Core-notation dump (for reading)\n\n" ++ "\n".intercalate core.toList }
   act.run' {}
