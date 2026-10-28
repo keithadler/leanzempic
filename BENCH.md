@@ -34,3 +34,30 @@ PATH=/opt/homebrew/bin:/usr/bin:/bin bench/build.sh natural   # or word
 
 (Run `build.sh` without Lean's toolchain on PATH, or GHC's C step picks up
 Lean's bundled clang and fails to find system headers.)
+
+# Fusion pipeline (`examples/Fusion.lean`)
+
+`foldl (+) 0 (filter (y % 3 != 0) (map (x*x % 1000) (range n)))`. Best of 3 wall-clock.
+
+| | n = 5e6 | n = 2e7 |
+|---|---|---|
+| Lean native, idiomatic `List.map/filter/foldl` | 0.10 s | 0.35 s |
+| Lean native, via `Zempic.Fuse.*` (closure calls, no fusion) | 0.16 s | 0.60 s |
+| leanzempic, word Nat, **fused** | **0.03 s** | **0.04 s** |
+| leanzempic, exact Nat, **fused** | 0.12 s | 0.41 s |
+| leanzempic, word Nat, ordinary Lean code (no `Zempic.Fuse`) | 0.37 s | 2.56 s |
+
+Fused word mode allocates 58 KB in total for n = 2e7: the three intermediate lists
+never exist. That is 9x faster than Lean's idiomatic version.
+
+* **You must opt in.** Fusion happens only for pipelines written with `Zempic.Fuse.map/filter/foldl/range`.
+  Ordinary Lean list code is compiled by Lean into private specialized loops before
+  leanzempic sees it, so it stays unfused, and it is *slower* than Lean's own C there
+  (2.56 s vs 0.35 s: GHC's copying GC on a live 2e7-element list).
+* **Exact Nat** only breaks even (0.41 s vs 0.35 s): `Natural` arithmetic dominates once the lists are gone.
+* Two things made it fire, both learned the hard way: lists must be native `[Any]` with no
+  `unsafeCoerce` between stages (each cast is an opaque `case` that blocks GHC's rewrite
+  rules), and `range` must be an explicit `build` (an `if n == 0` guard turned the producer
+  into a join-point argument).
+* Intermediate `let`s of fusible stages are emitted lazy, not strict. Results are identical
+  for total functions; a panic inside a stage may happen in a different order or never.

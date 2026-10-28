@@ -39,6 +39,19 @@ import Zempic
 
 Compile with `ghc -O2 -iruntime -ibuild`. See `tests/run.sh` for the full loop.
 
+## Fusion
+
+```lean
+import Zempic
+def pipe (n : Nat) : Nat :=
+  Zempic.Fuse.foldl (· + ·) 0 (Zempic.Fuse.filter (· % 3 != 0)
+    (Zempic.Fuse.map (fun x => x * x % 1000) (Zempic.Fuse.range n)))
+```
+
+These are normal Lean functions (still run and prove in Lean). The Haskell backend
+swaps them for GHC's fusible `map`/`filter`/`foldl'`/`build`, and the three stages
+become one loop with no lists. 9x faster than Lean's own version in word mode.
+
 ## Nat modes
 
 Pick one by include path when compiling the generated module:
@@ -53,7 +66,7 @@ Pick one by include path when compiling the generated module:
 * Types beyond `Nat`/`Bool`, so GHC cannot unbox structures or list elements yet.
 * Fixed-width ints, `String`/`Array` ops, `IO`, `Float`, `Thunk`/`Task`.
   Unsupported constants are listed in a compile error, never silently dropped.
-* Fusion. Needs mapping Lean list functions onto GHC's fusible combinators.
+* Fusion of ordinary Lean list code. Only pipelines written with `Zempic.Fuse.*` fuse (see `BENCH.md`); more combinators (`length`, `zip`, `take`, `append`, ...) are not mapped yet.
 * Benchmarks beyond three loops. See `BENCH.md` for what is and is not measured.
 
 ## Lean Studio

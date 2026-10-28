@@ -13,3 +13,15 @@ for m in natural word; do
   out=$(build/t-$m)
   [ "$out" = "$expected" ] && echo "ok $m" || { echo "FAIL $m"; echo "$out"; exit 1; }
 done
+
+# Fusion pipeline: Lean-native value must match Haskell value in both modes.
+lake build fusion >/dev/null
+want=$(.lake/build/bin/fusion lean 100000)
+for m in natural word; do
+  mkdir -p build/of-$m
+  (cd bench && ghc -O2 -i../runtime -i../runtime/$m -i../build -outputdir ../build/of-$m -o ../build/fusion-$m FusionMain.hs >/dev/null)
+  for w in lean fused; do
+    got=$(build/fusion-$m $w 100000)
+    [ "$got" = "$want" ] && echo "ok fusion $m $w" || { echo "FAIL fusion $m $w: $got vs $want"; exit 1; }
+  done
+done
