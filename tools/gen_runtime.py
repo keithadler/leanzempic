@@ -82,6 +82,10 @@ arrSet :: Any -> Any -> ZNat -> Any -> Any
 arrSet _ !a !i !v = arrIO (zo <$> aSet (zu a) (arrIdx i) v)
 {-# INLINE arrSet #-}
 
+arrSetH :: Any -> Any -> ZNat -> Any -> Any -> Any
+arrSetH _ !a !i !v _ = arrIO (zo <$> aSet (zu a) (arrIdx i) v)
+{-# INLINE arrSetH #-}
+
 arrUSet :: Any -> Any -> Word -> Any -> Any -> Any
 arrUSet _ a i v _ = arrIO (zo <$> aSet (zu a) (fromIntegral i) v)
 {-# INLINE arrUSet #-}
@@ -177,6 +181,145 @@ strLit lit = strIO (zo <$> sFromText (T.pack lit))
 {-# NOINLINE strLit #-}
 """.split("\n")
 
+
+EXTRA_FUNCS = r"""-- Strings by byte position (a Pos is a byte offset).
+strGet :: Any -> ZNat -> Word32
+strGet s p = sCharAt (zu s :: Str) (arrIdx p)
+
+strNext :: Any -> ZNat -> ZNat
+strNext s p = natAdd p (fromIntegral (sCharWidthAt (zu s :: Str) (arrIdx p)))
+
+strPrev :: Any -> ZNat -> ZNat
+strPrev s p = fromIntegral (sPrev (zu s :: Str) (arrIdx p))
+
+strAtEnd :: Any -> ZNat -> Bool
+strAtEnd s p = toInteger p >= toInteger (sBytes (zu s :: Str))
+
+strExtract :: Any -> ZNat -> ZNat -> Any
+strExtract s b e = strIO (zo <$> sExtract (zu s) (arrIdx b) (arrIdx e))
+{-# NOINLINE strExtract #-}
+
+strPushn :: Any -> Word32 -> ZNat -> Any
+strPushn s c n = strIO (zo <$> sPushn (zu s) c (arrIdx n))
+{-# NOINLINE strPushn #-}
+
+strDecodeChar :: Any -> ZNat -> Any -> Word32
+strDecodeChar s p _ = strGet s p
+
+strPosNext :: Any -> ZNat -> Any -> ZNat
+strPosNext s p _ = strNext s p
+
+strGetByte :: Any -> ZNat -> Any -> Word8
+strGetByte s i _ = sByteAt (zu s :: Str) (arrIdx i)
+
+strPosOf :: Any -> Word32 -> ZNat
+strPosOf s c = go 0
+  where st = zu s :: Str
+        n = sBytes st
+        go i | i >= n = fromIntegral n
+             | sCharAt st i == c = fromIntegral i
+             | otherwise = go (i + sCharWidthAt st i)
+
+strOffsetOfPos :: Any -> ZNat -> ZNat
+strOffsetOfPos s p = go 0 0
+  where st = zu s :: Str
+        lim = min (arrIdx p) (sBytes st)
+        go i acc | i >= lim = acc
+                 | otherwise = go (i + sCharWidthAt st i) (acc + 1)
+
+strHash :: Any -> Word64
+strHash s = sHash (zu s :: Str)
+
+strMemcmp :: Any -> Any -> ZNat -> ZNat -> ZNat -> Any -> Any -> Bool
+strMemcmp a b i j len _ _ = sMemEq (zu a :: Str) (zu b :: Str) (arrIdx i) (arrIdx j) (arrIdx len)
+
+strSetAt :: Any -> ZNat -> Word32 -> Any
+strSetAt s p c =
+  let st = zu s :: Str
+      i = arrIdx p
+  in if i >= sBytes st || p < 0 then s
+     else strIO (do pre <- sExtract st 0 i
+                    mid <- sPush pre c
+                    rest <- sExtract st (i + sCharWidthAt st i) (sBytes st)
+                    zo <$> sAppend mid rest)
+{-# NOINLINE strSetAt #-}
+
+strSetAtH :: Any -> ZNat -> Word32 -> Any -> Any
+strSetAtH s p c _ = strSetAt s p c
+
+natLog2 :: ZNat -> ZNat
+natLog2 n = if n == 0 then 0 else go 0 (toInteger n)
+  where go acc x = if x <= 1 then acc else go (acc + 1) (x `shiftR` 1)
+
+natPred :: ZNat -> ZNat
+natPred x = if x == 0 then 0 else x - 1
+
+strIsEmpty :: Any -> Bool
+strIsEmpty s = sBytes (zu s :: Str) == 0
+
+-- Int (an Integer), converting to and from Nat.
+intOfNat :: ZNat -> Integer
+intOfNat = toInteger
+{-# INLINE intOfNat #-}
+
+intNegSucc :: ZNat -> Integer
+intNegSucc n = negate (toInteger n) - 1
+
+intToNat :: Integer -> ZNat
+intToNat i = if i < 0 then 0 else natOfInteger i
+
+intNatAbs :: Integer -> ZNat
+intNatAbs i = natOfInteger (abs i)
+
+intPow :: Integer -> ZNat -> Integer
+intPow b e = b ^ toInteger e
+
+floatOfNat :: ZNat -> Double
+floatOfNat = fromIntegral
+
+floatOfInt :: Integer -> Double
+floatOfInt = fromInteger
+
+floatOfSciN :: ZNat -> Bool -> ZNat -> Double
+floatOfSciN m neg e = floatOfSci (toInteger m) neg (toInteger e)
+
+floatToU8 :: Double -> Word8
+floatToU8 x = fromInteger (floatToUnsigned 255 x)
+floatToU16 :: Double -> Word16
+floatToU16 x = fromInteger (floatToUnsigned 65535 x)
+floatToU32 :: Double -> Word32
+floatToU32 x = fromInteger (floatToUnsigned 4294967295 x)
+floatToU64 :: Double -> Word64
+floatToU64 x = fromInteger (floatToUnsigned 18446744073709551615 x)
+floatToUsz :: Double -> Word
+floatToUsz x = fromInteger (floatToUnsigned 18446744073709551615 x)
+
+-- ByteArray, kept in the same shared buffer as strings (bytes only).
+baEmpty :: ZNat -> Any
+baEmpty _ = strIO (zo <$> sFromText T.empty)
+{-# NOINLINE baEmpty #-}
+
+baSize :: Any -> ZNat
+baSize a = fromIntegral (sBytes (zu a :: Str))
+
+baPush :: Any -> Word8 -> Any
+baPush a b = strIO (zo <$> sPushByte (zu a) b)
+{-# NOINLINE baPush #-}
+
+baGet :: Any -> ZNat -> Word8
+baGet a i = let s = zu a :: Str; k = arrIdx i in if k < sBytes s then sByteAt s k else 0
+
+baGetF :: Any -> ZNat -> Any -> Word8
+baGetF a i _ = baGet a i
+
+baUGet :: Any -> Word -> Any -> Word8
+baUGet a i _ = baGet a (fromIntegral i)
+
+baSet :: Any -> ZNat -> Word8 -> Any
+baSet a i b = strIO (zo <$> sSetByte (zu a) (arrIdx i) b)
+{-# NOINLINE baSet #-}
+""".split("\n")
+
 ARRAY_NAMES = ["arrIdx", "arrMkEmpty", "arrReplicate", "arrSize", "arrUSize", "arrPush", "arrGetD",
                "arrGetI", "arrUGet", "arrSet", "arrUSet", "arrSwap", "arrPop"]
 
@@ -187,8 +330,12 @@ def nat_region():
         out += [f"{s}OfNat :: ZNat -> {h}", f"{s}OfNat = fromIntegral",
                 f"{s}ToNat :: {h} -> ZNat", f"{s}ToNat = fromIntegral",
                 f"{{-# INLINE {s}OfNat #-}}", f"{{-# INLINE {s}ToNat #-}}"]
+    for L, s, h, _ in TYPES:
+        out += [f"{s}OfNatLT :: ZNat -> Any -> {h}", f"{s}OfNatLT n _ = fromIntegral n",
+                f"{{-# INLINE {s}OfNatLT #-}}"]
     out += ARRAY_FUNCS
     out += STRING_FUNCS
+    out += EXTRA_FUNCS
     out += ["charOfNat :: ZNat -> Word32",
             "charOfNat n = if n < 55296 || (n > 57343 && n < 1114112) then fromIntegral n else 0",
             "charOfNatAux :: ZNat -> Any -> Word32", "charOfNatAux n _ = fromIntegral n",
@@ -207,6 +354,8 @@ def patch(path):
     s = s.replace("import qualified Data.Sequence as Seq\nimport Data.Sequence (Seq, (|>))\n", "")
     if "import qualified Data.Text as T" not in s:
         s = s.replace("import Data.Bits", "import qualified Data.Text as T\nimport Data.Char (chr, ord)\nimport Data.Bits", 1)
+    if "import Zempic.Prims" not in s:
+        s = s.replace("import Zempic.Arr", "import Zempic.Arr\nimport Zempic.Prims (floatOfSci, floatToUnsigned)", 1)
     if "import Zempic.Str" not in s:
         s = s.replace("import Zempic.Arr", "import Zempic.Arr\nimport Zempic.Str", 1)
     if "import Zempic.Arr" not in s:

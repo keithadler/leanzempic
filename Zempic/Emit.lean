@@ -103,6 +103,83 @@ def prims : List (Name × String × List String × String) :=
   , (`Char.ofNat, "charOfNat", ["ZNat"], "Word32")
   , (`Char.ofNatAux, "charOfNatAux", ["ZNat", "Any"], "Word32")
   , (`Char.toNat, "u32ToNat", ["Word32"], "ZNat")
+  , (`Array.set, "arrSetH", ["Any", "Any", "ZNat", "Any", "Any"], "Any")
+  , (`String.get, "strGet", ["Any", "ZNat"], "Word32")
+  , (`String.Pos.Raw.get, "strGet", ["Any", "ZNat"], "Word32")
+  , (`String.Internal.get, "strGet", ["Any", "ZNat"], "Word32")
+  , (`String.next, "strNext", ["Any", "ZNat"], "ZNat")
+  , (`String.Pos.Raw.next, "strNext", ["Any", "ZNat"], "ZNat")
+  , (`String.Internal.next, "strNext", ["Any", "ZNat"], "ZNat")
+  , (`String.prev, "strPrev", ["Any", "ZNat"], "ZNat")
+  , (`String.Pos.Raw.prev, "strPrev", ["Any", "ZNat"], "ZNat")
+  , (`String.Internal.prev, "strPrev", ["Any", "ZNat"], "ZNat")
+  , (`String.atEnd, "strAtEnd", ["Any", "ZNat"], "Bool")
+  , (`String.Pos.Raw.atEnd, "strAtEnd", ["Any", "ZNat"], "Bool")
+  , (`String.Internal.atEnd, "strAtEnd", ["Any", "ZNat"], "Bool")
+  , (`String.extract, "strExtract", ["Any", "ZNat", "ZNat"], "Any")
+  , (`String.Pos.Raw.extract, "strExtract", ["Any", "ZNat", "ZNat"], "Any")
+  , (`String.Internal.extract, "strExtract", ["Any", "ZNat", "ZNat"], "Any")
+  , (`String.pushn, "strPushn", ["Any", "Word32", "ZNat"], "Any")
+  , (`String.Internal.pushn, "strPushn", ["Any", "Word32", "ZNat"], "Any")
+  , (`String.decodeChar, "strDecodeChar", ["Any", "ZNat", "Any"], "Word32")
+  , (`String.Pos.next, "strPosNext", ["Any", "ZNat", "Any"], "ZNat")
+  , (`String.getUTF8Byte, "strGetByte", ["Any", "ZNat", "Any"], "Word8")
+  , (`String.isEmpty, "strIsEmpty", ["Any"], "Bool")
+  , (`String.hash, "strHash", ["Any"], "Word64")
+  , (`String.Slice.Pattern.Internal.memcmpStr, "strMemcmp", ["Any", "Any", "ZNat", "ZNat", "ZNat", "Any", "Any"], "Bool")
+  , (`String.Pos.set, "strSetAtH", ["Any", "ZNat", "Word32", "Any"], "Any"), (`String.Pos.Raw.set, "strSetAt", ["Any", "ZNat", "Word32"], "Any")
+  , (`String.set, "strSetAt", ["Any", "ZNat", "Word32"], "Any")
+  , (`String.get!, "strGet", ["Any", "ZNat"], "Word32"), (`String.Pos.Raw.get!, "strGet", ["Any", "ZNat"], "Word32")
+  , (`Nat.log2, "natLog2", ["ZNat"], "ZNat"), (`Nat.pred, "natPred", ["ZNat"], "ZNat")
+  , (`String.Internal.length, "strLen", ["Any"], "ZNat")
+  , (`String.Internal.posOf, "strPosOf", ["Any", "Word32"], "ZNat"), (`String.posOf, "strPosOf", ["Any", "Word32"], "ZNat")
+  , (`String.Internal.offsetOfPos, "strOffsetOfPos", ["Any", "ZNat"], "ZNat")
+  , (`String.offsetOfPos, "strOffsetOfPos", ["Any", "ZNat"], "ZNat")
+  , (`Int.ofNat, "intOfNat", ["ZNat"], "Integer"), (`Int.negSucc, "intNegSucc", ["ZNat"], "Integer")
+  , (`Int.add, "intAdd", ["Integer", "Integer"], "Integer"), (`Int.sub, "intSub", ["Integer", "Integer"], "Integer")
+  , (`Int.mul, "intMul", ["Integer", "Integer"], "Integer"), (`Int.neg, "intNeg", ["Integer"], "Integer")
+  , (`Int.ediv, "intEDiv", ["Integer", "Integer"], "Integer"), (`Int.emod, "intEMod", ["Integer", "Integer"], "Integer")
+  , (`Int.div, "intTDiv", ["Integer", "Integer"], "Integer"), (`Int.mod, "intTMod", ["Integer", "Integer"], "Integer")
+  , (`Int.tdiv, "intTDiv", ["Integer", "Integer"], "Integer"), (`Int.tmod, "intTMod", ["Integer", "Integer"], "Integer")
+  , (`Int.fdiv, "intFDiv", ["Integer", "Integer"], "Integer"), (`Int.fmod, "intFMod", ["Integer", "Integer"], "Integer")
+  , (`Int.decEq, "intEq", ["Integer", "Integer"], "Bool"), (`Int.decLt, "intLt", ["Integer", "Integer"], "Bool")
+  , (`Int.decLe, "intLe", ["Integer", "Integer"], "Bool")
+  , (`Int.natAbs, "intNatAbs", ["Integer"], "ZNat"), (`Int.toNat, "intToNat", ["Integer"], "ZNat")
+  , (`Int.pow, "intPow", ["Integer", "ZNat"], "Integer")
+  , (`Float.add, "floatAdd", ["Double", "Double"], "Double"), (`Float.sub, "floatSub", ["Double", "Double"], "Double")
+  , (`Float.mul, "floatMul", ["Double", "Double"], "Double"), (`Float.div, "floatDiv", ["Double", "Double"], "Double")
+  , (`Float.neg, "floatNeg", ["Double"], "Double")
+  , (`Float.beq, "floatEq", ["Double", "Double"], "Bool"), (`Float.decLt, "floatLt", ["Double", "Double"], "Bool")
+  , (`Float.decLe, "floatLe", ["Double", "Double"], "Bool")
+  , (`Float.lt, "floatLt", ["Double", "Double"], "Bool"), (`Float.le, "floatLe", ["Double", "Double"], "Bool")
+  , (`Float.sqrt, "floatSqrt", ["Double"], "Double"), (`Float.sin, "floatSin", ["Double"], "Double")
+  , (`Float.cos, "floatCos", ["Double"], "Double"), (`Float.tan, "floatTan", ["Double"], "Double")
+  , (`Float.exp, "floatExp", ["Double"], "Double"), (`Float.log, "floatLog", ["Double"], "Double")
+  , (`Float.log2, "floatLog2", ["Double"], "Double"), (`Float.log10, "floatLog10", ["Double"], "Double")
+  , (`Float.exp2, "floatExp2", ["Double"], "Double"), (`Float.abs, "floatAbs", ["Double"], "Double")
+  , (`Float.floor, "floatFloor", ["Double"], "Double"), (`Float.ceil, "floatCeil", ["Double"], "Double")
+  , (`Float.round, "floatRound", ["Double"], "Double"), (`Float.atan, "floatAtan", ["Double"], "Double")
+  , (`Float.asin, "floatAsin", ["Double"], "Double"), (`Float.acos, "floatAcos", ["Double"], "Double")
+  , (`Float.sinh, "floatSinh", ["Double"], "Double"), (`Float.cosh, "floatCosh", ["Double"], "Double")
+  , (`Float.tanh, "floatTanh", ["Double"], "Double")
+  , (`Float.pow, "floatPow", ["Double", "Double"], "Double"), (`Float.atan2, "floatAtan2", ["Double", "Double"], "Double")
+  , (`Float.isNaN, "floatIsNaN", ["Double"], "Bool"), (`Float.isInf, "floatIsInf", ["Double"], "Bool")
+  , (`Float.isFinite, "floatIsFinite", ["Double"], "Bool")
+  , (`Float.ofNat, "floatOfNat", ["ZNat"], "Double"), (`Nat.toFloat, "floatOfNat", ["ZNat"], "Double")
+  , (`Float.ofInt, "floatOfInt", ["Integer"], "Double")
+  , (`Float.ofScientific, "floatOfSciN", ["ZNat", "Bool", "ZNat"], "Double")
+  , (`Float.toUInt8, "floatToU8", ["Double"], "Word8"), (`Float.toUInt16, "floatToU16", ["Double"], "Word16")
+  , (`Float.toUInt32, "floatToU32", ["Double"], "Word32"), (`Float.toUInt64, "floatToU64", ["Double"], "Word64")
+  , (`Float.toUSize, "floatToUsz", ["Double"], "Word")
+  , (`Thunk.mk, "thunkMk", ["Any", "Any"], "Any"), (`Thunk.pure, "thunkPure", ["Any", "Any"], "Any")
+  , (`Thunk.get, "thunkGet", ["Any", "Any"], "Any")
+  , (`mixHash, "mixHash", ["Word64", "Word64"], "Word64")
+  , (`ByteArray.emptyWithCapacity, "baEmpty", ["ZNat"], "Any"), (`ByteArray.mkEmpty, "baEmpty", ["ZNat"], "Any")
+  , (`ByteArray.size, "baSize", ["Any"], "ZNat"), (`ByteArray.usize, "baSize", ["Any"], "ZNat")
+  , (`ByteArray.push, "baPush", ["Any", "Word8"], "Any")
+  , (`ByteArray.get!, "baGet", ["Any", "ZNat"], "Word8"), (`ByteArray.get, "baGetF", ["Any", "ZNat", "Any"], "Word8")
+  , (`ByteArray.uget, "baUGet", ["Any", "Word", "Any"], "Word8")
+  , (`ByteArray.set!, "baSet", ["Any", "ZNat", "Word8"], "Any"), (`ByteArray.set, "baSet", ["Any", "ZNat", "Word8"], "Any")
   , (`Bool.true, "True", [], "Bool"), (`Bool.false, "False", [], "Bool") ]
 
 /-- Fixed-width integer types: Lean name, runtime prefix, Haskell type. Must match
@@ -125,6 +202,7 @@ def uintPrims : List (Name × String × List String × String) :=
     , (s!"{L}.complement".toName, s!"{s}Compl", [h], h), (s!"{L}.neg".toName, s!"{s}Neg", [h], h)
     , cmp "decEq" "Eq", cmp "decLt" "Lt", cmp "decLe" "Le"
     , (s!"{L}.ofNat".toName, s!"{s}OfNat", ["ZNat"], h)
+    , (s!"{L}.ofNatLT".toName, s!"{s}OfNatLT", ["ZNat", "Any"], h)
     , (s!"Nat.to{L}".toName, s!"{s}OfNat", ["ZNat"], h)
     , (s!"{L}.toNat".toName, s!"{s}ToNat", [h], "ZNat") ] ++
     (uintTypes.filter (·.2.1 != s)).map fun (L2, s2, h2) =>
@@ -268,6 +346,7 @@ def typeParamMask (v : InductiveVal) : Array Bool := Id.run do
 /-- Parenthesize a type that is an application, so it can be an argument. -/
 def paren (t : String) : String := if t.contains ' ' then s!"({t})" else t
 
+mutual
 /-- Haskell type for a Lean type. `Nat` and `Bool` are `ZNat` and `Bool`; a user inductive is its
 generated `data` type applied to the Haskell types of its type arguments (noted so that it gets
 declared); lists, pairs, functions, builtin types and everything else are `Any`. `env` gives the
@@ -278,22 +357,30 @@ partial def hsTyWith (env : List String) (e : Expr) : EmitM String := do
   | .const `Nat _ => return "ZNat"
   | .const `Bool _ => return "Bool"
   | .const `Char _ => return "Word32"
+  | .const `Int _ => return "Integer"
+  | .const `Float _ => return "Double"
   | .const n _ =>
     if let some (_, _, h) := uintTypes.find? (·.1.toName == n) then return h
     if n == `List || n == `Prod || builtinTypes.contains n then return "Any"
     match (← getEnv).find? n with
     | some (.inductInfo v) =>
       if isPropInduct v then return "Any"
-      noteType n
       let mask := typeParamMask v
       let args := e.getAppArgs
       let mut ts : Array String := #[]
+      let mut raw : Array String := #[]
       for k in [0:v.numParams] do
         if mask[k]! then
           let t ← match args[k]? with
             | some a => hsTyWith env a
             | none => pure "Any"
           ts := ts.push (paren t)
+          raw := raw.push t
+      -- Lean stores a structure with one relevant field as that field (`String.Pos` is a `Nat`);
+      -- values built by the compiled code are the bare field, so the type must be too.
+      if let some info ← liftM (m := CoreM) (hasTrivialStructure? n) then
+        return (← ctorFieldTys info.ctorName raw).getD info.fieldIdx "Any"
+      noteType n
       return if ts.isEmpty then typeName n else typeName n ++ " " ++ " ".intercalate ts.toList
     | some (.defnInfo d) =>
       -- A type alias (`abbrev Byte := UInt8`) has the layout of what it abbreviates.
@@ -303,6 +390,34 @@ partial def hsTyWith (env : List String) (e : Expr) : EmitM String := do
       else return "Any"
     | _ => return "Any"
   | _ => return "Any"
+
+/-- Haskell types of the fields of constructor `c`, read from its signature. `targs` are the
+Haskell types of the inductive's type parameters (a missing one is `Any`). -/
+partial def ctorFieldTys (c : Name) (targs : Array String := #[]) : EmitM (List String) := do
+  let some (.ctorInfo v) := (← getEnv).find? c | return []
+  let some (.inductInfo iv) := (← getEnv).find? v.induct | return []
+  let mask := typeParamMask iv
+  let mut ty := v.type
+  let mut env : List String := []
+  let mut out : Array String := #[]
+  let mut i := 0
+  let mut ti := 0
+  repeat
+    match ty with
+    | .forallE _ dom body _ =>
+      if i < v.numParams then
+        if mask[i]! then
+          env := targs.getD ti "Any" :: env
+          ti := ti + 1
+        else env := "Any" :: env
+      else
+        out := out.push (← hsTyWith env dom)
+        env := "Any" :: env
+      i := i + 1
+      ty := body
+    | _ => break
+  return out.toList
+end
 
 /-- `hsTyWith` outside any binder. -/
 def hsTyM (e : Expr) : EmitM String := hsTyWith [] e
@@ -339,33 +454,6 @@ def instTy (e : Expr) (ind : Name) : EmitM String := do
   match e.getAppFn with
   | .const n _ => if n == ind then hsTyWith [] e else genericTy ind
   | _ => genericTy ind
-
-/-- Haskell types of the fields of constructor `c`, read from its signature. `targs` are the
-Haskell types of the inductive's type parameters (a missing one is `Any`). -/
-def ctorFieldTys (c : Name) (targs : Array String := #[]) : EmitM (List String) := do
-  let some (.ctorInfo v) := (← getEnv).find? c | return []
-  let some (.inductInfo iv) := (← getEnv).find? v.induct | return []
-  let mask := typeParamMask iv
-  let mut ty := v.type
-  let mut env : List String := []
-  let mut out : Array String := #[]
-  let mut i := 0
-  let mut ti := 0
-  repeat
-    match ty with
-    | .forallE _ dom body _ =>
-      if i < v.numParams then
-        if mask[i]! then
-          env := targs.getD ti "Any" :: env
-          ti := ti + 1
-        else env := "Any" :: env
-      else
-        out := out.push (← hsTyWith env dom)
-        env := "Any" :: env
-      i := i + 1
-      ty := body
-    | _ => break
-  return out.toList
 
 /-- Bind a parameter at its mapped type. -/
 def bindP (p : Param .pure) : EmitM String := do
@@ -442,7 +530,7 @@ def apply (head : String) (ptys : List String) (ret : String) (args : Array (Str
     else if arity == 0 then (head, ret) else (e, ret)
   else
     let sat := call (((args.extract 0 arity).toList.zipIdx.map fun (a, i) => cast i a))
-    let sat := if ctor || ret != "Any" then s!"(zo ({sat}))" else sat
+    let sat := if ctor || ret != "Any" then s!"(zo ({sat}))" else s!"({sat})"
     let rest := args.extract arity args.size
     (rest.foldl (fun acc a => s!"(zap {acc} {coerce a.1 a.2 "Any"})") sat, "Any")
 
@@ -661,6 +749,23 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
           | .alt n _ k => if n == want then pick := some k
           | .default k => if pick.isNone then pick := some k
         if let some k := pick then return ← hsCode k ind ret
+    if cs.typeName == `Int then
+      -- Int is an Integer: `ofNat n` for non-negative values, `negSucc n` (= -n-1) otherwise.
+      let x ← useAs cs.discr "Integer"
+      let mut pos : Option String := none
+      let mut neg : Option String := none
+      let mut dflt : Option String := none
+      for a in cs.alts do
+        match a with
+        | .alt n ps k =>
+          let v ← bindT ps[0]!.fvarId ps[0]!.binderName "ZNat"
+          let body ← hsCode k (ind + 2) ret
+          if n == `Int.ofNat then pos := some s!"let \{ !{v} = intToNat {x} } in\n{pad (ind + 2)}{body}"
+          else neg := some s!"let \{ !{v} = intNatAbs ({x} + 1) } in\n{pad (ind + 2)}{body}"
+        | .default k => dflt := some (← hsCode k (ind + 2) ret)
+      let p := pos.getD (dflt.getD "error \"leanzempic: unreachable\"")
+      let n := neg.getD (dflt.getD "error \"leanzempic: unreachable\"")
+      return s!"if intIsNeg {x}\n{pad (ind + 1)}then {n}\n{pad (ind + 1)}else {p}"
     noteType cs.typeName
     let dty? := (← get).exprTys[cs.discr]?
     let targs ← match dty? with
@@ -820,12 +925,14 @@ def dataDecl (t : Name) : EmitM String := do
   | some (.inductInfo v) =>
     let k := (typeParamMask v).foldl (fun n b => if b then n + 1 else n) 0
     let tyvars := (List.range k).map (s!"a{·}")
+    -- A parameter used by no field would otherwise be kind-generalized, and `T Any` then fails.
+    let kinded := tyvars.map (s!"({·} :: Type)")
     let mut cs : Array String := #[]
     for c in v.ctors do
       if let some (.ctorInfo _) := (← getEnv).find? c then
         let fields := (← ctorFieldTys c tyvars.toArray).map (s!"!{paren ·}")
         cs := cs.push (" ".intercalate (ctorName c :: fields))
-    let head := " ".intercalate (typeName t :: tyvars)
+    let head := " ".intercalate (typeName t :: kinded)
     return s!"data {head} = {" | ".intercalate cs.toList}\n"
   | _ => unsupported s!"type {t}"; return ""
 
@@ -868,12 +975,12 @@ def emitModule (modName : String) (roots : Array Name) (natMod : String := "Zemp
     let ownFlags := if (← get).destr.isEmpty then []
       else ["{-# OPTIONS_GHC -fno-cse -fno-full-laziness #-}"]
     let header := "\n".intercalate ([
-      "{-# LANGUAGE BangPatterns, ScopedTypeVariables #-}",
+      "{-# LANGUAGE BangPatterns, ScopedTypeVariables, KindSignatures #-}",
       "{-# OPTIONS_GHC -Wno-unused-matches -Wno-unused-imports #-}"] ++ ownFlags ++ [
       "-- Generated by leanzempic. Do not edit.",
       s!"module {modName} where", "",
-      "import Zempic.Runtime", s!"import {natMod}", "import Zempic.List", "import Zempic.UInt",
-      "import Data.Word (Word8, Word16, Word32, Word64)", "", ""])
+      "import Zempic.Runtime", s!"import {natMod}", "import Zempic.List", "import Zempic.UInt", "import Zempic.Prims",
+      "import Data.Word (Word8, Word16, Word32, Word64)", "import Data.Kind (Type)", "", ""])
     return { haskell := header ++ "\n".intercalate (datas ++ hs).toList
              core := "-- leanzempic Core-notation dump (for reading)\n\n" ++
                "\n".intercalate core.toList }

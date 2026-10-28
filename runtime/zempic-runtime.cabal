@@ -21,6 +21,7 @@ library
     Zempic.Arr
     Zempic.Str
     Zempic.Auto
+    Zempic.Prims
   build-depends:    base >=4.18 && <5, array, bytestring, text
   default-language: Haskell2010
   ghc-options:      -O2 -Wall -Wno-unused-imports -Wno-name-shadowing -Wno-unused-matches
