@@ -6,6 +6,7 @@
 {-# LANGUAGE MagicHash, UnboxedTuples, BangPatterns #-}
 module Zempic.Nat.Word where
 
+import Data.Word (Word16, Word32, Word64, Word8)
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import Control.Exception (Exception (..), throw)
 import GHC.Exts
@@ -88,3 +89,43 @@ zSum = foldl' (\a x -> natAdd a (zu x)) 0
 zTake :: ZNat -> [Any] -> [Any]
 zTake n = take (fromIntegral (min n 4611686018427387903))
 {-# INLINE zTake #-}
+
+-- BEGIN GENERATED (tools/gen_runtime.py)
+-- Conversions between Nat and the fixed-width integers.
+u8OfNat :: ZNat -> Word8
+u8OfNat = fromIntegral
+u8ToNat :: Word8 -> ZNat
+u8ToNat = fromIntegral
+{-# INLINE u8OfNat #-}
+{-# INLINE u8ToNat #-}
+u16OfNat :: ZNat -> Word16
+u16OfNat = fromIntegral
+u16ToNat :: Word16 -> ZNat
+u16ToNat = fromIntegral
+{-# INLINE u16OfNat #-}
+{-# INLINE u16ToNat #-}
+u32OfNat :: ZNat -> Word32
+u32OfNat = fromIntegral
+u32ToNat :: Word32 -> ZNat
+u32ToNat = fromIntegral
+{-# INLINE u32OfNat #-}
+{-# INLINE u32ToNat #-}
+u64OfNat :: ZNat -> Word64
+u64OfNat = fromIntegral
+u64ToNat :: Word64 -> ZNat
+u64ToNat = fromIntegral
+{-# INLINE u64OfNat #-}
+{-# INLINE u64ToNat #-}
+uszOfNat :: ZNat -> Word
+uszOfNat = fromIntegral
+uszToNat :: Word -> ZNat
+uszToNat = fromIntegral
+{-# INLINE uszOfNat #-}
+{-# INLINE uszToNat #-}
+charOfNat :: ZNat -> Word32
+charOfNat n = if n < 55296 || (n > 57343 && n < 1114112) then fromIntegral n else 0
+charOfNatAux :: ZNat -> Any -> Word32
+charOfNatAux n _ = fromIntegral n
+{-# INLINE charOfNat #-}
+{-# INLINE charOfNatAux #-}
+-- END GENERATED

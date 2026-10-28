@@ -38,3 +38,8 @@ srcDir = "examples"
 name = "structs"
 root = "Structs"
 srcDir = "examples"
+
+[[lean_exe]]
+name = "ints"
+root = "Ints"
+srcDir = "examples"
