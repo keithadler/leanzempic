@@ -73,6 +73,21 @@ both check out) and the common case runs at word speed.
 
 `Nat` and `Bool` are typed in signatures; other values are still `Any` (free casts).
 
+## Proved
+
+Checked by Lean Studio and re-checked by Tenet, an independent kernel (142 of 142 declarations,
+only `propext`, `Classical.choice`, `Quot.sound`):
+
+* `Zempic.mangle_injective`: two different Lean names never get the same Haskell name.
+* `Zempic.Proofs.mangleV1_not_injective`: the v0.1 encoding did not have this property.
+  `foo._lam` and `foo_.lam` both became `foo___lam`. Trying to prove injectivity found it;
+  the new encoding is a prefix code (a `_` always means a dot, a `'` always starts an escape).
+* `Zempic.Proofs.coerce_*`: typed code gets no casts, and `Any` casts are exactly `zo`/`zu`.
+
+Not proved: that the emitted Haskell means what the Lean did (the traversals are `partial`, so
+proofs see them as opaque), and that the Word fast path agrees with `Nat` (that is Haskell code,
+checked by tests, not by Lean).
+
 ## Not yet
 
 * Types beyond `Nat`/`Bool`, so GHC cannot unbox structures or list elements yet.

@@ -8,20 +8,13 @@ printing it gives GHC input that is shaped like Core: every `let` is a strict
 nothing is left lazy by accident.
 -/
 import Lean
+import Zempic.Names
 
 open Lean Compiler LCNF
 
 namespace Zempic
 
 /-! ## Names -/
-
-/-- Turn a Lean name into characters that are valid in a Haskell identifier, reversibly. -/
-def mangle (s : String) : String :=
-  s.foldl (fun acc c =>
-    if c.isAlphanum && c.toNat < 128 then acc.push c
-    else if c == '_' then acc ++ "__"
-    else if c == '.' then acc.push '_'
-    else acc ++ s!"_x{String.ofList (Nat.toDigits 16 c.toNat)}_") ""
 
 /-- Haskell name of a compiled Lean function. -/
 def fnName (n : Name) : String := "z_" ++ mangle n.toString
