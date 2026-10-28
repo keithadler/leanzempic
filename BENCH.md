@@ -116,3 +116,20 @@ Six pipelines over n = 5e6. Best of 3 wall-clock. Haskell is auto mode.
   unfused (360 MB) because Lean's CSE merges the two `range n` into one shared list, and GHC will
   not recompute a shared list. With different producers it fuses. The example uses `range (n+1)`.
 * Plain Lean, rewritten Lean and Haskell print identical values for all six at n = 100000.
+
+# Typed structures (`examples/Structs.lean`)
+
+User inductives are now real Haskell `data` types with typed, strict fields
+(`ZC_Stats_mk !ZNat !ZNat !ZNat`, `ZC_Seg_mk !ZT_Pt !ZT_Pt`, `ZC_Tree_node !ZT_Tree !ZNat !ZT_Tree`),
+so GHC unboxes them in loops. Best of 3, auto mode, n = 2e8 iterations.
+
+| Test | Lean | Haskell | Speedup | Haskell heap (n = 2e7) |
+|---|---|---|---|---|
+| fold a 3-field record through a loop | 0.66 s | 0.31 s | 2.1x | 61 KB |
+| walk a segment of two nested 2-field records | 0.58 s | 0.28 s | 2.1x | 61 KB |
+| sum weights of an enum over a `for` loop | 0.42 s | 0.30 s | 1.4x | 61 KB |
+
+The loops allocate nothing: the record lives in registers. Not faster (allocation-bound by
+nature): a 1e6-element binary tree insert (0.09 s vs 0.08 s, 505 MB allocated) and an
+`Option` search (0.08 s both). Lean already reuses a uniquely-held record in place, which is
+why its record loops are fast too. All five tests print identical values at n = 1000 and 100000.

@@ -3,7 +3,7 @@
 # Needs lake and ghc on PATH; if Lean's bundled clang shadows the system one, GHC's C step fails.
 set -e
 cd "$(dirname "$0")/.."
-lake build Examples bench fusion autofusion combinators combinators-plain >/dev/null
+lake build Examples bench fusion autofusion combinators combinators-plain structs >/dev/null
 mkdir -p build/o
 ghc_() { (cd "$1" && ghc -O2 -i../runtime -i../build -outputdir ../build/o -o ../build/$2 $3 >/dev/null); }
 
@@ -36,3 +36,10 @@ for i in 0 1 2 3 4 5 6; do
   done
 done
 echo "ok combinators (length sum take append foldr any all zip, plain = rewritten = Haskell)"
+
+# Structures, nested structures, an enum, a recursive tree and Option: Lean and Haskell agree.
+ghc_ bench StructsMain StructsMain.hs
+for n in 1000 100000; do
+  [ "$(.lake/build/bin/structs $n)" = "$(build/StructsMain $n)" ] || { echo "FAIL structs n=$n"; exit 1; }
+done
+echo "ok structs (record loop, nested record, enum, tree, Option)"

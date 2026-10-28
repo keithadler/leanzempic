@@ -71,7 +71,8 @@ both check out) and the common case runs at word speed.
 * Worst case a call that overflows late does the work twice.
 * Other modes: `#zempic f to "x.hs" mode word` (fast only, aborts on overflow) or `mode exact`.
 
-`Nat` and `Bool` are typed in signatures; other values are still `Any` (free casts).
+`Nat`, `Bool` and user inductives (structures, enums, trees, `Option`) are typed, with strict typed
+fields so GHC unboxes them in loops; lists, pairs, functions and builtin types are still `Any`.
 
 ## Proved
 
@@ -90,7 +91,7 @@ checked by tests, not by Lean).
 
 ## Not yet
 
-* Types beyond `Nat`/`Bool`, so GHC cannot unbox structures or list elements yet.
+* Unboxed list elements and pair components (they are `Any`), and typed values across the auto-mode wrapper (it covers only `Nat`/`Bool` signatures, so a structure-typed function is used from `Out.Fast`/`Out.Exact` directly).
 * Fixed-width ints, `String`/`Array` ops, `IO`, `Float`, `Thunk`/`Task`.
   Unsupported constants are listed in a compile error, never silently dropped.
 * More fusible combinators. Mapped (by hand or by `zempic.fuse`): `map`, `filter`, `foldl`, `foldr`, `range`, `length`, `sum` (Nat), `take`, `append`, `zip`, `any`, `all`. Not mapped: `reverse`, `filterMap`, `join`, `zipWith`, `Array`, `for` loops. `zip` fuses on its first list only.

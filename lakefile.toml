@@ -33,3 +33,8 @@ srcDir = "examples"
 name = "combinators-plain"
 root = "CombinatorsPlain"
 srcDir = "examples"
+
+[[lean_exe]]
+name = "structs"
+root = "Structs"
+srcDir = "examples"

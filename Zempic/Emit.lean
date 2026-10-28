@@ -116,15 +116,12 @@ def bindT (id : FVarId) (base : Name) (ty : String) : EmitM String := do
 /-- `bindT` at type `Any`. -/
 def bind (id : FVarId) (base : Name) : EmitM String := bindT id base "Any"
 
-/-- Haskell type for a Lean type: only `Nat` and `Bool` are typed so far; everything else is
-`Any`. -/
-def hsTy : Expr → String
+/-- The Haskell type for `Nat` and `Bool`, and `Any` for everything else. Pure, so the auto-mode
+wrapper can use it; the emitter proper uses `hsTyM`, which also types user inductives. -/
+def basicTy : Expr → String
   | .const `Nat _ => "ZNat"
   | .const `Bool _ => "Bool"
   | _ => "Any"
-
-/-- Bind a parameter at its mapped type. -/
-def bindP (p : Param .pure) : EmitM String := bindT p.fvarId p.binderName (hsTy p.type)
 
 /-- The Haskell name of a variable. -/
 def lookup (id : FVarId) : EmitM String := do
@@ -160,6 +157,49 @@ def noteType (t : Name) : EmitM Unit := do
   if builtinTypes.contains t then unsupported s!"builtin type {t}"; return
   modify fun s => if s.types.contains t then s else { s with types := s.types.push t }
 
+/-- Is the inductive type `v` a proposition? Its values are proofs and carry no data. -/
+def isPropInduct (v : InductiveVal) : Bool :=
+  match v.type.getForallBody with
+  | .sort .zero => true
+  | _ => false
+
+/-- Haskell type for a Lean type. `Nat` and `Bool` are `ZNat` and `Bool`; a user inductive is its
+generated `data` type (noted so that it gets declared); lists, pairs, functions, builtin types and
+everything else are `Any`. -/
+def hsTyM (e : Expr) : EmitM String := do
+  match e.getAppFn with
+  | .const `Nat _ => return "ZNat"
+  | .const `Bool _ => return "Bool"
+  | .const n _ =>
+    if n == `List || n == `Prod || builtinTypes.contains n then return "Any"
+    match (← getEnv).find? n with
+    | some (.inductInfo v) =>
+      if isPropInduct v then return "Any"
+      noteType n
+      return typeName n
+    | _ => return "Any"
+  | _ => return "Any"
+
+/-- Haskell types of the fields of constructor `c`, read from its signature. Type parameters are
+not fields, and a field whose type is a parameter is `Any`. -/
+def ctorFieldTys (c : Name) : EmitM (List String) := do
+  let some (.ctorInfo v) := (← getEnv).find? c | return []
+  let mut ty := v.type
+  let mut out : Array String := #[]
+  let mut i := 0
+  repeat
+    match ty with
+    | .forallE _ dom body _ =>
+      if i ≥ v.numParams then out := out.push (← hsTyM dom)
+      i := i + 1
+      ty := body
+    | _ => break
+  return out.toList
+
+/-- Bind a parameter at its mapped type. -/
+def bindP (p : Param .pure) : EmitM String := do
+  bindT p.fvarId p.binderName (← hsTyM p.type)
+
 /-- Queue constant `n` for compilation unless already seen. -/
 def request (n : Name) : EmitM Unit :=
   modify fun s =>
@@ -181,15 +221,20 @@ def monoDecl? (n : Name) : EmitM (Option (Decl .pure)) := do
 inductive Head
   /-- A function from the Haskell runtime. -/
   | prim (hs : String) (ptys : List String) (ret : String)
-  /-- A constructor: its Haskell name, field count and (dropped) parameter count. -/
-  | ctor (hs : String) (arity numParams : Nat)
+  /-- A constructor: its Haskell name, field types, type, and (dropped) parameter count. -/
+  | ctor (hs : String) (ptys : List String) (ret : String) (numParams : Nat)
   /-- A function compiled from Lean. -/
   | decl (hs : String) (ptys : List String) (ret : String)
   /-- Not supported; already recorded as such. -/
   | bad
 
+/-- Result type of a declaration as `Nat`/`Bool`/`Any`, for the wrapper. -/
+def declRetBasic (d : Decl .pure) : String :=
+  basicTy (d.type.getForallBodyMaxDepth d.params.size)
+
 /-- Haskell result type of a declaration, read from its Lean type. -/
-def declRet (d : Decl .pure) : String := hsTy (d.type.getForallBodyMaxDepth d.params.size)
+def declRetM (d : Decl .pure) : EmitM String :=
+  hsTyM (d.type.getForallBodyMaxDepth d.params.size)
 
 /-- Decide how constant `c` is called: runtime primitive, constructor, compiled function or
 unsupported. -/
@@ -198,14 +243,15 @@ def resolve (c : Name) : EmitM Head := do
   match (← getEnv).find? c with
   | some (.ctorInfo v) =>
     noteType v.induct
-    return .ctor (ctorName c) v.numFields v.numParams
+    return .ctor (ctorName c) (← ctorFieldTys c) (typeName v.induct) v.numParams
   | _ =>
     match ← monoDecl? c with
     | some d =>
       match d.value with
       | .code _ =>
         request c
-        return .decl (fnName c) (d.params.toList.map (hsTy ·.type)) (declRet d)
+        let ptys ← d.params.toList.mapM (hsTyM ·.type)
+        return .decl (fnName c) ptys (← declRetM d)
       | .extern _ => unsupported s!"extern {c}"; return .bad
     | none => unsupported s!"constant {c}"; return .bad
 
@@ -226,15 +272,13 @@ def apply (head : String) (ptys : List String) (ret : String) (args : Array (Str
     let rest := args.extract arity args.size
     (rest.foldl (fun acc a => s!"(zap {acc} {coerce a.1 a.2 "Any"})") sat, "Any")
 
-/-- The constructor and field count of a single-constructor structure, or `none`. -/
-def single (t : Name) : EmitM (Option (Name × Nat)) := do
+/-- The constructor and field types of a single-constructor structure, or `none`. -/
+def single (t : Name) : EmitM (Option (Name × List String)) := do
   noteType t
   match (← getEnv).find? t with
   | some (.inductInfo v) =>
     match v.ctors with
-    | [c] => match (← getEnv).find? c with
-      | some (.ctorInfo cv) => return some (c, cv.numFields)
-      | _ => return none
+    | [c] => return some (c, ← ctorFieldTys c)
     | _ => return none
   | _ => return none
 
@@ -264,20 +308,19 @@ def hsLetValue : LetValue .pure → EmitM (String × String)
     let x ← useAs x "(Any, Any)"
     return (s!"(case {x} of \{ (p0, p1) -> p{i} })", "Any")
   | .proj t i x => do
-    let x ← useAs x "Any"
+    let x ← useAs x (typeName t)
     match ← single t with
-    | some (c, n) =>
-      let ps := (List.range n).map (s!"p{·}")
+    | some (c, ftys) =>
+      let ps := (List.range ftys.length).map (s!"p{·}")
       let pat := s!"{ctorName c} {" ".intercalate ps}"
-      return (s!"(case (zu {x} :: {typeName t}) of \{ {pat} -> p{i} })", "Any")
+      return (s!"(case ({x} :: {typeName t}) of \{ {pat} -> p{i} })", ftys.getD i "Any")
     | none => unsupported s!"projection on {t}"; return ("erased", "Any")
   | .const c _ args => do
     let args ← args.mapM atomT
     match ← resolve c with
     | .prim hs ptys ret => return apply hs ptys ret args false
     | .decl hs ptys ret => return apply hs ptys ret args false
-    | .ctor hs a np =>
-      return apply hs (List.replicate a "Any") "Any" (args.extract np args.size) true
+    | .ctor hs ptys ret np => return apply hs ptys ret (args.extract np args.size) false
     | .bad => return ("erased", "Any")
 
 mutual
@@ -298,7 +341,7 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
     let rest ← hsCode k ind ret
     return s!"let \{ {f} = zo (\\{lam} ->\n{pad (ind + 2)}{body}) } in\n{pad ind}{rest}"
   | .jp d k =>
-    let tys := d.params.toList.map (hsTy ·.type)
+    let tys ← d.params.toList.mapM (hsTyM ·.type)
     let ps ← d.params.mapM fun p => bindP p
     let ps := (ps.toList.zip tys).map fun (p, t) => s!"({p} :: {t})"
     let j ← bind d.fvarId d.binderName
@@ -337,7 +380,10 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
             let t ← bindT ps[1]!.fvarId ps[1]!.binderName "[Any]"
             pure s!"({h} : {t})"
           else do
-            let bs ← ps.mapM fun p => bind p.fvarId p.binderName
+            let ftys ← ctorFieldTys n
+            let mut bs : Array String := #[]
+            for p in ps, i in [0:ps.size] do
+              bs := bs.push (← bindT p.fvarId p.binderName (ftys.getD i "Any"))
             pure (" ".intercalate (ctorName n :: bs.toList))
         alts := alts.push s!"{pat} ->\n{pad (ind + 2)}{← hsCode k (ind + 2) ret}"
       | .default k => alts := alts.push s!"_ ->\n{pad (ind + 2)}{← hsCode k (ind + 2) ret}"
@@ -350,8 +396,9 @@ def hsDecl (d : Decl .pure) : EmitM String := do
   let .code body := d.value | return ""
   let ps ← d.params.mapM bindP
   let n := fnName d.name
-  let ret := declRet d
-  let sig := " -> ".intercalate ((d.params.toList.map (hsTy ·.type)) ++ [ret])
+  let ret ← declRetM d
+  let ptys ← d.params.toList.mapM (hsTyM ·.type)
+  let sig := " -> ".intercalate (ptys ++ [ret])
   let body ← hsCode body 1 ret
   return s!"{n} :: {sig}\n{n} {" ".intercalate ps.toList} =\n{pad 1}{body}\n"
 
@@ -435,8 +482,9 @@ def dataDecl (t : Name) : EmitM String := do
   | some (.inductInfo v) =>
     let mut cs : Array String := #[]
     for c in v.ctors do
-      if let some (.ctorInfo cv) := (← getEnv).find? c then
-        cs := cs.push (" ".intercalate (ctorName c :: List.replicate cv.numFields "!Any"))
+      if let some (.ctorInfo _) := (← getEnv).find? c then
+        let fields := (← ctorFieldTys c).map (s!"!{·}")
+        cs := cs.push (" ".intercalate (ctorName c :: fields))
     return s!"data {typeName t} = {" | ".intercalate cs.toList}\n"
   | _ => unsupported s!"type {t}"; return ""
 
@@ -456,8 +504,12 @@ def emitModule (modName : String) (roots : Array Name) (natMod : String := "Zemp
         hs := hs.push (← hsDecl d)
         core := core.push (← coreDecl d)
       | none => unsupported s!"constant {n}"
+    -- Declaring a type can mention more types, so go until none are new.
     let mut datas : Array String := #[]
-    for t in (← get).types do datas := datas.push (← dataDecl t)
+    let mut j := 0
+    while j < (← get).types.size do
+      datas := datas.push (← dataDecl (← get).types[j]!)
+      j := j + 1
     let bad := (← get).unsupported
     unless bad.isEmpty do
       throwError "leanzempic: unsupported in this version:\n  {"\n  ".intercalate bad.toList}"
@@ -480,8 +532,8 @@ def autoWrapper (modName : String) (roots : Array Name) : CoreM String := do
   let mut skipped : Array String := #[]
   for r in roots do
     let some d ← getDeclAt? r .mono | continue
-    let ptys := d.params.toList.map (hsTy ·.type)
-    let ret := declRet d
+    let ptys := d.params.toList.map (basicTy ·.type)
+    let ret := declRetBasic d
     let ok := (ptys.all fun t => t == "ZNat" || t == "Bool") && (ret == "ZNat" || ret == "Bool")
     if !ok then skipped := skipped.push (fnName r); continue
     let hs := fun (t : String) => if t == "ZNat" then "Natural" else "Bool"
