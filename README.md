@@ -71,8 +71,10 @@ both check out) and the common case runs at word speed.
 * Worst case a call that overflows late does the work twice.
 * Other modes: `#zempic f to "x.hs" mode word` (fast only, aborts on overflow) or `mode exact`.
 
-`Nat`, `Bool` and user inductives (structures, enums, trees, `Option`) are typed, with strict typed
-fields so GHC unboxes them in loops; lists, pairs, functions and builtin types are still `Any`.
+`Nat`, `Bool`, the fixed-width integers and user inductives (structures, enums, trees, `Option`,
+and generic ones like `MProd`) are typed, with strict typed fields so GHC unboxes them in loops.
+Generic inductives become polymorphic Haskell types, so every instantiation has one layout.
+Lists, pairs, functions and the builtin `Array`/`String` are still `Any` (opaque to GHC).
 
 ## Proved
 

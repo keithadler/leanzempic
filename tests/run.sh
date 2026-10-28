@@ -3,7 +3,7 @@
 # Needs lake and ghc on PATH; if Lean's bundled clang shadows the system one, GHC's C step fails.
 set -e
 cd "$(dirname "$0")/.."
-lake build Examples bench fusion autofusion combinators combinators-plain structs ints arrays arrays2 strings >/dev/null
+lake build Examples bench fusion autofusion combinators combinators-plain structs ints arrays arrays2 strings generics >/dev/null
 mkdir -p build/o
 ghc_() { (cd "$1" && ghc -O2 -i../runtime -i../build -outputdir ../build/o -o ../build/$2 $3 >/dev/null); }
 
@@ -68,3 +68,10 @@ for n in 10 1000 20000; do
   [ "$(.lake/build/bin/strings $n)" = "$(build/StringsMain $n)" ] || { echo "FAIL strings n=$n"; exit 1; }
 done
 echo "ok strings (shared UTF-8 buffer matches Lean, incl. non-ASCII)"
+
+# Generic data (Pair, Box, Option, MProd) through out-of-line generic functions at several types.
+ghc_ bench GenericsMain GenericsMain.hs
+for n in 10 1000 20000; do
+  [ "$(.lake/build/bin/generics $n)" = "$(build/GenericsMain $n)" ] || { echo "FAIL generics n=$n"; exit 1; }
+done
+echo "ok generics (polymorphic data keeps one layout across instantiations)"

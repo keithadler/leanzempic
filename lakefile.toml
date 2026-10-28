@@ -58,3 +58,8 @@ srcDir = "examples"
 name = "strings"
 root = "Strings"
 srcDir = "examples"
+
+[[lean_exe]]
+name = "generics"
+root = "Generics"
+srcDir = "examples"

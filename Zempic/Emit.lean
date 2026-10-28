@@ -149,6 +149,8 @@ structure St where
   types : Array Name := #[]
   /-- Everything that could not be compiled. -/
   unsupported : Array String := #[]
+  /-- The Lean type of each variable, to recover the type arguments of generic data. -/
+  exprTys : Std.HashMap FVarId Expr := {}
   /-- Word-sized Nat: literals above 2^64 - 1 must raise `ZOverflow`. -/
   fast : Bool := false
 
@@ -220,11 +222,33 @@ def isPropInduct (v : InductiveVal) : Bool :=
   | .sort .zero => true
   | _ => false
 
+/-- Remember the Lean type of a variable. -/
+def noteExpr (id : FVarId) (e : Expr) : EmitM Unit :=
+  modify fun s => { s with exprTys := s.exprTys.insert id e }
+
+/-- Which of the first `numParams` parameters of an inductive are types (and so become Haskell
+type variables)? Value parameters and higher-kinded ones are not. -/
+def typeParamMask (v : InductiveVal) : Array Bool := Id.run do
+  let mut ty := v.type
+  let mut out : Array Bool := #[]
+  for _ in [0:v.numParams] do
+    match ty with
+    | .forallE _ dom body _ =>
+      out := out.push (match dom with | .sort _ => true | _ => false)
+      ty := body
+    | _ => out := out.push false
+  return out
+
+/-- Parenthesize a type that is an application, so it can be an argument. -/
+def paren (t : String) : String := if t.contains ' ' then s!"({t})" else t
+
 /-- Haskell type for a Lean type. `Nat` and `Bool` are `ZNat` and `Bool`; a user inductive is its
-generated `data` type (noted so that it gets declared); lists, pairs, functions, builtin types and
-everything else are `Any`. -/
-def hsTyM (e : Expr) : EmitM String := do
+generated `data` type applied to the Haskell types of its type arguments (noted so that it gets
+declared); lists, pairs, functions, builtin types and everything else are `Any`. `env` gives the
+Haskell type of each enclosing bound variable, innermost first. -/
+partial def hsTyWith (env : List String) (e : Expr) : EmitM String := do
   match e.getAppFn with
+  | .bvar i => return env.getD i "Any"
   | .const `Nat _ => return "ZNat"
   | .const `Bool _ => return "Bool"
   | .const `Char _ => return "Word32"
@@ -235,21 +259,77 @@ def hsTyM (e : Expr) : EmitM String := do
     | some (.inductInfo v) =>
       if isPropInduct v then return "Any"
       noteType n
-      return typeName n
+      let mask := typeParamMask v
+      let args := e.getAppArgs
+      let mut ts : Array String := #[]
+      for k in [0:v.numParams] do
+        if mask[k]! then
+          let t ← match args[k]? with
+            | some a => hsTyWith env a
+            | none => pure "Any"
+          ts := ts.push (paren t)
+      return if ts.isEmpty then typeName n else typeName n ++ " " ++ " ".intercalate ts.toList
     | _ => return "Any"
   | _ => return "Any"
 
-/-- Haskell types of the fields of constructor `c`, read from its signature. Type parameters are
-not fields, and a field whose type is a parameter is `Any`. -/
-def ctorFieldTys (c : Name) : EmitM (List String) := do
+/-- `hsTyWith` outside any binder. -/
+def hsTyM (e : Expr) : EmitM String := hsTyWith [] e
+
+/-- The Haskell types of the type arguments of `e`, an application of inductive `ind`; empty when
+`e` is something else (the fields then default to `Any`, which has the same layout). -/
+def typeArgsOf (e : Expr) (ind : Name) : EmitM (Array String) := do
+  match e.getAppFn, (← getEnv).find? ind with
+  | .const n _, some (.inductInfo v) =>
+    if n != ind then return #[]
+    let mask := typeParamMask v
+    let args := e.getAppArgs
+    let mut out : Array String := #[]
+    for k in [0:v.numParams] do
+      if mask[k]! then
+        out := out.push (← match args[k]? with
+          | some a => hsTyWith [] a
+          | none => pure "Any")
+    return out
+  | _, _ => return #[]
+
+/-- The type `ind` applied to `Any` for every type parameter: how a value of unknown type
+arguments is typed. -/
+def genericTy (ind : Name) : EmitM String := do
+  noteType ind
+  match (← getEnv).find? ind with
+  | some (.inductInfo v) =>
+    let k := (typeParamMask v).foldl (fun n b => if b then n + 1 else n) 0
+    return " ".intercalate (typeName ind :: List.replicate k "Any")
+  | _ => return typeName ind
+
+/-- The Haskell type of `e` as a value of inductive `ind`, falling back to the generic type. -/
+def instTy (e : Expr) (ind : Name) : EmitM String := do
+  match e.getAppFn with
+  | .const n _ => if n == ind then hsTyWith [] e else genericTy ind
+  | _ => genericTy ind
+
+/-- Haskell types of the fields of constructor `c`, read from its signature. `targs` are the
+Haskell types of the inductive's type parameters (a missing one is `Any`). -/
+def ctorFieldTys (c : Name) (targs : Array String := #[]) : EmitM (List String) := do
   let some (.ctorInfo v) := (← getEnv).find? c | return []
+  let some (.inductInfo iv) := (← getEnv).find? v.induct | return []
+  let mask := typeParamMask iv
   let mut ty := v.type
+  let mut env : List String := []
   let mut out : Array String := #[]
   let mut i := 0
+  let mut ti := 0
   repeat
     match ty with
     | .forallE _ dom body _ =>
-      if i ≥ v.numParams then out := out.push (← hsTyM dom)
+      if i < v.numParams then
+        if mask[i]! then
+          env := targs.getD ti "Any" :: env
+          ti := ti + 1
+        else env := "Any" :: env
+      else
+        out := out.push (← hsTyWith env dom)
+        env := "Any" :: env
       i := i + 1
       ty := body
     | _ => break
@@ -257,6 +337,7 @@ def ctorFieldTys (c : Name) : EmitM (List String) := do
 
 /-- Bind a parameter at its mapped type. -/
 def bindP (p : Param .pure) : EmitM String := do
+  noteExpr p.fvarId p.type
   bindT p.fvarId p.binderName (← hsTyM p.type)
 
 /-- Queue constant `n` for compilation unless already seen. -/
@@ -297,13 +378,14 @@ def declRetM (d : Decl .pure) : EmitM String :=
 
 /-- Decide how constant `c` is called: runtime primitive, constructor, compiled function or
 unsupported. -/
-def resolve (c : Name) : EmitM Head := do
+def resolve (c : Name) (ty : Expr) : EmitM Head := do
   if let some (_, hs, ptys, ret) := (prims ++ uintPrims).find? (·.1 == c) then
     return .prim hs ptys ret
   match (← getEnv).find? c with
   | some (.ctorInfo v) =>
     noteType v.induct
-    return .ctor (ctorName c) (← ctorFieldTys c) (typeName v.induct) v.numParams
+    let targs ← typeArgsOf ty v.induct
+    return .ctor (ctorName c) (← ctorFieldTys c targs) (← instTy ty v.induct) v.numParams
   | _ =>
     match ← monoDecl? c with
     | some d =>
@@ -333,12 +415,12 @@ def apply (head : String) (ptys : List String) (ret : String) (args : Array (Str
     (rest.foldl (fun acc a => s!"(zap {acc} {coerce a.1 a.2 "Any"})") sat, "Any")
 
 /-- The constructor and field types of a single-constructor structure, or `none`. -/
-def single (t : Name) : EmitM (Option (Name × List String)) := do
+def single (t : Name) (targs : Array String := #[]) : EmitM (Option (Name × List String)) := do
   noteType t
   match (← getEnv).find? t with
   | some (.inductInfo v) =>
     match v.ctors with
-    | [c] => return some (c, ← ctorFieldTys c)
+    | [c] => return some (c, ← ctorFieldTys c targs)
     | _ => return none
   | _ => return none
 
@@ -353,7 +435,8 @@ def atomT : Arg .pure → EmitM (String × String)
   | _ => return ("erased", "Any")
 
 /-- Expression and its Haskell type. -/
-def hsLetValue : LetValue .pure → EmitM (String × String)
+def hsLetValue (v : LetValue .pure) (letTy : Expr) : EmitM (String × String) :=
+  match v with
   | .lit (.nat n) => do
     if (← get).fast && n ≥ 2 ^ 64 then return ("(overflow :: ZNat)", "ZNat")
     return (s!"({n} :: ZNat)", "ZNat")
@@ -372,16 +455,19 @@ def hsLetValue : LetValue .pure → EmitM (String × String)
     let x ← useAs x "(Any, Any)"
     return (s!"(case {x} of \{ (p0, p1) -> p{i} })", "Any")
   | .proj t i x => do
-    let x ← useAs x (typeName t)
-    match ← single t with
+    let (targs, full) ← match (← get).exprTys[x]? with
+      | some e => pure (← typeArgsOf e t, ← instTy e t)
+      | none => pure (#[], ← genericTy t)
+    let x ← useAs x full
+    match ← single t targs with
     | some (c, ftys) =>
       let ps := (List.range ftys.length).map (s!"p{·}")
       let pat := s!"{ctorName c} {" ".intercalate ps}"
-      return (s!"(case ({x} :: {typeName t}) of \{ {pat} -> p{i} })", ftys.getD i "Any")
+      return (s!"(case ({x} :: {full}) of \{ {pat} -> p{i} })", ftys.getD i "Any")
     | none => unsupported s!"projection on {t}"; return ("erased", "Any")
   | .const c _ args => do
     let args ← args.mapM atomT
-    match ← resolve c with
+    match ← resolve c letTy with
     | .prim hs ptys ret => return apply hs ptys ret args false
     | .decl hs ptys ret => return apply hs ptys ret args false
     | .ctor hs ptys ret np => return apply hs ptys ret (args.extract np args.size) false
@@ -392,12 +478,14 @@ mutual
 partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String := do
   match c with
   | .let d k =>
-    let (rhs, ty) ← hsLetValue d.value
+    let (rhs, ty) ← hsLetValue d.value d.type
+    noteExpr d.fvarId d.type
     let x ← bindT d.fvarId d.binderName ty
     let lazy := match d.value with | .const c _ _ => fuseProducers.contains c | _ => false
     let bang := if lazy then "" else "!"
     return s!"let \{ {bang}{x} = {rhs} } in\n{pad ind}{← hsCode k ind ret}"
   | .fun d k =>
+    for p in d.params do noteExpr p.fvarId p.type
     let ps ← d.params.mapM fun p => bind p.fvarId p.binderName
     let f ← bind d.fvarId d.binderName
     let body ← hsCode d.value (ind + 2) "Any"
@@ -422,11 +510,18 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
   | .return x => useAs x ret
   | .unreach _ => return "error \"leanzempic: unreachable\""
   | .cases cs =>
-    let ty := if cs.typeName == `Bool then "Bool"
-      else if cs.typeName == `List then "[Any]"
-      else if cs.typeName == `Prod then "(Any, Any)" else typeName cs.typeName
-    let x ← useAs cs.discr ty
     noteType cs.typeName
+    let dty? := (← get).exprTys[cs.discr]?
+    let targs ← match dty? with
+      | some e => typeArgsOf e cs.typeName
+      | none => pure #[]
+    let ty ← if cs.typeName == `Bool then pure "Bool"
+      else if cs.typeName == `List then pure "[Any]"
+      else if cs.typeName == `Prod then pure "(Any, Any)"
+      else match dty? with
+        | some e => instTy e cs.typeName
+        | none => genericTy cs.typeName
+    let x ← useAs cs.discr ty
     let mut alts : Array String := #[]
     for a in cs.alts do
       match a with
@@ -444,9 +539,10 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
             let t ← bindT ps[1]!.fvarId ps[1]!.binderName "[Any]"
             pure s!"({h} : {t})"
           else do
-            let ftys ← ctorFieldTys n
+            let ftys ← ctorFieldTys n targs
             let mut bs : Array String := #[]
             for p in ps, i in [0:ps.size] do
+              noteExpr p.fvarId p.type
               bs := bs.push (← bindT p.fvarId p.binderName (ftys.getD i "Any"))
             pure (" ".intercalate (ctorName n :: bs.toList))
         alts := alts.push s!"{pat} ->\n{pad (ind + 2)}{← hsCode k (ind + 2) ret}"
@@ -540,16 +636,21 @@ structure Output where
   /-- The Core-notation dump. -/
   core : String
 
-/-- The Haskell `data` declaration for Lean inductive `t`. -/
+/-- The Haskell `data` declaration for Lean inductive `t`. A generic inductive becomes a
+polymorphic Haskell type with strict fields (`data ZT_MProd a0 a1 = ZC_MProd_mk !a0 !a1`), so every
+instantiation has the same layout and GHC unboxes the fields wherever the types are known. -/
 def dataDecl (t : Name) : EmitM String := do
   match (← getEnv).find? t with
   | some (.inductInfo v) =>
+    let k := (typeParamMask v).foldl (fun n b => if b then n + 1 else n) 0
+    let tyvars := (List.range k).map (s!"a{·}")
     let mut cs : Array String := #[]
     for c in v.ctors do
       if let some (.ctorInfo _) := (← getEnv).find? c then
-        let fields := (← ctorFieldTys c).map (s!"!{·}")
+        let fields := (← ctorFieldTys c tyvars.toArray).map (s!"!{paren ·}")
         cs := cs.push (" ".intercalate (ctorName c :: fields))
-    return s!"data {typeName t} = {" | ".intercalate cs.toList}\n"
+    let head := " ".intercalate (typeName t :: tyvars)
+    return s!"data {head} = {" | ".intercalate cs.toList}\n"
   | _ => unsupported s!"type {t}"; return ""
 
 /-- Compile `roots` and everything they reach into one Haskell module plus a Core-notation dump. -/

@@ -147,9 +147,9 @@ shifts at and above the width, division by zero and wraparound.
 | UInt8 arithmetic, two mutable variables | 1.50 s | 0.83 s | 1.8x | 6.4 GB |
 | xorshift32, two mutable variables | 1.31 s | 1.21 s | 1.1x | 6.4 GB |
 
-The two tests that allocate 6.4 GB carry two mutable variables through a `for` loop in Lean's
-polymorphic `MProd` structure, whose fields are still boxed `Any` here. Specializing generic
-structures by their type arguments would remove that.
+The two tests that allocated 6.4 GB carry two mutable variables through a `for` loop in Lean's
+polymorphic `MProd` structure, whose fields were boxed `Any`. Generic structures are now typed
+(next section): those two rows became 61 KB and 2.7x and 1.6x.
 
 **Arrays** (`examples/Arrays.lean`). Here Lean wins, and clearly. Lean mutates an array in place
 when it holds the only reference, which it knows from reference counts. GHC has none, so the
@@ -186,3 +186,24 @@ against Lean's 0.02 s. Same tests, best of 3:
 Small strings are level with Lean; at millions of operations the Haskell side is 3x to 4x slower,
 mostly from allocating a fresh buffer for each short string. All five tests print Lean's values,
 including text whose character count differs from its byte size.
+
+# Generic structures typed by their type arguments (`examples/Generics.lean`)
+
+A generic inductive is now a polymorphic Haskell type with strict fields, for example
+`data ZT_MProd a0 a1 = ZC_MProd_mk !a0 !a1`. Every instantiation has the same heap layout, so a
+value can pass through an out-of-line generic function and come back with no conversion, and GHC
+unboxes the fields wherever it knows the concrete types. (A separate Haskell type per instantiation
+would make such a call read the wrong layout.) Best of 3, auto mode.
+
+| Test | n | Lean | Haskell | Speedup | Haskell heap |
+|---|---|---|---|---|---|
+| UInt8 arithmetic, two mutable variables | 2e8 | 1.56 s | 0.57 s | 2.7x | 6.4 GB to **61 KB** |
+| xorshift32, two mutable variables | 2e8 | 1.32 s | 0.85 s | 1.6x | 6.4 GB to **61 KB** |
+| three mutable variables (UInt8, UInt32, Nat, Bool) | 2e8 | 1.03 s | 0.60 s | 1.7x | **61 KB** |
+| swap `Pair`s of three different types through one `@[noinline]` generic function | 2e7 | 0.55 s | 0.08 s | 6.6x | 320 MB |
+| a list, an array and an `Option` of pairs | 2e6 | 0.12 s | 0.35 s | 0.3x | 735 MB |
+| binary trees of pairs, keyed by a closure | 3e5 | 0.79 s | 1.29 s | 0.6x | 3.6 GB |
+
+The last two are slower than Lean: they are dominated by list and persistent-array traffic and by
+calling a closure from an out-of-line generic function, not by the structures. All four tests print
+Lean's values at n = 10, 1000 and 20000.
