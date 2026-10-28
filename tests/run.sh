@@ -3,7 +3,7 @@
 # Needs lake and ghc on PATH; if Lean's bundled clang shadows the system one, GHC's C step fails.
 set -e
 cd "$(dirname "$0")/.."
-lake build Examples bench fusion autofusion >/dev/null
+lake build Examples bench fusion autofusion combinators combinators-plain >/dev/null
 mkdir -p build/o
 ghc_() { (cd "$1" && ghc -O2 -i../runtime -i../build -outputdir ../build/o -o ../build/$2 $3 >/dev/null); }
 
@@ -26,3 +26,13 @@ want=$(.lake/build/bin/autofusion 100000)
 got=$(build/AutoMain 100000)
 [ "$got" = "$want" ] && echo "ok autofusion" || { echo "FAIL autofusion: $got vs $want"; exit 1; }
 grep -q zMap build/AutoFusion/Fast.hs && grep -q zFoldl build/AutoFusion/Fast.hs && echo "ok autofusion rewrote the pipeline"
+
+# Every fusible combinator: plain Lean, rewritten Lean and Haskell must agree, test by test.
+ghc_ bench CombMain CombMain.hs
+for i in 0 1 2 3 4 5 6; do
+  want=$(.lake/build/bin/combinators-plain 100000 $i)
+  for got in "$(.lake/build/bin/combinators 100000 $i)" "$(build/CombMain 100000 $i)"; do
+    [ "$got" = "$want" ] || { echo "FAIL combinators t$((i+1)): $got vs $want"; exit 1; }
+  done
+done
+echo "ok combinators (length sum take append foldr any all zip, plain = rewritten = Haskell)"

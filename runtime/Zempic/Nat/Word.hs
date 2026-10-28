@@ -9,7 +9,8 @@ module Zempic.Nat.Word where
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import Control.Exception (Exception (..), throw)
 import GHC.Exts
-import Zempic.Runtime (Any, zo)
+import Data.List (foldl')
+import Zempic.Runtime (Any, zo, zu)
 import GHC.Word (Word(W#))
 
 type ZNat = Word
@@ -75,3 +76,15 @@ zRange :: ZNat -> [Any]
 zRange n = map zo (build (\c nil ->
   let go !i = if i >= n then nil else i `c` go (i + 1) in go 0))
 {-# INLINE zRange #-}
+
+zLength :: [Any] -> ZNat
+zLength xs = fromIntegral (length xs)
+{-# INLINE zLength #-}
+
+zSum :: [Any] -> ZNat
+zSum = foldl' (\a x -> natAdd a (zu x)) 0
+{-# INLINE zSum #-}
+
+zTake :: ZNat -> [Any] -> [Any]
+zTake n = take (fromIntegral (min n 4611686018427387903))
+{-# INLINE zTake #-}

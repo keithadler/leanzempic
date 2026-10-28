@@ -23,3 +23,13 @@ srcDir = "examples"
 name = "autofusion"
 root = "AutoFusion"
 srcDir = "examples"
+
+[[lean_exe]]
+name = "combinators"
+root = "Combinators"
+srcDir = "examples"
+
+[[lean_exe]]
+name = "combinators-plain"
+root = "CombinatorsPlain"
+srcDir = "examples"

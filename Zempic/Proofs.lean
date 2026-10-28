@@ -20,7 +20,8 @@ def mangleV1 (s : List Char) : List Char := s.flatMap mangleV1Char
 
 /-- Two different Lean names, `foo._lam` and `foo_.lam`, got the same Haskell name. -/
 theorem mangleV1_collides :
-    mangleV1 "foo._lam".toList = mangleV1 "foo_.lam".toList ∧ "foo._lam".toList ≠ "foo_.lam".toList := by
+    mangleV1 "foo._lam".toList = mangleV1 "foo_.lam".toList ∧
+      "foo._lam".toList ≠ "foo_.lam".toList := by
   decide +kernel
 
 /-- So v0.1's `mangle` was not injective. -/

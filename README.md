@@ -93,7 +93,7 @@ checked by tests, not by Lean).
 * Types beyond `Nat`/`Bool`, so GHC cannot unbox structures or list elements yet.
 * Fixed-width ints, `String`/`Array` ops, `IO`, `Float`, `Thunk`/`Task`.
   Unsupported constants are listed in a compile error, never silently dropped.
-* More fusible combinators. Only `map`, `filter`, `foldl`, `range` are mapped (by hand or by `zempic.fuse`); `length`, `sum`, `zip`, `take`, `append`, `foldr`, `any`/`all` are not, and `Array`/`for` loops are untouched.
+* More fusible combinators. Mapped (by hand or by `zempic.fuse`): `map`, `filter`, `foldl`, `foldr`, `range`, `length`, `sum` (Nat), `take`, `append`, `zip`, `any`, `all`. Not mapped: `reverse`, `filterMap`, `join`, `zipWith`, `Array`, `for` loops. `zip` fuses on its first list only.
 * Benchmarks beyond three loops. See `BENCH.md` for what is and is not measured.
 
 ## Lean Studio

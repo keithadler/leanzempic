@@ -21,4 +21,21 @@ namespace Zempic.Fuse
 /-- `[0, n)`. Replaced by an explicit `build` so GHC can fuse it. -/
 @[noinline] def range (n : Nat) : List Nat := List.range n
 
+/-- List length. Replaced by GHC's `length`. -/
+@[noinline] def length (xs : List α) : Nat := List.length xs
+/-- Sum of a list of naturals. Replaced by a strict fused sum. -/
+@[noinline] def sum (xs : List Nat) : Nat := List.foldl (· + ·) 0 xs
+/-- The first `n` elements. Replaced by GHC's fusible `take`. -/
+@[noinline] def take (n : Nat) (xs : List α) : List α := List.take n xs
+/-- Concatenation. Replaced by GHC's fusible `(++)`. -/
+@[noinline] def append (xs ys : List α) : List α := List.append xs ys
+/-- Right fold. Replaced by GHC's `foldr`, the base case of its fusion rules. -/
+@[noinline] def foldr (f : α → β → β) (init : β) (xs : List α) : β := List.foldr f init xs
+/-- Does some element satisfy `p`? Replaced by GHC's fusible `any`. -/
+@[noinline] def any (p : α → Bool) (xs : List α) : Bool := List.any xs p
+/-- Do all elements satisfy `p`? Replaced by GHC's fusible `all`. -/
+@[noinline] def all (p : α → Bool) (xs : List α) : Bool := List.all xs p
+/-- Pair up elements. Replaced by GHC's fusible `zip`. -/
+@[noinline] def zip (xs : List α) (ys : List β) : List (α × β) := List.zip xs ys
+
 end Zempic.Fuse

@@ -92,3 +92,27 @@ are exact. Best of 3, same functions as above.
 Overflow check: `fact 25` (above 2^64) and `fact 3000 % 1000000007` both return the exact
 value, the latter verified against Python (341406877). The earlier "exact Nat" column (3x to
 5x slower than Lean) is superseded; `mode exact` still gives that behavior if you want it.
+
+# More combinators (`examples/Combinators.lean`, `zempic.fuse` on)
+
+`length`, `sum`, `take`, `append`, `foldr`, `any`, `all`, `zip` join `map`/`filter`/`foldl`/`range`.
+Six pipelines over n = 5e6. Best of 3 wall-clock. Haskell is auto mode.
+
+| Test | Lean plain | Lean, rewrite on | Haskell | Heap allocated (Haskell) |
+|---|---|---|---|---|
+| t1 range, filter, length | 0.09 s | 0.10 s | **0.03 s** | 61 KB |
+| t2 range, map, sum | crashes | 0.11 s | **0.02 s** | 61 KB |
+| t3 zip of two mapped ranges, map, foldl | crashes | 0.16 s | **0.08 s** | 560 MB |
+| t4 range, take, strict foldr | 0.13 s | 0.13 s | **0.03 s** | 82 MB |
+| t5 range any, range all | 0.15 s | 0.16 s | **0.03 s** | 61 KB |
+| t6 range ++ range, length | 0.16 s | 0.16 s | **0.03 s** | 61 KB |
+
+* "crashes": Lean's own `List.sum` and `List.zip` overflow the stack at 1e6 elements
+  (`Stack overflow detected`). The Haskell build completes them.
+* **Fully fused (about 61 KB for 5M elements):** length, sum, any, all, append, with `map`/`filter`/`range`.
+* **Partly fused:** `zip` fuses only on its first list, so the second is built (560 MB). A
+  strict `foldr` is not a loop (82 MB of stack). Both are limits of GHC's fusion rules, not of this backend.
+* **Sharing blocks fusion, correctly.** `(List.range n).any f && (List.range n).all g` looked
+  unfused (360 MB) because Lean's CSE merges the two `range n` into one shared list, and GHC will
+  not recompute a shared list. With different producers it fuses. The example uses `range (n+1)`.
+* Plain Lean, rewritten Lean and Haskell print identical values for all six at n = 100000.

@@ -28,6 +28,20 @@ def isNil (a : Arg .pure) : CompilerM Bool := do
   | .const ``List.nil .. => return true
   | _ => return false
 
+/-- Is `a` bound to a call of constant `c` (such as the `Array.mkEmpty` that starts `takeTR`)? -/
+def isCallTo (c : Name) (a : Arg .pure) : CompilerM Bool := do
+  let .fvar id := a | return false
+  let some d ← findLetDecl? (pu := .pure) id | return false
+  match d.value with
+  | .const n .. => return n == c
+  | _ => return false
+
+/-- Are the two arguments the same variable? -/
+def sameVar (a b : Arg .pure) : Bool :=
+  match a, b with
+  | .fvar x, .fvar y => x == y
+  | _, _ => false
+
 /-- Rewrite one `let` value if it is a recognized list call. -/
 def rewrite (v : LetValue .pure) : CompilerM (Option (LetValue .pure)) := do
   let .const n us args := v | return none
@@ -43,6 +57,28 @@ def rewrite (v : LetValue .pure) : CompilerM (Option (LetValue .pure)) := do
     return some (.const ``Zempic.Fuse.foldl us args)
   else if n == ``List.range && args.size == 1 then
     return some (.const ``Zempic.Fuse.range us args)
+  else if (n == ``List.lengthTR || n == ``List.length) && args.size == 2 then
+    return some (.const ``Zempic.Fuse.length us args)
+  else if (n == ``List.appendTR || n == ``List.append) && args.size == 3 then
+    return some (.const ``Zempic.Fuse.append us args)
+  else if (n == ``List.foldrTR || n == ``List.foldr) && args.size == 5 then
+    return some (.const ``Zempic.Fuse.foldr us args)
+  else if n == ``List.any && args.size == 3 then
+    return some (.const ``Zempic.Fuse.any us #[args[0]!, args[2]!, args[1]!])
+  else if n == ``List.all && args.size == 3 then
+    return some (.const ``Zempic.Fuse.all us #[args[0]!, args[2]!, args[1]!])
+  else if (n == ``List.takeTR || n == ``List.take) && args.size == 3 then
+    return some (.const ``Zempic.Fuse.take us args)
+  else if privateToUserName? n == some `List.takeTR.go && args.size == 5 then
+    -- takeTR.go l xs n acc, started with an empty array
+    if sameVar args[1]! args[2]! && (← isCallTo ``Array.mkEmpty args[4]!) then
+      return some (.const ``Zempic.Fuse.take us #[args[0]!, args[3]!, args[2]!])
+  else if (n == ``List.zip || n == `List.zipWith._at_.List.zip.spec_0) && args.size == 4 then
+    return some (.const ``Zempic.Fuse.zip us args)
+  else if n == ``List.sum && args.size == 4 then
+    -- only the Nat instance: the sum is then exactly `Zempic.Fuse.sum`
+    if ← isCallTo ``instAddNat args[1]! then
+      return some (.const ``Zempic.Fuse.sum us #[args[3]!])
   return none
 
 mutual

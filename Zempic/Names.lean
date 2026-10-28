@@ -49,7 +49,8 @@ theorem char_toNat_lt (a : Char) : a.toNat < 16777216 := by
 theorem digitChar_inj : ∀ a b : Fin 16, Nat.digitChar a = Nat.digitChar b → a = b := by decide
 
 theorem hexD_inj {a b : Nat} (h : hexD a = hexD b) : a % 16 = b % 16 := by
-  have := digitChar_inj ⟨a % 16, Nat.mod_lt _ (by omega)⟩ ⟨b % 16, Nat.mod_lt _ (by omega)⟩ h
+  have := digitChar_inj ⟨a % 16, Nat.mod_lt _ (by omega)⟩
+    ⟨b % 16, Nat.mod_lt _ (by omega)⟩ h
   exact congrArg Fin.val this
 
 theorem hex6_inj {n m : Nat} (hn : n < 16777216) (hm : m < 16777216) (h : hex6 n = hex6 m) :
@@ -83,7 +84,8 @@ theorem mangleChar_other {c : Char} (hp : isPlain c = false) (hd : c ≠ '.') (h
 
 /-- Every character is plain, a dot, an underscore, or something else. -/
 theorem char_cases (c : Char) :
-    isPlain c = true ∨ c = '.' ∨ c = '_' ∨ (isPlain c = false ∧ c ≠ '.' ∧ c ≠ '_') := by
+    isPlain c = true ∨ c = '.' ∨ c = '_' ∨
+      (isPlain c = false ∧ c ≠ '.' ∧ c ≠ '_') := by
   by_cases h : isPlain c = true
   · exact Or.inl h
   by_cases d : c = '.'
@@ -115,7 +117,8 @@ theorem mangleChar_append_inj {a b : Char} {r s : List Char}
        subst h1
        simp_all [isPlain_us, isPlain_quote])
     | (obtain ⟨hh, hr⟩ := List.append_inj h (by simp [hex6_length])
-       exact ⟨char_toNat_inj (hex6_inj (char_toNat_lt a) (char_toNat_lt b) hh), by simpa using hr⟩)
+       exact ⟨char_toNat_inj (hex6_inj (char_toNat_lt a) (char_toNat_lt b) hh),
+         by simpa using hr⟩)
 
 /-- Encoding a list of characters loses nothing. -/
 theorem mangleChars_injective : Function.Injective mangleChars := by

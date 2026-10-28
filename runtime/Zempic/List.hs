@@ -27,3 +27,25 @@ zFilter p = filter (\x -> zu (p x) :: Bool)
 zFoldl :: (Any -> Any -> Any) -> Any -> [Any] -> Any
 zFoldl = foldl'
 {-# INLINE zFoldl #-}
+
+zAppend :: [Any] -> [Any] -> [Any]
+zAppend = (++)
+{-# INLINE zAppend #-}
+
+zFoldr :: (Any -> Any -> Any) -> Any -> [Any] -> Any
+zFoldr = foldr
+{-# INLINE zFoldr #-}
+
+zAny, zAll :: (Any -> Any) -> [Any] -> Bool
+zAny p = foldr (\x r -> (zu (p x) :: Bool) || r) False
+zAll p = foldr (\x r -> (zu (p x) :: Bool) && r) True
+{-# INLINE zAny #-}
+{-# INLINE zAll #-}
+
+zZip :: [Any] -> [Any] -> [Any]
+zZip = zipWith (\a b -> zo (a, b))
+{-# INLINE zZip #-}
+
+zPair :: Any -> Any -> Any -> Any -> (Any, Any)
+zPair _ _ a b = (a, b)
+{-# INLINE zPair #-}

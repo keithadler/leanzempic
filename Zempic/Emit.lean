@@ -48,14 +48,20 @@ def prims : List (Name × String × List String × String) :=
   , (`Nat.xor, "natXor", n2, "ZNat"), (`Nat.gcd, "natGcd", n2, "ZNat")
   , (`Nat.succ, "natSucc", ["ZNat"], "ZNat"), (`Nat.zero, "natZero", [], "ZNat")
   , (`List.nil, "zNil", ["Any"], "[Any]"), (`List.cons, "zCons", ["Any", "Any", "[Any]"], "[Any]")
-  , (`Zempic.Fuse.map, "zMap", ["Any", "Any", "Any -> Any", "[Any]"], "[Any]")
   , (`Zempic.Fuse.map._redArg, "zMap", ["Any -> Any", "[Any]"], "[Any]")
-  , (`Zempic.Fuse.filter, "zFilter", ["Any", "Any -> Any", "[Any]"], "[Any]")
   , (`Zempic.Fuse.filter._redArg, "zFilter", ["Any -> Any", "[Any]"], "[Any]")
-  , (`Zempic.Fuse.foldl, "zFoldl", ["Any", "Any", "Any -> Any -> Any", "Any", "[Any]"], "Any")
   , (`Zempic.Fuse.foldl._redArg, "zFoldl", ["Any -> Any -> Any", "Any", "[Any]"], "Any")
   , (`Zempic.Fuse.range, "zRange", ["ZNat"], "[Any]")
   , (`Zempic.Fuse.range._redArg, "zRange", ["ZNat"], "[Any]")
+  , (`Zempic.Fuse.length._redArg, "zLength", ["[Any]"], "ZNat")
+  , (`Zempic.Fuse.sum, "zSum", ["[Any]"], "ZNat")
+  , (`Zempic.Fuse.take._redArg, "zTake", ["ZNat", "[Any]"], "[Any]")
+  , (`Zempic.Fuse.append._redArg, "zAppend", ["[Any]", "[Any]"], "[Any]")
+  , (`Zempic.Fuse.foldr._redArg, "zFoldr", ["Any -> Any -> Any", "Any", "[Any]"], "Any")
+  , (`Zempic.Fuse.any._redArg, "zAny", ["Any -> Any", "[Any]"], "Bool")
+  , (`Zempic.Fuse.all._redArg, "zAll", ["Any -> Any", "[Any]"], "Bool")
+  , (`Zempic.Fuse.zip._redArg, "zZip", ["[Any]", "[Any]"], "[Any]")
+  , (`Prod.mk, "zPair", ["Any", "Any", "Any", "Any"], "(Any, Any)")
   , (`Bool.true, "True", [], "Bool"), (`Bool.false, "False", [], "Bool") ]
 
 /-- Types with a builtin runtime representation; building or matching them is not supported yet. -/
@@ -145,11 +151,12 @@ def useAs (id : FVarId) (want : String) : EmitM String := do
 /-- Producers whose result may stay lazy so GHC can fuse them into their consumer. -/
 def fuseProducers : List Name :=
   [`Zempic.Fuse.map, `Zempic.Fuse.map._redArg, `Zempic.Fuse.filter, `Zempic.Fuse.filter._redArg,
-   `Zempic.Fuse.range, `Zempic.Fuse.range._redArg]
+   `Zempic.Fuse.range, `Zempic.Fuse.range._redArg, `Zempic.Fuse.take, `Zempic.Fuse.take._redArg,
+   `Zempic.Fuse.append, `Zempic.Fuse.append._redArg, `Zempic.Fuse.zip, `Zempic.Fuse.zip._redArg]
 
 /-- Remember that the `data` type for `t` must be generated (builtin types are rejected). -/
 def noteType (t : Name) : EmitM Unit := do
-  if t == `Bool || t == `List then return
+  if t == `Bool || t == `List || t == `Prod then return
   if builtinTypes.contains t then unsupported s!"builtin type {t}"; return
   modify fun s => if s.types.contains t then s else { s with types := s.types.push t }
 
@@ -253,6 +260,9 @@ def hsLetValue : LetValue .pure → EmitM (String × String)
     let f ← useAs f "Any"
     let args ← args.mapM atomT
     return (args.foldl (fun acc a => s!"(zap {acc} {coerce a.1 a.2 "Any"})") f, "Any")
+  | .proj `Prod i x => do
+    let x ← useAs x "(Any, Any)"
+    return (s!"(case {x} of \{ (p0, p1) -> p{i} })", "Any")
   | .proj t i x => do
     let x ← useAs x "Any"
     match ← single t with
@@ -306,7 +316,8 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
   | .unreach _ => return "error \"leanzempic: unreachable\""
   | .cases cs =>
     let ty := if cs.typeName == `Bool then "Bool"
-      else if cs.typeName == `List then "[Any]" else typeName cs.typeName
+      else if cs.typeName == `List then "[Any]"
+      else if cs.typeName == `Prod then "(Any, Any)" else typeName cs.typeName
     let x ← useAs cs.discr ty
     noteType cs.typeName
     let mut alts : Array String := #[]
@@ -316,6 +327,10 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
         let pat ←
           if n == `Bool.true then pure "True"
           else if n == `Bool.false then pure "False"
+          else if n == `Prod.mk then do
+            let a ← bind ps[0]!.fvarId ps[0]!.binderName
+            let b ← bind ps[1]!.fvarId ps[1]!.binderName
+            pure s!"({a}, {b})"
           else if n == `List.nil then pure "[]"
           else if n == `List.cons then do
             let h ← bind ps[0]!.fvarId ps[0]!.binderName
