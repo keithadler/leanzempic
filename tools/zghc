@@ -1,0 +1,13 @@
+#!/bin/sh
+# zghc: GHC with the settings leanzempic's output wants.
+#
+#   tools/zghc Main.hs -ibuild -o main
+#
+# * -O2, and a larger allocation area for the collector (override with ZEMPIC_RTS="-A64m").
+# * -iruntime, so the runtime modules are found (not needed once zempic-runtime is installed as a
+#   package; see runtime/zempic-runtime.cabal).
+# * Lean's toolchain is taken off PATH. Lean bundles its own clang, and when it shadows the system
+#   one GHC's C compiler step fails with "'inttypes.h' file not found".
+root=$(cd "$(dirname "$0")/.." && pwd)
+clean=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/\.elan/' | tr '\n' ':' | sed 's/:$//')
+PATH="$clean" exec ghc -O2 -i"$root/runtime" -rtsopts "-with-rtsopts=${ZEMPIC_RTS:--A128m}" "$@"

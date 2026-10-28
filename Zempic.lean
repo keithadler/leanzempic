@@ -1,3 +1,4 @@
+import Zempic.Config
 import Zempic.Names
 import Zempic.Own
 import Zempic.Emit

@@ -109,3 +109,12 @@ for n in 0 1 5 17 59 1000 123457; do
   eq "$(.lake/build/bin/stralias $n)" "$(build/StrAliasMain $n)" || { echo "FAIL stralias n=$n"; exit 1; }
 done
 echo "ok string aliasing (versions sharing a buffer never disturb each other)"
+
+# Model-based randomized tests of the runtime (arrays, strings, integers, Nat fast path vs exact).
+mkdir -p build/pt
+ghc -O1 -iruntime -outputdir build/pt tests/PropTests.hs -o build/proptests >/dev/null
+for seed in 1 2 3 4 5 6 7 8; do
+  out=$(build/proptests $seed 3 2>&1)
+  case "$out" in *"all properties held"*) ;; *) echo "FAIL proptests seed $seed"; echo "$out" | head -8; exit 1;; esac
+done
+echo "ok proptests (8 seeds of random operation sequences against pure models)"

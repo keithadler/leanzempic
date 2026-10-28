@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install elan (Lean installs itself from lean-toolchain on first use)
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Install GHC and Cabal
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.14.1'
+          cabal-version: 'latest'
+
+      - name: Versions
+        run: |
+          lean --version
+          ghc --version
+          cabal --version
+
+      - name: Build the Lean library
+        run: lake build Zempic
+
+      - name: Build the runtime package
+        run: |
+          cabal update
+          cd runtime && cabal build
+
+      - name: Test suite
+        run: sh tests/run.sh

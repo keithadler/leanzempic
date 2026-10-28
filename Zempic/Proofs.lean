@@ -5,6 +5,7 @@ Machine-checked facts about the printer. `mangleV1_collides` is a bug the proof 
 `mangle_injective` (in `Zempic.Names`) is the fix.
 -/
 import Zempic.Emit
+import Zempic.Config
 
 namespace Zempic.Proofs
 
@@ -39,5 +40,20 @@ theorem coerce_to_any (x t : String) (h : t ≠ "Any") : coerce x t "Any" = s!"(
 /-- Casting out of `Any` to a real type adds `zu`. -/
 theorem coerce_from_any (x t : String) (h : t ≠ "Any") : coerce x "Any" t = s!"(zu {x})" := by
   simp [coerce, h, Ne.symm h]
+
+/-- The supported Lean version is accepted. -/
+theorem checkLean_supported : (checkLean 4 29 false).toBool = true := by decide
+
+/-- Another version is refused unless the user opts in. -/
+theorem checkLean_other : (checkLean 4 36 false).toBool = false := by decide
+
+/-- ... and accepted when they do. -/
+theorem checkLean_override : (checkLean 4 36 true).toBool = true := by decide
+
+/-- A mistyped mode is an error, not silently `auto`. -/
+theorem checkMode_typo : (checkMode "exatc").toBool = false := by decide
+
+/-- Every real mode is accepted. -/
+theorem checkMode_valid : validModes.all (fun m => (checkMode m).toBool) = true := by decide
 
 end Zempic.Proofs

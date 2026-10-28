@@ -68,7 +68,7 @@ work for it (in-place arrays at scale). Both halves are measured below.
 
 One environment trap: **run GHC without Lean's toolchain `bin` directory on `PATH`.** Lean bundles
 its own `clang`; if it shadows the system one, GHC's C step fails with
-`'inttypes.h' file not found`. `tests/run.sh` and `bench/build.sh` show the working setup.
+`'inttypes.h' file not found`. `tools/zghc` handles this for you.
 
 ### Compile a Lean function to Haskell
 
@@ -107,8 +107,13 @@ main = print (z_fact 25 :: Natural)   -- 15511210043330985984000000, exact
 ```
 
 ```sh
-ghc -O2 -iruntime -ibuild Main.hs && ./Main
+tools/zghc -ibuild Main.hs -o main && ./main
 ```
+
+`tools/zghc` is GHC with the right flags (`-O2`, `-iruntime`, a larger allocation area) and with Lean's
+toolchain taken off `PATH`, which avoids the clang trap below. Plain `ghc -O2 -iruntime -ibuild`
+works too if Lean's `bin` is not on your `PATH`. To use the runtime as a package instead of
+`-iruntime`, build `runtime/zempic-runtime.cabal` and pass `-package zempic-runtime`.
 
 Generated function names are `z_` followed by the mangled Lean name (`fact` becomes `z_fact`).
 
@@ -119,7 +124,7 @@ PATH=/opt/homebrew/bin:/usr/bin:/bin:$HOME/.elan/bin sh tests/run.sh
 ```
 
 It builds every example, compiles the generated Haskell, and checks each result against native
-Lean. Fourteen checks print `ok` (the last one only if Cabal is installed); any failure aborts with
+Lean. Fifteen checks print `ok` (the plugin check only if Cabal is installed); any failure aborts with
 `FAIL`.
 
 ## How it works
@@ -544,6 +549,7 @@ value, with native Lean at several sizes:
 | `aliasing` | 15 programs that update arrays while other references are live |
 | `string aliasing` | 6 programs that make versions of a string share a buffer |
 | `core plugin` | injected Core passes `-dcore-lint` and gives the same answers (needs Cabal) |
+| `proptests` | random operation sequences on arrays, strings, fixed-width integers and the `Word`/`Natural` fast path, each step compared with a pure model |
 
 ### Tests of the tests
 
@@ -613,10 +619,14 @@ runtime/Zempic/         the Haskell runtime (about 1,200 lines)
   Arr.hs                Baker persistent arrays, with in-place variants
   Str.hs                shared-buffer strings
   Auto.hs               tryFast, the auto-mode wrapper glue
+  zempic-runtime.cabal  the runtime as a Cabal package
 examples/               Lean programs used as tests and benchmarks
 bench/                  Haskell drivers and bench/build.sh
 tests/run.sh            the test suite
+tests/PropTests.hs      model-based randomized tests of the runtime
 tools/gen_runtime.py    regenerates UInt.hs and the generated regions of Nat/*.hs
+tools/zghc              GHC with the right flags, and without Lean's clang on PATH
+.github/workflows/      CI (macOS and Linux)
 plugin/                 GHC Core plugin spike (a separate Cabal package, see plugin/README.md)
 spike/                  small drivers for the plugin spike
 BENCH.md                the benchmark log
@@ -665,13 +675,15 @@ Every Lean module is kept at: no `sorry`, every definition documented, no line o
 
 | Symptom | Cause and fix |
 |---|---|
-| `'inttypes.h' file not found` from GHC | Lean's bundled `clang` is first on `PATH`. Put system paths first and keep Lean's `bin` off. |
-| `Could not find module 'Zempic.Nat.Word'` | Pass `-iruntime` (and `-ibuild`) to GHC. |
+| `'inttypes.h' file not found` from GHC | Lean's bundled `clang` is first on `PATH`. Use `tools/zghc`, or keep Lean's `bin` off `PATH`. |
+| `Could not find module 'Zempic.Nat.Word'` | Pass `-iruntime` (and `-ibuild`) to GHC, or use `tools/zghc`, or `-package zempic-runtime`. |
 | `leanzempic: unsupported in this version: extern X` | `X` has no entry in the primitive table. See [Adding a primitive](#adding-a-primitive). |
 | `builtin type Int` (or `Float`, ...) | That type has no representation yet. |
 | Two outputs identical but empty | A build failed. Run the build command and read its errors. |
 | `Stack overflow detected` from the **Lean** binary | Lean's own `List.sum` / `List.zip` overflow around 1e6 elements. The Haskell side is fine. |
 | `Could not find module 'Zempic.Plugin'` | The plugin must be loaded from a Cabal package database; see `plugin/README.md`. |
+| `leanzempic supports Lean 4.29.x, but this is Lean ...` | Use the pinned Lean (see `lean-toolchain`), or `set_option zempic.allowOtherLean true` to try anyway. |
+| `unknown mode` | The mode is one of `auto`, `word`, `exact`, `core`. |
 
 ## Things that did not work
 

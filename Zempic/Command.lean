@@ -3,8 +3,15 @@ Copyright 2026 Keith Adler. Licensed under the Apache License, Version 2.0.
 -/
 import Lean
 import Zempic.Emit
+import Zempic.Config
 
 open Lean Elab Command
+
+/-- Allow `#zempic` on a Lean version other than the supported one, at your own risk. -/
+register_option zempic.allowOtherLean : Bool := {
+  defValue := false
+  descr := "(leanzempic) run on a Lean version the backend was not tested with"
+}
 
 namespace Zempic
 
@@ -14,6 +21,8 @@ syntax (name := zempicCmd) "#zempic " ident+ (" to " str)? (&" mode " ident)? : 
 
 /-- Elaborate `#zempic`: emit the Haskell files and the Core dump for the named constants. -/
 @[command_elab zempicCmd] def elabZempic : CommandElab := fun stx => do
+  let allow := zempic.allowOtherLean.get (← getOptions)
+  if let .error msg := checkLean Lean.version.major Lean.version.minor allow then throwError msg
   let ids := stx[1].getArgs
   let path? := stx[2].getArgs[1]?.map (·.isStrLit?.get!)
   let mut roots : Array Name := #[]
@@ -22,6 +31,7 @@ syntax (name := zempicCmd) "#zempic " ident+ (" to " str)? (&" mode " ident)? : 
     | some p => (System.FilePath.mk p).fileStem.getD "Out"
     | none => "Out"
   let mode := (stx[3].getArgs[1]?.map (·.getId.toString)).getD "auto"
+  if let .error msg := checkMode mode then throwError msg
   if mode == "core" then
     let (stub, zc) ← liftCoreM <| emitCore modName roots
     match path? with
