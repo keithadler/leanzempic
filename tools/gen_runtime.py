@@ -107,6 +107,46 @@ arrToList _ a = arrIO (aToList (zu a))
 {-# NOINLINE arrToList #-}
 """.split("\n")
 
+STRING_FUNCS = """-- Lean's String as a shared UTF-8 buffer (see Zempic.Str): amortized O(1) push and append.
+strIO :: IO a -> a
+strIO = unsafeDupablePerformIO
+{-# INLINE strIO #-}
+
+strLen :: Any -> ZNat
+strLen s = fromIntegral (sChars (zu s :: Str))
+
+strBytes :: Any -> ZNat
+strBytes s = fromIntegral (sBytes (zu s :: Str))
+
+strAppend :: Any -> Any -> Any
+strAppend a b = strIO (zo <$> sAppend (zu a) (zu b))
+{-# NOINLINE strAppend #-}
+
+strPush :: Any -> Word32 -> Any
+strPush s c = strIO (zo <$> sPush (zu s) c)
+{-# NOINLINE strPush #-}
+
+strEq, strLt, strLe :: Any -> Any -> Bool
+strEq a b = sEq (zu a :: Str) (zu b :: Str)
+strLt a b = sLt (zu a :: Str) (zu b :: Str)
+strLe a b = sLe (zu a :: Str) (zu b :: Str)
+
+strToList :: Any -> [Any]
+strToList s = map (\\c -> zo (fromIntegral (ord c) :: Word32)) (T.unpack (sToText (zu s :: Str)))
+
+strOfList :: [Any] -> Any
+strOfList cs = strIO (zo <$> sFromText (T.pack (map (\\c -> chr (fromIntegral (zu c :: Word32))) cs)))
+{-# NOINLINE strOfList #-}
+
+natRepr :: ZNat -> Any
+natRepr n = strIO (zo <$> sFromText (T.pack (show n)))
+{-# NOINLINE natRepr #-}
+
+strLit :: String -> Any
+strLit lit = strIO (zo <$> sFromText (T.pack lit))
+{-# NOINLINE strLit #-}
+""".split("\n")
+
 ARRAY_NAMES = ["arrIdx", "arrMkEmpty", "arrReplicate", "arrSize", "arrUSize", "arrPush", "arrGetD",
                "arrGetI", "arrUGet", "arrSet", "arrUSet", "arrSwap", "arrPop"]
 
@@ -118,6 +158,7 @@ def nat_region():
                 f"{s}ToNat :: {h} -> ZNat", f"{s}ToNat = fromIntegral",
                 f"{{-# INLINE {s}OfNat #-}}", f"{{-# INLINE {s}ToNat #-}}"]
     out += ARRAY_FUNCS
+    out += STRING_FUNCS
     out += ["charOfNat :: ZNat -> Word32",
             "charOfNat n = if n < 55296 || (n > 57343 && n < 1114112) then fromIntegral n else 0",
             "charOfNatAux :: ZNat -> Any -> Word32", "charOfNatAux n _ = fromIntegral n",
@@ -134,6 +175,10 @@ def patch(path):
     else:
         s = s.rstrip("\n") + "\n\n" + region + "\n"
     s = s.replace("import qualified Data.Sequence as Seq\nimport Data.Sequence (Seq, (|>))\n", "")
+    if "import qualified Data.Text as T" not in s:
+        s = s.replace("import Data.Bits", "import qualified Data.Text as T\nimport Data.Char (chr, ord)\nimport Data.Bits", 1)
+    if "import Zempic.Str" not in s:
+        s = s.replace("import Zempic.Arr", "import Zempic.Arr\nimport Zempic.Str", 1)
     if "import Zempic.Arr" not in s:
         s = s.replace("import Data.Bits", "import System.IO.Unsafe (unsafeDupablePerformIO)\nimport Zempic.Arr\nimport Data.Bits", 1)
     if "import Data.Word" not in s:

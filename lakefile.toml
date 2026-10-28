@@ -53,3 +53,8 @@ srcDir = "examples"
 name = "arrays2"
 root = "Arrays2"
 srcDir = "examples"
+
+[[lean_exe]]
+name = "strings"
+root = "Strings"
+srcDir = "examples"

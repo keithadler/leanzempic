@@ -167,3 +167,22 @@ is correct for every use but pays for it.
 So arrays are 3x to 10x slower than Lean's, down from 15x to 90x with the sequence. Every array
 test matches Lean's value. Closing the gap needs ownership information (which array is
 uniquely held), which the Haskell backend does not have.
+
+**Strings** (`examples/Strings.lean`). A Lean string is a shared UTF-8 buffer (every version is a
+prefix of one buffer; appending to the newest version writes in place, appending to an older one
+copies). My first version, Haskell `Text`, copied on every push: 100,000 pushes took 6.83 s
+against Lean's 0.02 s. Same tests, best of 3:
+
+| Test | n | Lean | Haskell (buffer) | Haskell (Text, first try) |
+|---|---|---|---|---|
+| push characters, then length and byte size | 1e5 | 0.02 s | 0.02 s | 6.83 s |
+| push characters | 1e7 | 0.05 s | 0.18 s | not run |
+| append `toString i ++ ","` | 1e5 | 0.03 s | 0.03 s | 1.65 s |
+| append `toString i ++ ","` | 3e6 | 0.12 s | 0.50 s | not run |
+| equality and ordering of `toString` pairs | 1e6 | 0.07 s | 0.24 s | 0.08 s |
+| `toList`, `ofList`, reverse | 2e6 | 0.02 s | 0.02 s | 0.02 s |
+| length and byte size of non-ASCII text | 2e7 | 0.02 s | 0.02 s | 0.02 s |
+
+Small strings are level with Lean; at millions of operations the Haskell side is 3x to 4x slower,
+mostly from allocating a fresh buffer for each short string. All five tests print Lean's values,
+including text whose character count differs from its byte size.

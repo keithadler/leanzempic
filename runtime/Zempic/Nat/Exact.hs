@@ -6,6 +6,9 @@ module Zempic.Nat.Exact where
 import Data.Word (Word16, Word32, Word64, Word8)
 import System.IO.Unsafe (unsafeDupablePerformIO)
 import Zempic.Arr
+import Zempic.Str
+import qualified Data.Text as T
+import Data.Char (chr, ord)
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import GHC.Exts (build)
 import Numeric.Natural (Natural)
@@ -173,6 +176,45 @@ arrOfList _ xs = arrIO (zo <$> aFromList xs)
 arrToList :: Any -> Any -> [Any]
 arrToList _ a = arrIO (aToList (zu a))
 {-# NOINLINE arrToList #-}
+
+-- Lean's String as a shared UTF-8 buffer (see Zempic.Str): amortized O(1) push and append.
+strIO :: IO a -> a
+strIO = unsafeDupablePerformIO
+{-# INLINE strIO #-}
+
+strLen :: Any -> ZNat
+strLen s = fromIntegral (sChars (zu s :: Str))
+
+strBytes :: Any -> ZNat
+strBytes s = fromIntegral (sBytes (zu s :: Str))
+
+strAppend :: Any -> Any -> Any
+strAppend a b = strIO (zo <$> sAppend (zu a) (zu b))
+{-# NOINLINE strAppend #-}
+
+strPush :: Any -> Word32 -> Any
+strPush s c = strIO (zo <$> sPush (zu s) c)
+{-# NOINLINE strPush #-}
+
+strEq, strLt, strLe :: Any -> Any -> Bool
+strEq a b = sEq (zu a :: Str) (zu b :: Str)
+strLt a b = sLt (zu a :: Str) (zu b :: Str)
+strLe a b = sLe (zu a :: Str) (zu b :: Str)
+
+strToList :: Any -> [Any]
+strToList s = map (\c -> zo (fromIntegral (ord c) :: Word32)) (T.unpack (sToText (zu s :: Str)))
+
+strOfList :: [Any] -> Any
+strOfList cs = strIO (zo <$> sFromText (T.pack (map (\c -> chr (fromIntegral (zu c :: Word32))) cs)))
+{-# NOINLINE strOfList #-}
+
+natRepr :: ZNat -> Any
+natRepr n = strIO (zo <$> sFromText (T.pack (show n)))
+{-# NOINLINE natRepr #-}
+
+strLit :: String -> Any
+strLit lit = strIO (zo <$> sFromText (T.pack lit))
+{-# NOINLINE strLit #-}
 
 charOfNat :: ZNat -> Word32
 charOfNat n = if n < 55296 || (n > 57343 && n < 1114112) then fromIntegral n else 0
