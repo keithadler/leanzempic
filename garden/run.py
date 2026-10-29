@@ -43,7 +43,10 @@ def one(name):
     head = "import Zempic\n" + "\n".join(imps) + "\n"
     prn = "\n".join(f'  IO.println s!"{n} {{entry {n}}}"' for n in NS)
     open(f"{d}/{name}.lean", "w").write(head + body + "\n\ndef main : IO Unit := do\n" + prn + "\n")
-    open(f"{d}/emit.lean", "w").write(head + body + f'\n\n#zempic entry to "build/garden/{name}/Out.hs"\n')
+    # GARDEN_FUSE=1 compiles the program with the list-fusion pass on; the option must be set before the
+    # definitions, because the pass runs when Lean compiles them, not when #zempic prints them.
+    fuse = "set_option zempic.fuse true\n" if os.environ.get("GARDEN_FUSE") == "1" else ""
+    open(f"{d}/emit.lean", "w").write(head + fuse + body + f'\n\n#zempic entry to "build/garden/{name}/Out.hs"\n')
     rc, out = sh(f"{lean} --run {d}/{name}.lean", env=lake_env)
     want = "\n".join(l for l in out.splitlines() if re.match(r"^\d+ \d+$", l.strip())).strip()
     if rc != 0 or not want.startswith("0 "):

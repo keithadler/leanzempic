@@ -43,6 +43,11 @@ First complete version.
   0.080 s, `string_chars` 0.454 s to 0.345 s.
 * Documented `-with-rtsopts='-A256m -O1g'`: 25 to 40% on list and array programs.
 
+### Fusion
+* Documented and measured: `set_option zempic.fuse true` before the definitions gives 2x to 5x on list
+  pipelines (all 106 garden programs agree with it on). One program got slower (list merge sort).
+* Every generated module carries `-fno-float-in`, avoiding a GHC 9.14.1 panic in the Float Inwards pass.
+
 ### Tooling
 * CI runs a 36-program subset of the garden at `-O1` (the full 106 take about 15 CPU-minutes and
   exceeded the runner). `GARDEN_OPT` and `GARDEN_SET` select the level and the set.

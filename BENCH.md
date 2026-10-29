@@ -445,3 +445,53 @@ place of persistent maps. Which of that carries over to generated code:
 * **What did carry over, already in:** mutable arrays in place of persistent structures (`Zempic.Arr`),
   strict fields and strict counters, a large allocation area (`-A256m -O1g`), and the habit of
   profiling before changing anything.
+
+
+## Fusion done right, a GHC panic, and the heap census (2026-10-29)
+
+**An invalid test, corrected.** The earlier "fusion changes nothing" result set `zempic.fuse true`
+just before `#zempic`. The pass runs when Lean compiles the definitions, so the option has to come
+first. With it set correctly, best of 3, identical answers:
+
+| Program | n | plain | fused |
+|---|---|---|---|
+| list of `UInt8` hashed (FNV) | 3e6 | 0.15 s | 0.03 s |
+| tuple-state fold | 5e6 | 0.26 s | 0.08 s |
+| `Int` list work | 1e6 | 0.30 s | 0.15 s |
+| sum-type fold | 3e6 | 0.14 s | 0.06 s |
+| `Option` chain | 5e6 | 0.09 s | 0.03 s |
+| list functions (zip, filterMap, foldr, ...) | 1e6 | 0.26 s | 0.18 s |
+| closures | 1e6 | 0.04 s | 0.03 s |
+| list merge sort | 3e5 | 0.09 s | 0.12 s (slower) |
+
+The reason is what tenet-hs found about copying collectors: live data is the cost, not allocation.
+A fused pipeline never builds the intermediate list, so there is nothing for the collector to copy.
+All 106 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
+
+**A GHC panic, found by fusion.** `list_funcs` with fusion made GHC 9.14.1 panic ("the 'impossible'
+happened", `StgToCmm.Env: variable not found co5_Xc`). It was deterministic for a given invocation but
+changed with incidental inputs such as the output directory, so any single `-fno-...` flag appeared to
+fix it by luck. `-dcore-lint` named the real culprit: the Float Inwards pass produces an ill-scoped
+coercion variable on code full of `unsafeCoerce`. `-fno-float-in` is stable across four builds and
+costs nothing measurable on eight programs (`while_loop`, `struct_update`, `typeclass`, `hashmap`,
+`string_chars`, `tuples`, `list_mergesort`, `functor_tree`: all within noise), so every generated module
+now carries it.
+
+**Collector settings, by scenario** (best of 3, seconds):
+
+| RTS options | 15M-element array loop | array map/filter/fold | list functions |
+|---|---|---|---|
+| `-A128m` | 0.98 | 0.25 | 0.25 |
+| `-A256m -O1g` | 0.81 | 0.20 | 0.17 |
+| `-A512m -O2g` | 0.68 | 0.20 | 0.12 |
+| `-A1g -O2g` | 0.60 | 0.22 | 0.14 |
+| `-H2g` | 0.63 | 0.26 | 0.22 |
+
+Larger is faster for programs with large live data, and costs peak memory.
+
+**Heap census (`+RTS -hT`, normal collector, as tenet-hs advises).** No thunk leftovers anywhere,
+which was the lesson most worth checking. The live data is the boxing we already knew about: the
+15M-element array loop holds 240 MB of `W#` boxes plus a 134 MB pointer array; the tuple fold is cons
+cells and `W#` boxes; `list_funcs` adds about 50 MB of persistent-array version records (`Arr`, `Diff`,
+`MutVar`) and 39 MB of stack. Sharing preallocated boxes for small values would not help these, since
+the values are large.

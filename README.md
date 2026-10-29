@@ -334,7 +334,12 @@ def pipe (n : Nat) : Nat :=
 `specialize` pass and swaps the calls for `Zempic.Fuse.*`. It has to run that early because after
 specialization Lean has already baked your lambdas into private loops. It is **off by default**
 because the rewritten code is slower in native Lean (closure calls: 0.59 s against 0.38 s in one
-test), so enable it only in files you compile to Haskell.
+test), so enable it only in files you compile to Haskell. **For code that goes to Haskell, turn it
+on.** Set the option before the definitions (the pass runs when Lean compiles them, not when `#zempic`
+prints them). Measured on the garden with identical answers: a list pipeline over a `UInt8` hash 5x
+faster (0.15 s to 0.03 s), a tuple-state fold 3x (0.26 s to 0.08 s), `Int` list work 2x, `Option` and
+sum-type folds 2x to 3x. It is not free everywhere: a list merge sort got slower (0.09 s to 0.12 s).
+All 106 garden programs give the same answers with it on (`GARDEN_FUSE=1 python3 garden/run.py`).
 
 Covered combinators: `map`, `filter`, `foldl`, `foldr`, `range`, `length`, `sum` (on `Nat`),
 `take`, `append` (`++`), `zip`, `any`, `all`. Not covered: `reverse`, `filterMap`, `join`, `zipWith`,
@@ -563,9 +568,14 @@ level or faster (down to 0.1x for a `Float` loop); lists, arrays, hash maps and 
 pieces are 2x to 7x slower; an array that a caller shares and a loop mutates is about 20x slower
 (Lean copies it once; this backend runs the loop on the persistent array).
 
-**Run Haskell output with a large allocation area.** Garbage collection is about half the run time of
-the slow programs, and `-with-rtsopts='-A256m -O1g'` (or `-H1g`) makes them 25 to 40% faster with no
-change to the code. Smaller areas are slower, and `--nonmoving-gc`, `-c` and `-F4` do nothing.
+**Run Haskell output with a large allocation area, and know what it costs.** Garbage collection is
+about half the run time of the slow programs, because a copying collector copies every live boxed
+value. `-with-rtsopts='-A256m -O1g'` makes list and array programs 25 to 40% faster with no change to
+the code; for heaps of several hundred MB, `-A512m -O2g` goes further (a 15-million-element array loop:
+0.98 s to 0.68 s, and 0.60 s with `-A1g -O2g`). The price is memory: the allocation area is reserved
+up front, so peak memory rises by about that much. If peak memory matters more than speed (tenet-hs,
+the author's Haskell kernel, keeps `-A64m` for that reason), use less. Smaller areas than 128 MB were
+slower here, and `--nonmoving-gc`, `-c` and `-F4` did nothing.
 
 ### A proved development: AES-256
 
@@ -653,7 +663,7 @@ than `OK` names the stage that failed: `NATIVE` (the program itself does not run
 cannot compile it, with the missing primitive), `GHC` (the generated Haskell does not typecheck),
 `RUNERR` (the Haskell crashed) or `DIFF` (different answers). `tests/run.sh` runs the whole garden
 (about 15 CPU-minutes); CI runs a 36-program subset that touches every area, at `-O1` (`GARDEN_SET=ci
-GARDEN_OPT=-O1`; `-O0` would hide the crash class the garden once found).
+GARDEN_OPT=-O1 GARDEN_FUSE=1`, the recommended configuration; `-O0` would hide the crash class the garden once found).
 
 The garden is how the features above were found: the first run compiled 27 of 48 programs, and every
 failure was a missing primitive or a bug. Two were real bugs, not gaps: a single-field structure
@@ -828,6 +838,7 @@ Every Lean module is kept at: no `sorry`, every definition documented, no line o
 | `builtin type X` | That builtin type has no representation yet (`Int`, `Float`, `ByteArray`, `Thunk` do). |
 | Two outputs identical but empty | A build failed. Run the build command and read its errors. |
 | `Stack overflow detected` from the **Lean** binary | Lean's own `List.sum` / `List.zip` overflow around 1e6 elements. The Haskell side is fine. |
+| `panic! (the 'impossible' happened) ... StgToCmm.Env: variable not found co...` | A GHC 9.14.1 bug in the Float Inwards pass on cast-heavy code (found with `-dcore-lint`). Generated modules carry `-fno-float-in`, which avoids it; if you compile your own variant, pass the flag. |
 | `Could not find module 'Zempic.Plugin'` | The plugin must be loaded from a Cabal package database; see `plugin/README.md`. |
 | `leanzempic supports Lean 4.29.x, but this is Lean ...` | Use the pinned Lean (see `lean-toolchain`), or `set_option zempic.allowOtherLean true` to try anyway. |
 | `unknown mode` | The mode is one of `auto`, `word`, `exact`, `core`. |

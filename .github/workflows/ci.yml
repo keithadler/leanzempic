@@ -58,4 +58,5 @@ jobs:
         env:
           GARDEN_OPT: -O1
           GARDEN_SET: ci
+          GARDEN_FUSE: '1'
         run: sh tests/run.sh
