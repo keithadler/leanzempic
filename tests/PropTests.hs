@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, ScopedTypeVariables #-}
 -- Copyright 2026 Keith Adler. Licensed under the Apache License, Version 2.0.
 --
 -- Model-based randomized tests of the Haskell runtime. Each structure is driven through long random
@@ -268,6 +268,107 @@ arrWord c g kind steps = do
   g0 <- wordContents aEnd
   expect c "the stale version is undisturbed" g0 mEnd
 
+-- | The narrow-typed primitives (`UInt8/16/32/64` elements read and written with no box), against a list
+-- model: on a boxed buffer and a buffer of the matching kind, in place, through a lazy handle, on stale
+-- versions (which must fall back), and with reads and writes past either end, at huge and negative indices.
+data NOps t = NOps
+  { nPushU :: A.Arr -> t -> IO A.Arr, nSetU :: A.Arr -> Int -> t -> IO A.Arr
+  , nGetP :: A.Arr -> Int -> t -> t, nGetPS :: A.Arr -> Int -> t -> t, nSwapU :: A.Arr -> Int -> Int -> IO A.Arr }
+
+arrNarrow :: forall t. (Integral t, Bounded t) => Check -> Gen -> NOps t -> Int -> Int -> Int -> IO ()
+arrNarrow c g ops kind bits steps = do
+  let toT :: Integer -> t
+      toT = fromInteger
+      box :: Integer -> Any
+      box v = case bits of
+        8 -> unsafeCoerce (fromInteger v :: Word8)
+        16 -> unsafeCoerce (fromInteger v :: Word16)
+        32 -> unsafeCoerce (fromInteger v :: Word32)
+        _ -> unsafeCoerce (fromInteger v :: Word64)
+      unbox :: Any -> Integer
+      unbox a = case bits of
+        8 -> toInteger (unsafeCoerce a :: Word8)
+        16 -> toInteger (unsafeCoerce a :: Word16)
+        32 -> toInteger (unsafeCoerce a :: Word32)
+        _ -> toInteger (unsafeCoerce a :: Word64)
+      randV = do w <- next g
+                 r <- below g 4
+                 return (if r == 0 then toInteger (maxBound :: t) else toInteger (fromIntegral w :: t))
+      mset k v m = if k < 0 || k >= length m then m else take k m ++ [v] ++ drop (k + 1) m
+      mswap i j m = if i < 0 || j < 0 || i >= length m || j >= length m then m else mset j (m !! i) (mset i (m !! j) m)
+      contents a = map unbox <$> A.aToList a
+      label s = s ++ " (" ++ show bits ++ " bits, kind " ++ show kind ++ ")"
+      idx m = do r <- below g 8
+                 case r of
+                   0 -> return (-1)
+                   1 -> return (length m)
+                   2 -> return maxBound
+                   3 -> return minBound
+                   _ -> below g (length m + 1)
+  a0 <- A.aEmptyK kind 2
+  (aEnd, mEnd) <- foldM
+    (\(a, m) _ -> do
+        op <- below g 7
+        k <- idx m
+        v <- randV
+        (b, mb) <- case op of
+          0 -> do b <- nPushU ops a (toT v); return (b, m ++ [v])
+          1 -> do b <- nSetU ops a k (toT v); return (b, mset k v m)
+          2 -> do b <- A.aPopU a; return (b, if null m then m else init m)
+          3 -> do
+            j <- idx m
+            b <- nSwapU ops a k j
+            return (b, mswap k j m)
+          4 -> do
+            let want = if k >= 0 && k < length m then m !! k else v
+            expect c (label "narrow get") (toInteger (nGetPS ops a k (toT v))) want
+            expect c (label "narrow get, lazy default") (toInteger (nGetP ops a k (toT v))) want
+            -- an in-range read must not force its default (the compiled code passes a shared error value)
+            when (k >= 0 && k < length m) $
+              expect c (label "narrow get does not force the default in range") (toInteger (nGetP ops a k (error "default forced"))) (m !! k)
+            return (a, m)
+          5 -> do
+            -- a lazily shared handle copies on its first write and leaves the source alone
+            h <- A.aShare a
+            h' <- nSetU ops h 0 (toT v)
+            gsrc <- contents a
+            expect c (label "source undisturbed by a write to its lazy copy") gsrc m
+            return (h', mset 0 v m)
+          _ -> do
+            -- a persistent write first: the in-place ones must keep working on the new live version
+            b <- A.aPush a (box v)
+            return (b, m ++ [v])
+        got <- contents b
+        expect c (label "narrow ops") got mb
+        return (b, mb))
+    (a0, []) [1 .. steps]
+  -- Stale versions fall back to the persistent operations.
+  newer <- A.aPush aEnd (box 42)
+  s1 <- nPushU ops aEnd (toT 7)
+  gs1 <- contents s1
+  expect c (label "stale narrow push falls back") gs1 (mEnd ++ [7])
+  s2 <- nSetU ops aEnd 0 (toT 9)
+  gs2 <- contents s2
+  expect c (label "stale narrow set falls back") gs2 (mset 0 9 mEnd)
+  s3 <- nSwapU ops aEnd 0 (length mEnd - 1)
+  gs3 <- contents s3
+  expect c (label "stale narrow swap falls back") gs3 (mswap 0 (length mEnd - 1) mEnd)
+  gn <- contents newer
+  expect c (label "the newer version is undisturbed") gn (mEnd ++ [42])
+  g0 <- contents aEnd
+  expect c (label "the stale version is undisturbed") g0 mEnd
+  -- the compiled-code wrappers (word mode and exact mode) at indices no clamp may wrap around
+  when (bits == 32) $ do
+    let anyA = unsafeCoerce aEnd :: Any
+        wantAt i = if i < length mEnd then toInteger (mEnd !! i) else 5
+    forM_ [0 .. length mEnd + 1] $ \i -> do
+      expect c "W.arrGetD32" (toInteger (W.arrGetD32 undefined 5 anyA (fromIntegral i))) (wantAt i)
+      expect c "E.arrGetD32" (toInteger (E.arrGetD32 undefined 5 anyA (fromIntegral i))) (wantAt i)
+    forM_ [2 ^ 63, 2 ^ 63 + 1, 2 ^ 64 - 1 :: Word] $ \i ->
+      expect c "W.arrGetD32 at a huge index" (W.arrGetD32 undefined 5 anyA i) 5
+    forM_ [2 ^ 64, 2 ^ 64 + 3, 2 ^ 70 :: Natural] $ \i ->
+      expect c "E.arrGetD32 at a huge index" (E.arrGetD32 undefined 5 anyA i) 5
+
 -- | `Array.range` and the element move behind `Array.append` / `Array.extract`.
 arrRangeMove :: Check -> Gen -> IO ()
 arrRangeMove c g = do
@@ -532,6 +633,12 @@ main = do
       when (kind == 0 || kind == 5) $ arrWord check gen kind 400
       when (kind /= 0) $ arrPlaceholderRaw check gen kind
     arrRangeMove check gen
+    forM_ [(0, 8), (1, 8), (0, 16), (2, 16), (0, 32), (3, 32), (0, 64), (4, 64)] $ \(kind, bits) ->
+      case bits :: Int of
+        8 -> arrNarrow check gen (NOps A.aPushU8 A.aSetU8 A.aGetP8 A.aGetPS8 A.aSwapU8) kind bits 300
+        16 -> arrNarrow check gen (NOps A.aPushU16 A.aSetU16 A.aGetP16 A.aGetPS16 A.aSwapU16) kind bits 300
+        32 -> arrNarrow check gen (NOps A.aPushU32 A.aSetU32 A.aGetP32 A.aGetPS32 A.aSwapU32) kind bits 300
+        _ -> arrNarrow check gen (NOps A.aPushU64 A.aSetU64 A.aGetP64 A.aGetPS64 A.aSwapU64) kind bits 300
     strPool check gen 500
   uintType check gen "UInt8" 8 [ (n, f, r) | ((n, r), f) <- zip (uintOps 8)
     [U.u8Add, U.u8Sub, U.u8Mul, U.u8Div, U.u8Mod, U.u8Land, U.u8Lor, U.u8Xor, U.u8Shl, U.u8Shr] ]

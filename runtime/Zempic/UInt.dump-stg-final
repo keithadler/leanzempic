@@ -1,0 +1,1006 @@
+
+==================== Final STG: ====================
+
+$trModule2 :: Addr# = "Zempic.UInt"#;
+
+$trModule4 :: Addr# = "main"#;
+
+$trModule3 :: TrName = TrNameS! [$trModule4];
+
+$trModule1 :: TrName = TrNameS! [$trModule2];
+
+$trModule :: Module = Module! [$trModule3 $trModule1];
+
+u8Compl :: Word8 -> Word8 =
+    \r [eta_B0] $fBitsWord8_$ccomplement eta_B0;
+
+u8Xor :: Word8 -> Word8 -> Word8 =
+    \r [eta_B0 eta_B1] $fBitsWord8_$cxor eta_B0 eta_B1;
+
+u8Lor :: Word8 -> Word8 -> Word8 =
+    \r [eta_B0 eta_B1] $fBitsWord8_$c.|. eta_B0 eta_B1;
+
+u8Land :: Word8 -> Word8 -> Word8 =
+    \r [eta_B0 eta_B1] $fBitsWord8_$c.&. eta_B0 eta_B1;
+
+u8Eq :: Word8 -> Word8 -> Bool =
+    \r [eta_B0 eta_B1] eqWord8 eta_B0 eta_B1;
+
+u8Le :: Word8 -> Word8 -> Bool =
+    \r [eta_B0 eta_B1] leWord8 eta_B0 eta_B1;
+
+u8Lt :: Word8 -> Word8 -> Bool =
+    \r [eta_B0 eta_B1] ltWord8 eta_B0 eta_B1;
+
+u16Compl :: Word16 -> Word16 =
+    \r [eta_B0] $fBitsWord16_$ccomplement eta_B0;
+
+u16Xor :: Word16 -> Word16 -> Word16 =
+    \r [eta_B0 eta_B1] $fBitsWord16_$cxor eta_B0 eta_B1;
+
+u16Lor :: Word16 -> Word16 -> Word16 =
+    \r [eta_B0 eta_B1] $fBitsWord16_$c.|. eta_B0 eta_B1;
+
+u16Land :: Word16 -> Word16 -> Word16 =
+    \r [eta_B0 eta_B1] $fBitsWord16_$c.&. eta_B0 eta_B1;
+
+u16Eq :: Word16 -> Word16 -> Bool =
+    \r [eta_B0 eta_B1] eqWord16 eta_B0 eta_B1;
+
+u16Le :: Word16 -> Word16 -> Bool =
+    \r [eta_B0 eta_B1] leWord16 eta_B0 eta_B1;
+
+u16Lt :: Word16 -> Word16 -> Bool =
+    \r [eta_B0 eta_B1] ltWord16 eta_B0 eta_B1;
+
+u32Compl :: Word32 -> Word32 =
+    \r [eta_B0] $fBitsWord32_$ccomplement eta_B0;
+
+u32Xor :: Word32 -> Word32 -> Word32 =
+    \r [eta_B0 eta_B1] $fBitsWord32_$cxor eta_B0 eta_B1;
+
+u32Lor :: Word32 -> Word32 -> Word32 =
+    \r [eta_B0 eta_B1] $fBitsWord32_$c.|. eta_B0 eta_B1;
+
+u32Land :: Word32 -> Word32 -> Word32 =
+    \r [eta_B0 eta_B1] $fBitsWord32_$c.&. eta_B0 eta_B1;
+
+u32Eq :: Word32 -> Word32 -> Bool =
+    \r [eta_B0 eta_B1] eqWord32 eta_B0 eta_B1;
+
+u32Le :: Word32 -> Word32 -> Bool =
+    \r [eta_B0 eta_B1] leWord32 eta_B0 eta_B1;
+
+u32Lt :: Word32 -> Word32 -> Bool =
+    \r [eta_B0 eta_B1] ltWord32 eta_B0 eta_B1;
+
+u64Compl :: Word64 -> Word64 =
+    \r [eta_B0] $fBitsWord64_$ccomplement eta_B0;
+
+u64Xor :: Word64 -> Word64 -> Word64 =
+    \r [eta_B0 eta_B1] $fBitsWord64_$cxor eta_B0 eta_B1;
+
+u64Lor :: Word64 -> Word64 -> Word64 =
+    \r [eta_B0 eta_B1] $fBitsWord64_$c.|. eta_B0 eta_B1;
+
+u64Land :: Word64 -> Word64 -> Word64 =
+    \r [eta_B0 eta_B1] $fBitsWord64_$c.&. eta_B0 eta_B1;
+
+u64Eq :: Word64 -> Word64 -> Bool =
+    \r [eta_B0 eta_B1] eqWord64 eta_B0 eta_B1;
+
+u64Le :: Word64 -> Word64 -> Bool =
+    \r [eta_B0 eta_B1] leWord64 eta_B0 eta_B1;
+
+u64Lt :: Word64 -> Word64 -> Bool =
+    \r [eta_B0 eta_B1] ltWord64 eta_B0 eta_B1;
+
+uszCompl :: Word -> Word =
+    \r [eta_B0] $fBitsWord_$ccomplement eta_B0;
+
+uszXor :: Word -> Word -> Word =
+    \r [eta_B0 eta_B1] $fBitsWord_$cxor eta_B0 eta_B1;
+
+uszLor :: Word -> Word -> Word =
+    \r [eta_B0 eta_B1] $fBitsWord_$c.|. eta_B0 eta_B1;
+
+uszLand :: Word -> Word -> Word =
+    \r [eta_B0 eta_B1] $fBitsWord_$c.&. eta_B0 eta_B1;
+
+uszNeg :: Word -> Word = \r [eta_B0] $fNumWord_$cnegate eta_B0;
+
+uszMul :: Word -> Word -> Word =
+    \r [eta_B0 eta_B1] $fNumWord_$c* eta_B0 eta_B1;
+
+uszSub :: Word -> Word -> Word =
+    \r [eta_B0 eta_B1] $fNumWord_$c- eta_B0 eta_B1;
+
+uszAdd :: Word -> Word -> Word =
+    \r [eta_B0 eta_B1] $fNumWord_$c+ eta_B0 eta_B1;
+
+u64ToUsz :: Word64 -> Word =
+    \r [eta_swIG]
+        case eta_swIG of wild_swIH {
+        W64# x#_swII ->
+        case word64ToWord# [x#_swII] of u64ToUsz_sat_swIJ {
+        __DEFAULT -> W# [u64ToUsz_sat_swIJ];
+        };
+        };
+
+u32ToUsz :: Word32 -> Word =
+    \r [eta_swIK]
+        case eta_swIK of wild_swIL {
+        W32# x#_swIM ->
+        case word32ToWord# [x#_swIM] of u32ToUsz_sat_swIN {
+        __DEFAULT -> W# [u32ToUsz_sat_swIN];
+        };
+        };
+
+u16ToUsz :: Word16 -> Word =
+    \r [eta_swIO]
+        case eta_swIO of wild_swIP {
+        W16# x#_swIQ ->
+        case word16ToWord# [x#_swIQ] of u16ToUsz_sat_swIR {
+        __DEFAULT -> W# [u16ToUsz_sat_swIR];
+        };
+        };
+
+u8ToUsz :: Word8 -> Word =
+    \r [eta_swIS]
+        case eta_swIS of wild_swIT {
+        W8# x#_swIU ->
+        case word8ToWord# [x#_swIU] of u8ToUsz_sat_swIV {
+        __DEFAULT -> W# [u8ToUsz_sat_swIV];
+        };
+        };
+
+uszEq :: Word -> Word -> Bool =
+    \r [eta_B0 eta_B1] eqWord eta_B0 eta_B1;
+
+uszLe :: Word -> Word -> Bool =
+    \r [eta_B0 eta_B1] leWord eta_B0 eta_B1;
+
+uszLt :: Word -> Word -> Bool =
+    \r [eta_B0 eta_B1] ltWord eta_B0 eta_B1;
+
+u64ToU8 :: Word64 -> Word8 =
+    \r [eta_swIW]
+        case eta_swIW of wild_swIX {
+        W64# x#_swIY ->
+        case word64ToWord# [x#_swIY] of u64ToU8_sat_swIZ {
+        __DEFAULT ->
+        case wordToWord8# [u64ToU8_sat_swIZ] of u64ToU8_sat_swJ0 {
+        __DEFAULT -> W8# [u64ToU8_sat_swJ0];
+        };
+        };
+        };
+
+u32ToU8 :: Word32 -> Word8 =
+    \r [eta_swJ1]
+        case eta_swJ1 of wild_swJ2 {
+        W32# x#_swJ3 ->
+        case word32ToWord# [x#_swJ3] of u32ToU8_sat_swJ4 {
+        __DEFAULT ->
+        case wordToWord8# [u32ToU8_sat_swJ4] of u32ToU8_sat_swJ5 {
+        __DEFAULT -> W8# [u32ToU8_sat_swJ5];
+        };
+        };
+        };
+
+u16ToU8 :: Word16 -> Word8 =
+    \r [eta_swJ6]
+        case eta_swJ6 of wild_swJ7 {
+        W16# x#_swJ8 ->
+        case word16ToWord# [x#_swJ8] of u16ToU8_sat_swJ9 {
+        __DEFAULT ->
+        case wordToWord8# [u16ToU8_sat_swJ9] of u16ToU8_sat_swJa {
+        __DEFAULT -> W8# [u16ToU8_sat_swJa];
+        };
+        };
+        };
+
+u8Neg :: Word8 -> Word8 = \r [eta_B0] $fNumWord8_$cnegate eta_B0;
+
+u8Shr :: Word8 -> Word8 -> Word8 =
+    \r [x_swJb y_swJc]
+        case x_swJb of wild_swJd {
+        W8# x#_swJe ->
+        case y_swJc of wild1_swJf {
+        W8# x#1_swJg ->
+        case remWord8# [x#1_swJg 8#Word8] of ds_u8Shr_sat_swJi {
+        __DEFAULT ->
+        case word8ToWord# [ds_u8Shr_sat_swJi] of ds_swJh {
+        __DEFAULT ->
+        case word2Int# [ds_swJh] of ds1_swJj {
+        __DEFAULT ->
+        case >=# [ds1_swJj 0#] of lwild_swJk {
+          __DEFAULT -> overflowError;
+          1# ->
+              case <# [ds1_swJj 64#] of u8Shr_sat_swJn {
+              __DEFAULT ->
+              case negateInt# [u8Shr_sat_swJn] of u8Shr_sat_swJo {
+              __DEFAULT ->
+              case int2Word# [u8Shr_sat_swJo] of u8Shr_sat_swJp {
+              __DEFAULT ->
+              case word8ToWord# [x#_swJe] of u8Shr_sat_swJl {
+              __DEFAULT ->
+              case
+                  uncheckedShiftRL# [u8Shr_sat_swJl ds1_swJj]
+              of
+              u8Shr_sat_swJm
+              {
+              __DEFAULT ->
+              case and# [u8Shr_sat_swJm u8Shr_sat_swJp] of u8Shr_sat_swJq {
+              __DEFAULT ->
+              case wordToWord8# [u8Shr_sat_swJq] of u8Shr_sat_swJr {
+              __DEFAULT -> W8# [u8Shr_sat_swJr];
+              };
+              };
+              };
+              };
+              };
+              };
+              };
+        };
+        };
+        };
+        };
+        };
+        };
+
+u8Shl :: Word8 -> Word8 -> Word8 =
+    \r [x_swJs y_swJt]
+        case x_swJs of wild_swJu {
+        W8# x#_swJv ->
+        case y_swJt of wild1_swJw {
+        W8# x#1_swJx ->
+        case remWord8# [x#1_swJx 8#Word8] of ds_u8Shl_sat_swJz {
+        __DEFAULT ->
+        case word8ToWord# [ds_u8Shl_sat_swJz] of ds_swJy {
+        __DEFAULT ->
+        case word2Int# [ds_swJy] of ds1_swJA {
+        __DEFAULT ->
+        case >=# [ds1_swJA 0#] of lwild_swJB {
+          __DEFAULT -> overflowError;
+          1# ->
+              case <# [ds1_swJA 64#] of u8Shl_sat_swJE {
+              __DEFAULT ->
+              case negateInt# [u8Shl_sat_swJE] of u8Shl_sat_swJF {
+              __DEFAULT ->
+              case int2Word# [u8Shl_sat_swJF] of u8Shl_sat_swJG {
+              __DEFAULT ->
+              case word8ToWord# [x#_swJv] of u8Shl_sat_swJC {
+              __DEFAULT ->
+              case uncheckedShiftL# [u8Shl_sat_swJC ds1_swJA] of u8Shl_sat_swJD {
+              __DEFAULT ->
+              case and# [u8Shl_sat_swJD u8Shl_sat_swJG] of u8Shl_sat_swJH {
+              __DEFAULT ->
+              case wordToWord8# [u8Shl_sat_swJH] of u8Shl_sat_swJI {
+              __DEFAULT -> W8# [u8Shl_sat_swJI];
+              };
+              };
+              };
+              };
+              };
+              };
+              };
+        };
+        };
+        };
+        };
+        };
+        };
+
+u8Mod :: Word8 -> Word8 -> Word8 =
+    \r [x_swJJ y_swJK]
+        case y_swJK of wild_swJL {
+        W8# x1_swJM ->
+        case word8ToWord# [x1_swJM] of wild1_swJN {
+          __DEFAULT ->
+              case x_swJJ of wild2_swJO {
+              W8# x#_swJP ->
+              case remWord8# [x#_swJP x1_swJM] of ds1_swJQ {
+              __DEFAULT -> W8# [ds1_swJQ];
+              };
+              };
+          0## -> x_swJJ;
+        };
+        };
+
+lvl_rwIB :: Word8 = W8#! [0#Word8];
+
+u8Div :: Word8 -> Word8 -> Word8 =
+    \r [x_swJR y_swJS]
+        case y_swJS of wild_swJT {
+        W8# x1_swJU ->
+        case word8ToWord# [x1_swJU] of wild1_swJV {
+          __DEFAULT ->
+              case x_swJR of wild2_swJW {
+              W8# x#_swJX ->
+              case quotWord8# [x#_swJX x1_swJU] of ds1_swJY {
+              __DEFAULT -> W8# [ds1_swJY];
+              };
+              };
+          0## -> lvl_rwIB<TagProper>;
+        };
+        };
+
+u8Mul :: Word8 -> Word8 -> Word8 =
+    \r [eta_B0 eta_B1] $fNumWord8_$c* eta_B0 eta_B1;
+
+u8Sub :: Word8 -> Word8 -> Word8 =
+    \r [eta_B0 eta_B1] $fNumWord8_$c- eta_B0 eta_B1;
+
+u8Add :: Word8 -> Word8 -> Word8 =
+    \r [eta_B0 eta_B1] $fNumWord8_$c+ eta_B0 eta_B1;
+
+u64ToU16 :: Word64 -> Word16 =
+    \r [eta_swJZ]
+        case eta_swJZ of wild_swK0 {
+        W64# x#_swK1 ->
+        case word64ToWord# [x#_swK1] of u64ToU16_sat_swK2 {
+        __DEFAULT ->
+        case wordToWord16# [u64ToU16_sat_swK2] of u64ToU16_sat_swK3 {
+        __DEFAULT -> W16# [u64ToU16_sat_swK3];
+        };
+        };
+        };
+
+u32ToU16 :: Word32 -> Word16 =
+    \r [eta_swK4]
+        case eta_swK4 of wild_swK5 {
+        W32# x#_swK6 ->
+        case word32ToWord# [x#_swK6] of u32ToU16_sat_swK7 {
+        __DEFAULT ->
+        case wordToWord16# [u32ToU16_sat_swK7] of u32ToU16_sat_swK8 {
+        __DEFAULT -> W16# [u32ToU16_sat_swK8];
+        };
+        };
+        };
+
+u16Neg :: Word16 -> Word16 =
+    \r [eta_B0] $fNumWord16_$cnegate eta_B0;
+
+u16Shr :: Word16 -> Word16 -> Word16 =
+    \r [x_swK9 y_swKa]
+        case x_swK9 of wild_swKb {
+        W16# x#_swKc ->
+        case y_swKa of wild1_swKd {
+        W16# x#1_swKe ->
+        case remWord16# [x#1_swKe 16#Word16] of ds_u16Shr_sat_swKg {
+        __DEFAULT ->
+        case word16ToWord# [ds_u16Shr_sat_swKg] of ds_swKf {
+        __DEFAULT ->
+        case word2Int# [ds_swKf] of ds1_swKh {
+        __DEFAULT ->
+        case >=# [ds1_swKh 0#] of lwild_swKi {
+          __DEFAULT -> overflowError;
+          1# ->
+              case <# [ds1_swKh 64#] of u16Shr_sat_swKl {
+              __DEFAULT ->
+              case negateInt# [u16Shr_sat_swKl] of u16Shr_sat_swKm {
+              __DEFAULT ->
+              case int2Word# [u16Shr_sat_swKm] of u16Shr_sat_swKn {
+              __DEFAULT ->
+              case word16ToWord# [x#_swKc] of u16Shr_sat_swKj {
+              __DEFAULT ->
+              case
+                  uncheckedShiftRL# [u16Shr_sat_swKj ds1_swKh]
+              of
+              u16Shr_sat_swKk
+              {
+              __DEFAULT ->
+              case and# [u16Shr_sat_swKk u16Shr_sat_swKn] of u16Shr_sat_swKo {
+              __DEFAULT ->
+              case wordToWord16# [u16Shr_sat_swKo] of u16Shr_sat_swKp {
+              __DEFAULT -> W16# [u16Shr_sat_swKp];
+              };
+              };
+              };
+              };
+              };
+              };
+              };
+        };
+        };
+        };
+        };
+        };
+        };
+
+u16Shl :: Word16 -> Word16 -> Word16 =
+    \r [x_swKq y_swKr]
+        case x_swKq of wild_swKs {
+        W16# x#_swKt ->
+        case y_swKr of wild1_swKu {
+        W16# x#1_swKv ->
+        case remWord16# [x#1_swKv 16#Word16] of ds_u16Shl_sat_swKx {
+        __DEFAULT ->
+        case word16ToWord# [ds_u16Shl_sat_swKx] of ds_swKw {
+        __DEFAULT ->
+        case word2Int# [ds_swKw] of ds1_swKy {
+        __DEFAULT ->
+        case >=# [ds1_swKy 0#] of lwild_swKz {
+          __DEFAULT -> overflowError;
+          1# ->
+              case <# [ds1_swKy 64#] of u16Shl_sat_swKC {
+              __DEFAULT ->
+              case negateInt# [u16Shl_sat_swKC] of u16Shl_sat_swKD {
+              __DEFAULT ->
+              case int2Word# [u16Shl_sat_swKD] of u16Shl_sat_swKE {
+              __DEFAULT ->
+              case word16ToWord# [x#_swKt] of u16Shl_sat_swKA {
+              __DEFAULT ->
+              case
+                  uncheckedShiftL# [u16Shl_sat_swKA ds1_swKy]
+              of
+              u16Shl_sat_swKB
+              {
+              __DEFAULT ->
+              case and# [u16Shl_sat_swKB u16Shl_sat_swKE] of u16Shl_sat_swKF {
+              __DEFAULT ->
+              case wordToWord16# [u16Shl_sat_swKF] of u16Shl_sat_swKG {
+              __DEFAULT -> W16# [u16Shl_sat_swKG];
+              };
+              };
+              };
+              };
+              };
+              };
+              };
+        };
+        };
+        };
+        };
+        };
+        };
+
+u16Mod :: Word16 -> Word16 -> Word16 =
+    \r [x_swKH y_swKI]
+        case y_swKI of wild_swKJ {
+        W16# x1_swKK ->
+        case word16ToWord# [x1_swKK] of wild1_swKL {
+          __DEFAULT ->
+              case x_swKH of wild2_swKM {
+              W16# x#_swKN ->
+              case remWord16# [x#_swKN x1_swKK] of ds1_swKO {
+              __DEFAULT -> W16# [ds1_swKO];
+              };
+              };
+          0## -> x_swKH;
+        };
+        };
+
+lvl1_rwIC :: Word16 = W16#! [0#Word16];
+
+u16Div :: Word16 -> Word16 -> Word16 =
+    \r [x_swKP y_swKQ]
+        case y_swKQ of wild_swKR {
+        W16# x1_swKS ->
+        case word16ToWord# [x1_swKS] of wild1_swKT {
+          __DEFAULT ->
+              case x_swKP of wild2_swKU {
+              W16# x#_swKV ->
+              case quotWord16# [x#_swKV x1_swKS] of ds1_swKW {
+              __DEFAULT -> W16# [ds1_swKW];
+              };
+              };
+          0## -> lvl1_rwIC<TagProper>;
+        };
+        };
+
+u16Mul :: Word16 -> Word16 -> Word16 =
+    \r [eta_B0 eta_B1] $fNumWord16_$c* eta_B0 eta_B1;
+
+u16Sub :: Word16 -> Word16 -> Word16 =
+    \r [eta_B0 eta_B1] $fNumWord16_$c- eta_B0 eta_B1;
+
+u16Add :: Word16 -> Word16 -> Word16 =
+    \r [eta_B0 eta_B1] $fNumWord16_$c+ eta_B0 eta_B1;
+
+u8ToU16 :: Word8 -> Word16 =
+    \r [eta_swKX]
+        case eta_swKX of wild_swKY {
+        W8# x#_swKZ ->
+        case word8ToWord# [x#_swKZ] of u8ToU16_sat_swL0 {
+        __DEFAULT ->
+        case wordToWord16# [u8ToU16_sat_swL0] of u8ToU16_sat_swL1 {
+        __DEFAULT -> W16# [u8ToU16_sat_swL1];
+        };
+        };
+        };
+
+u64ToU32 :: Word64 -> Word32 =
+    \r [eta_swL2]
+        case eta_swL2 of wild_swL3 {
+        W64# x#_swL4 ->
+        case word64ToWord# [x#_swL4] of u64ToU32_sat_swL5 {
+        __DEFAULT ->
+        case wordToWord32# [u64ToU32_sat_swL5] of u64ToU32_sat_swL6 {
+        __DEFAULT -> W32# [u64ToU32_sat_swL6];
+        };
+        };
+        };
+
+u32Neg :: Word32 -> Word32 =
+    \r [eta_B0] $fNumWord32_$cnegate eta_B0;
+
+u32Shr :: Word32 -> Word32 -> Word32 =
+    \r [x_swL7 y_swL8]
+        case x_swL7 of wild_swL9 {
+        W32# x#_swLa ->
+        case y_swL8 of wild1_swLb {
+        W32# x#1_swLc ->
+        case remWord32# [x#1_swLc 32#Word32] of ds_u32Shr_sat_swLe {
+        __DEFAULT ->
+        case word32ToWord# [ds_u32Shr_sat_swLe] of ds_swLd {
+        __DEFAULT ->
+        case word2Int# [ds_swLd] of ds1_swLf {
+        __DEFAULT ->
+        case >=# [ds1_swLf 0#] of lwild_swLg {
+          __DEFAULT -> overflowError;
+          1# ->
+              case <# [ds1_swLf 64#] of u32Shr_sat_swLj {
+              __DEFAULT ->
+              case negateInt# [u32Shr_sat_swLj] of u32Shr_sat_swLk {
+              __DEFAULT ->
+              case int2Word# [u32Shr_sat_swLk] of u32Shr_sat_swLl {
+              __DEFAULT ->
+              case word32ToWord# [x#_swLa] of u32Shr_sat_swLh {
+              __DEFAULT ->
+              case
+                  uncheckedShiftRL# [u32Shr_sat_swLh ds1_swLf]
+              of
+              u32Shr_sat_swLi
+              {
+              __DEFAULT ->
+              case and# [u32Shr_sat_swLi u32Shr_sat_swLl] of u32Shr_sat_swLm {
+              __DEFAULT ->
+              case wordToWord32# [u32Shr_sat_swLm] of u32Shr_sat_swLn {
+              __DEFAULT -> W32# [u32Shr_sat_swLn];
+              };
+              };
+              };
+              };
+              };
+              };
+              };
+        };
+        };
+        };
+        };
+        };
+        };
+
+u32Shl :: Word32 -> Word32 -> Word32 =
+    \r [x_swLo y_swLp]
+        case x_swLo of wild_swLq {
+        W32# x#_swLr ->
+        case y_swLp of wild1_swLs {
+        W32# x#1_swLt ->
+        case remWord32# [x#1_swLt 32#Word32] of ds_u32Shl_sat_swLv {
+        __DEFAULT ->
+        case word32ToWord# [ds_u32Shl_sat_swLv] of ds_swLu {
+        __DEFAULT ->
+        case word2Int# [ds_swLu] of ds1_swLw {
+        __DEFAULT ->
+        case >=# [ds1_swLw 0#] of lwild_swLx {
+          __DEFAULT -> overflowError;
+          1# ->
+              case <# [ds1_swLw 64#] of u32Shl_sat_swLA {
+              __DEFAULT ->
+              case negateInt# [u32Shl_sat_swLA] of u32Shl_sat_swLB {
+              __DEFAULT ->
+              case int2Word# [u32Shl_sat_swLB] of u32Shl_sat_swLC {
+              __DEFAULT ->
+              case word32ToWord# [x#_swLr] of u32Shl_sat_swLy {
+              __DEFAULT ->
+              case
+                  uncheckedShiftL# [u32Shl_sat_swLy ds1_swLw]
+              of
+              u32Shl_sat_swLz
+              {
+              __DEFAULT ->
+              case and# [u32Shl_sat_swLz u32Shl_sat_swLC] of u32Shl_sat_swLD {
+              __DEFAULT ->
+              case wordToWord32# [u32Shl_sat_swLD] of u32Shl_sat_swLE {
+              __DEFAULT -> W32# [u32Shl_sat_swLE];
+              };
+              };
+              };
+              };
+              };
+              };
+              };
+        };
+        };
+        };
+        };
+        };
+        };
+
+u32Mod :: Word32 -> Word32 -> Word32 =
+    \r [x_swLF y_swLG]
+        case y_swLG of wild_swLH {
+        W32# x1_swLI ->
+        case word32ToWord# [x1_swLI] of wild1_swLJ {
+          __DEFAULT ->
+              case x_swLF of wild2_swLK {
+              W32# x#_swLL ->
+              case remWord32# [x#_swLL x1_swLI] of ds1_swLM {
+              __DEFAULT -> W32# [ds1_swLM];
+              };
+              };
+          0## -> x_swLF;
+        };
+        };
+
+lvl2_rwID :: Word32 = W32#! [0#Word32];
+
+u32Div :: Word32 -> Word32 -> Word32 =
+    \r [x_swLN y_swLO]
+        case y_swLO of wild_swLP {
+        W32# x1_swLQ ->
+        case word32ToWord# [x1_swLQ] of wild1_swLR {
+          __DEFAULT ->
+              case x_swLN of wild2_swLS {
+              W32# x#_swLT ->
+              case quotWord32# [x#_swLT x1_swLQ] of ds1_swLU {
+              __DEFAULT -> W32# [ds1_swLU];
+              };
+              };
+          0## -> lvl2_rwID<TagProper>;
+        };
+        };
+
+u32Mul :: Word32 -> Word32 -> Word32 =
+    \r [eta_B0 eta_B1] $fNumWord32_$c* eta_B0 eta_B1;
+
+u32Sub :: Word32 -> Word32 -> Word32 =
+    \r [eta_B0 eta_B1] $fNumWord32_$c- eta_B0 eta_B1;
+
+u32Add :: Word32 -> Word32 -> Word32 =
+    \r [eta_B0 eta_B1] $fNumWord32_$c+ eta_B0 eta_B1;
+
+u16ToU32 :: Word16 -> Word32 =
+    \r [eta_swLV]
+        case eta_swLV of wild_swLW {
+        W16# x#_swLX ->
+        case word16ToWord# [x#_swLX] of u16ToU32_sat_swLY {
+        __DEFAULT ->
+        case wordToWord32# [u16ToU32_sat_swLY] of u16ToU32_sat_swLZ {
+        __DEFAULT -> W32# [u16ToU32_sat_swLZ];
+        };
+        };
+        };
+
+u8ToU32 :: Word8 -> Word32 =
+    \r [eta_swM0]
+        case eta_swM0 of wild_swM1 {
+        W8# x#_swM2 ->
+        case word8ToWord# [x#_swM2] of u8ToU32_sat_swM3 {
+        __DEFAULT ->
+        case wordToWord32# [u8ToU32_sat_swM3] of u8ToU32_sat_swM4 {
+        __DEFAULT -> W32# [u8ToU32_sat_swM4];
+        };
+        };
+        };
+
+u64Neg :: Word64 -> Word64 =
+    \r [eta_B0] $fNumWord64_$cnegate eta_B0;
+
+u64Shr :: Word64 -> Word64 -> Word64 =
+    \r [x_swM5 y_swM6]
+        case x_swM5 of wild_swM7 {
+        W64# x#_swM8 ->
+        case y_swM6 of wild1_swM9 {
+        W64# x#1_swMa ->
+        case remWord64# [x#1_swMa 64#Word64] of ds_u64Shr_sat_swMc {
+        __DEFAULT ->
+        case word64ToWord# [ds_u64Shr_sat_swMc] of ds_swMb {
+        __DEFAULT ->
+        case word2Int# [ds_swMb] of ds1_swMd {
+        __DEFAULT ->
+        case >=# [ds1_swMd 0#] of lwild_swMe {
+          __DEFAULT -> overflowError;
+          1# ->
+              case <# [ds1_swMd 64#] of u64Shr_sat_swMg {
+              __DEFAULT ->
+              case negateInt# [u64Shr_sat_swMg] of u64Shr_sat_swMh {
+              __DEFAULT ->
+              case intToInt64# [u64Shr_sat_swMh] of u64Shr_sat_swMi {
+              __DEFAULT ->
+              case int64ToWord64# [u64Shr_sat_swMi] of u64Shr_sat_swMj {
+              __DEFAULT ->
+              case uncheckedShiftRL64# [x#_swM8 ds1_swMd] of u64Shr_sat_swMf {
+              __DEFAULT ->
+              case and64# [u64Shr_sat_swMf u64Shr_sat_swMj] of u64Shr_sat_swMk {
+              __DEFAULT -> W64# [u64Shr_sat_swMk];
+              };
+              };
+              };
+              };
+              };
+              };
+        };
+        };
+        };
+        };
+        };
+        };
+
+u64Shl :: Word64 -> Word64 -> Word64 =
+    \r [x_swMl y_swMm]
+        case x_swMl of wild_swMn {
+        W64# x#_swMo ->
+        case y_swMm of wild1_swMp {
+        W64# x#1_swMq ->
+        case remWord64# [x#1_swMq 64#Word64] of ds_u64Shl_sat_swMs {
+        __DEFAULT ->
+        case word64ToWord# [ds_u64Shl_sat_swMs] of ds_swMr {
+        __DEFAULT ->
+        case word2Int# [ds_swMr] of ds1_swMt {
+        __DEFAULT ->
+        case >=# [ds1_swMt 0#] of lwild_swMu {
+          __DEFAULT -> overflowError;
+          1# ->
+              case <# [ds1_swMt 64#] of u64Shl_sat_swMw {
+              __DEFAULT ->
+              case negateInt# [u64Shl_sat_swMw] of u64Shl_sat_swMx {
+              __DEFAULT ->
+              case intToInt64# [u64Shl_sat_swMx] of u64Shl_sat_swMy {
+              __DEFAULT ->
+              case int64ToWord64# [u64Shl_sat_swMy] of u64Shl_sat_swMz {
+              __DEFAULT ->
+              case uncheckedShiftL64# [x#_swMo ds1_swMt] of u64Shl_sat_swMv {
+              __DEFAULT ->
+              case and64# [u64Shl_sat_swMv u64Shl_sat_swMz] of u64Shl_sat_swMA {
+              __DEFAULT -> W64# [u64Shl_sat_swMA];
+              };
+              };
+              };
+              };
+              };
+              };
+        };
+        };
+        };
+        };
+        };
+        };
+
+u64Mod :: Word64 -> Word64 -> Word64 =
+    \r [x_swMB y_swMC]
+        case y_swMC of wild_swMD {
+        W64# x1_swME ->
+        case x1_swME<TagProper> of wild1_swMF {
+          __DEFAULT ->
+              case x_swMB of wild2_swMG {
+              W64# x#_swMH ->
+              case remWord64# [x#_swMH wild1_swMF] of ds1_swMI {
+              __DEFAULT -> W64# [ds1_swMI];
+              };
+              };
+          0#Word64 -> x_swMB;
+        };
+        };
+
+lvl3_rwIE :: Word64 = W64#! [0#Word64];
+
+u64Div :: Word64 -> Word64 -> Word64 =
+    \r [x_swMJ y_swMK]
+        case y_swMK of wild_swML {
+        W64# x1_swMM ->
+        case x1_swMM<TagProper> of wild1_swMN {
+          __DEFAULT ->
+              case x_swMJ of wild2_swMO {
+              W64# x#_swMP ->
+              case quotWord64# [x#_swMP wild1_swMN] of ds1_swMQ {
+              __DEFAULT -> W64# [ds1_swMQ];
+              };
+              };
+          0#Word64 -> lvl3_rwIE<TagProper>;
+        };
+        };
+
+u64Mul :: Word64 -> Word64 -> Word64 =
+    \r [eta_B0 eta_B1] $fNumWord64_$c* eta_B0 eta_B1;
+
+u64Sub :: Word64 -> Word64 -> Word64 =
+    \r [eta_B0 eta_B1] $fNumWord64_$c- eta_B0 eta_B1;
+
+u64Add :: Word64 -> Word64 -> Word64 =
+    \r [eta_B0 eta_B1] $fNumWord64_$c+ eta_B0 eta_B1;
+
+u32ToU64 :: Word32 -> Word64 =
+    \r [eta_swMR]
+        case eta_swMR of wild_swMS {
+        W32# x#_swMT ->
+        case word32ToWord# [x#_swMT] of u32ToU64_sat_swMU {
+        __DEFAULT ->
+        case word2Int# [u32ToU64_sat_swMU] of u32ToU64_sat_swMV {
+        __DEFAULT ->
+        case intToInt64# [u32ToU64_sat_swMV] of u32ToU64_sat_swMW {
+        __DEFAULT ->
+        case int64ToWord64# [u32ToU64_sat_swMW] of u32ToU64_sat_swMX {
+        __DEFAULT -> W64# [u32ToU64_sat_swMX];
+        };
+        };
+        };
+        };
+        };
+
+u16ToU64 :: Word16 -> Word64 =
+    \r [eta_swMY]
+        case eta_swMY of wild_swMZ {
+        W16# x#_swN0 ->
+        case word16ToWord# [x#_swN0] of u16ToU64_sat_swN1 {
+        __DEFAULT ->
+        case word2Int# [u16ToU64_sat_swN1] of u16ToU64_sat_swN2 {
+        __DEFAULT ->
+        case intToInt64# [u16ToU64_sat_swN2] of u16ToU64_sat_swN3 {
+        __DEFAULT ->
+        case int64ToWord64# [u16ToU64_sat_swN3] of u16ToU64_sat_swN4 {
+        __DEFAULT -> W64# [u16ToU64_sat_swN4];
+        };
+        };
+        };
+        };
+        };
+
+u8ToU64 :: Word8 -> Word64 =
+    \r [eta_swN5]
+        case eta_swN5 of wild_swN6 {
+        W8# x#_swN7 ->
+        case word8ToWord# [x#_swN7] of u8ToU64_sat_swN8 {
+        __DEFAULT ->
+        case word2Int# [u8ToU64_sat_swN8] of u8ToU64_sat_swN9 {
+        __DEFAULT ->
+        case intToInt64# [u8ToU64_sat_swN9] of u8ToU64_sat_swNa {
+        __DEFAULT ->
+        case int64ToWord64# [u8ToU64_sat_swNa] of u8ToU64_sat_swNb {
+        __DEFAULT -> W64# [u8ToU64_sat_swNb];
+        };
+        };
+        };
+        };
+        };
+
+uszToU64 :: Word -> Word64 =
+    \r [eta_swNc]
+        case eta_swNc of wild_swNd {
+        W# x#_swNe ->
+        case wordToWord64# [x#_swNe] of uszToU64_sat_swNf {
+        __DEFAULT -> W64# [uszToU64_sat_swNf];
+        };
+        };
+
+uszToU32 :: Word -> Word32 =
+    \r [eta_swNg]
+        case eta_swNg of wild_swNh {
+        W# x#_swNi ->
+        case wordToWord32# [x#_swNi] of uszToU32_sat_swNj {
+        __DEFAULT -> W32# [uszToU32_sat_swNj];
+        };
+        };
+
+uszToU16 :: Word -> Word16 =
+    \r [eta_swNk]
+        case eta_swNk of wild_swNl {
+        W# x#_swNm ->
+        case wordToWord16# [x#_swNm] of uszToU16_sat_swNn {
+        __DEFAULT -> W16# [uszToU16_sat_swNn];
+        };
+        };
+
+uszToU8 :: Word -> Word8 =
+    \r [eta_swNo]
+        case eta_swNo of wild_swNp {
+        W# x#_swNq ->
+        case wordToWord8# [x#_swNq] of uszToU8_sat_swNr {
+        __DEFAULT -> W8# [uszToU8_sat_swNr];
+        };
+        };
+
+uszShr :: Word -> Word -> Word =
+    \r [x_swNs y_swNt]
+        case x_swNs of wild_swNu {
+        W# x#_swNv ->
+        case y_swNt of wild1_swNw {
+        W# x#1_swNx ->
+        case remWord# [x#1_swNx 64##] of ds_swNy {
+        __DEFAULT ->
+        case word2Int# [ds_swNy] of ds1_swNz {
+        __DEFAULT ->
+        case >=# [ds1_swNz 0#] of lwild_swNA {
+          __DEFAULT -> overflowError;
+          1# ->
+              case <# [ds1_swNz 64#] of uszShr_sat_swNC {
+              __DEFAULT ->
+              case negateInt# [uszShr_sat_swNC] of uszShr_sat_swND {
+              __DEFAULT ->
+              case int2Word# [uszShr_sat_swND] of uszShr_sat_swNE {
+              __DEFAULT ->
+              case uncheckedShiftRL# [x#_swNv ds1_swNz] of uszShr_sat_swNB {
+              __DEFAULT ->
+              case and# [uszShr_sat_swNB uszShr_sat_swNE] of uszShr_sat_swNF {
+              __DEFAULT -> W# [uszShr_sat_swNF];
+              };
+              };
+              };
+              };
+              };
+        };
+        };
+        };
+        };
+        };
+
+uszShl :: Word -> Word -> Word =
+    \r [x_swNG y_swNH]
+        case x_swNG of wild_swNI {
+        W# x#_swNJ ->
+        case y_swNH of wild1_swNK {
+        W# x#1_swNL ->
+        case remWord# [x#1_swNL 64##] of ds_swNM {
+        __DEFAULT ->
+        case word2Int# [ds_swNM] of ds1_swNN {
+        __DEFAULT ->
+        case >=# [ds1_swNN 0#] of lwild_swNO {
+          __DEFAULT -> overflowError;
+          1# ->
+              case <# [ds1_swNN 64#] of uszShl_sat_swNQ {
+              __DEFAULT ->
+              case negateInt# [uszShl_sat_swNQ] of uszShl_sat_swNR {
+              __DEFAULT ->
+              case int2Word# [uszShl_sat_swNR] of uszShl_sat_swNS {
+              __DEFAULT ->
+              case uncheckedShiftL# [x#_swNJ ds1_swNN] of uszShl_sat_swNP {
+              __DEFAULT ->
+              case and# [uszShl_sat_swNP uszShl_sat_swNS] of uszShl_sat_swNT {
+              __DEFAULT -> W# [uszShl_sat_swNT];
+              };
+              };
+              };
+              };
+              };
+        };
+        };
+        };
+        };
+        };
+
+uszMod :: Word -> Word -> Word =
+    \r [x_swNU y_swNV]
+        case y_swNV of wild_swNW {
+        W# x1_swNX ->
+        case x1_swNX<TagProper> of wild1_swNY {
+          __DEFAULT ->
+              case x_swNU of wild2_swNZ {
+              W# x#_swO0 ->
+              case remWord# [x#_swO0 wild1_swNY] of ds1_swO1 {
+              __DEFAULT -> W# [ds1_swO1];
+              };
+              };
+          0## -> x_swNU;
+        };
+        };
+
+lvl4_rwIF :: Word = W#! [0##];
+
+uszDiv :: Word -> Word -> Word =
+    \r [x_swO2 y_swO3]
+        case y_swO3 of wild_swO4 {
+        W# x1_swO5 ->
+        case x1_swO5<TagProper> of wild1_swO6 {
+          __DEFAULT ->
+              case x_swO2 of wild2_swO7 {
+              W# x#_swO8 ->
+              case quotWord# [x#_swO8 wild1_swO6] of ds1_swO9 {
+              __DEFAULT -> W# [ds1_swO9];
+              };
+              };
+          0## -> lvl4_rwIF<TagProper>;
+        };
+        };
+

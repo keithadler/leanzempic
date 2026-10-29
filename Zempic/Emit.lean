@@ -790,6 +790,16 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
       let hs := if punned && ["arrSet", "arrSetH", "arrUSet", "arrPush"].contains hs then hs ++ "B" else hs
       -- The analysis proved this array operation may update in place: use the in-place primitive.
       let hs := if (← get).destr.contains ((← get).cur, letId) then hs ++ "U" else hs
+      -- An in-place swap on an array of a known word-like element type exchanges in line.
+      let swapSfx? ← match hs, elem? with
+        | "arrSwapU", some elem | "arrSwapPU", some elem =>
+          match ← hsTyM elem with
+          | "Word8" => pure (some "8") | "Word16" => pure (some "16") | "Word32" => pure (some "32")
+          | "Word64" => pure (some "64") | "Word" => pure (some "W")
+          | "ZNat" => pure (if (← get).fast then some "W" else none)
+          | _ => pure none
+        | _, _ => pure none
+      let hs := match swapSfx? with | some sfx => hs ++ sfx | none => hs
       -- A new array of a known numeric element type gets an unboxed buffer.
       let hs ← if hs == "arrMkEmpty" || hs == "arrReplicate" || hs == "arrOfList" then
           match elem? with
@@ -809,13 +819,29 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
       let isW := fun (t : String) => t == "Word" || (fast && t == "ZNat")
       let letHs ← hsTyM letTy
       let isWordGet := (← get).wordGets.contains letId
+      let valT := fun (k : Nat) => (args[k]?).map (·.2)
       let valW := fun (k : Nat) => match args[k]? with | some a => isW a.2 | none => false
       let setW := ["arrPushU", "arrSetU", "arrUSetU", "arrUSetBU"]
       -- `get!` hands over its default as a `Word` too, so it is not boxed at every read.
       let getPtys := fun (h : String) (ps : List String) =>
         if h == "arrGetD" then ps.set 1 (if fast then "ZNat" else "Word") else ps
+      -- An element of a narrow integer type (`UInt8/16/32/64`, `Char`) is read and written in line from a
+      -- buffer of its own kind, again with no box. Not inside the in-place `Array.map` (a pun).
+      let narrow? : Option String := match letHs with
+        | "Word8" => some "8" | "Word16" => some "16" | "Word32" => some "32" | "Word64" => some "64"
+        | _ => none
+      let narrowOf := fun (t : String) => match t with
+        | "Word8" => some "8" | "Word16" => some "16" | "Word32" => some "32" | "Word64" => some "64"
+        | _ => (none : Option String)
+      let narrowSet := ["arrPushU", "arrSetU", "arrUSetU"]
+      let narrowK := if hs.startsWith "arrPush" then 2 else 3
+      let narrowV : Option String := (valT narrowK).bind narrowOf
       let (hs, ptys, ret) :=
-        if ["arrGetD", "arrGetI", "arrUGet"].contains hs && !punned && isW letHs then
+        if ["arrGetD", "arrGetI", "arrUGet"].contains hs && !punned && narrow?.isSome then
+          (hs ++ narrow?.get!, (if hs == "arrGetD" then ptys.set 1 letHs else ptys), letHs)
+        else if narrowSet.contains hs && !punned && narrowV.isSome then
+          (hs ++ narrowV.get!, ptys.set narrowK (valT narrowK).get!, ret)
+        else if ["arrGetD", "arrGetI", "arrUGet"].contains hs && !punned && isW letHs then
           (hs ++ "W", getPtys hs ptys, letHs)
         else if ["arrGetD", "arrGetI", "arrUGet"].contains hs && isWordGet then
           (hs ++ "W", getPtys hs ptys, if fast then "ZNat" else "Word")

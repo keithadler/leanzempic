@@ -20,6 +20,9 @@ module Zempic.Arr
   , aToList, aFromList, aFromListK
   , aSetU, aPushU, aPopU, aSwapU, aDeopt, aShare
   , aRangeW, aDeoptW, aGetW, aGetWU, aGetWI, aGetWIS, aPushFromU, aPushUW, aSetUW, aSetUWB
+  , aGetP8, aGetP16, aGetP32, aGetP64, aGetPS8, aGetPS16, aGetPS32, aGetPS64
+  , aSwapU8, aSwapU16, aSwapU32, aSwapU64, aSwapUW
+  , aPushU8, aPushU16, aPushU32, aPushU64, aSetU8, aSetU16, aSetU32, aSetU64
   ) where
 
 import Data.Array.Base (MArray, getNumElements, unsafeRead, unsafeWrite)
@@ -33,13 +36,13 @@ import Unsafe.Coerce (unsafeCoerce)
 -- | The element storage. Kind codes: 0 boxed, 1 Word8, 2 Word16, 3 Word32, 4 Word64, 5 Word,
 -- 6 Bool. (@Word@ and @Word64@ are different types with different boxes, so they stay apart.)
 data Buf
-  = BBox !(IOArray Int Any)
-  | B8 !(IOUArray Int Word8)
-  | B16 !(IOUArray Int Word16)
-  | B32 !(IOUArray Int Word32)
-  | B64 !(IOUArray Int Word64)
-  | BW !(IOUArray Int Word)
-  | BBool !(IOUArray Int Word8)
+  = BBox {-# UNPACK #-} !(IOArray Int Any)
+  | B8 {-# UNPACK #-} !(IOUArray Int Word8)
+  | B16 {-# UNPACK #-} !(IOUArray Int Word16)
+  | B32 {-# UNPACK #-} !(IOUArray Int Word32)
+  | B64 {-# UNPACK #-} !(IOUArray Int Word64)
+  | BW {-# UNPACK #-} !(IOUArray Int Word)
+  | BBool {-# UNPACK #-} !(IOUArray Int Word8)
 
 -- | How to get from the newer version this node points at to the version holding the node.
 data Op
@@ -629,6 +632,339 @@ aDeoptW arr = do
     Direct (BBox _) _ -> return ()
     _ -> aDeopt arr
 {-# INLINE aDeoptW #-}
+
+-- | Is the index outside the array? One unsigned comparison covers a negative index as well (the length is
+-- never negative), so a caller may pass any 64-bit pattern without clamping it first.
+outOfRange :: Int -> Arr -> Bool
+outOfRange i arr = (fromIntegral i :: Word) >= fromIntegral (aLen arr)
+{-# INLINE outOfRange #-}
+
+-- * Narrow-typed operations
+--
+-- The same as the `Word` operations above for `UInt8`, `UInt16`, `UInt32` and `UInt64` elements (and `Char`,
+-- which is a `UInt32`). Each reads or writes a live buffer of its own kind in line with no box; every other
+-- case goes to a NOINLINE function that uses the generic (boxed) operations, which handle all buffers.
+-- The compiler picks them only from the static type of the element, never in a view as another type.
+
+-- | Read element @i@ as a `Word8`, widened to a `Word#`; the default (not forced unless used) is returned
+-- when out of range. Works on unboxed words from end to end so that no box is built (see 'aGetWU').
+aGetS8 :: Arr -> Int -> Word8 -> State# RealWorld -> (# State# RealWorld, Word# #)
+aGetS8 arr i d s0
+  | outOfRange i arr = case (fromIntegral d :: Word) of W# d# -> (# s0, d# #)
+  | otherwise = case readIORef (aRef arr) of
+      IO m -> case m s0 of
+        (# s1, node #) -> case node of
+          Direct (B8 a) _ -> case unsafeRead a i of
+            IO r -> case r s1 of (# s2, w #) -> case (fromIntegral w :: Word) of W# w# -> (# s2, w# #)
+          _ -> getPN 8 arr i (unsafeCoerce d) s1
+{-# INLINE aGetS8 #-}
+
+-- | 'aGetS8' run purely; the default is not forced (use for a shared error value).
+aGetP8 :: Arr -> Int -> Word8 -> Word8
+aGetP8 arr i d = case runRW# (aGetS8 arr i d) of (# _, r #) -> fromIntegral (W# r)
+{-# INLINE aGetP8 #-}
+
+-- | 'aGetP8' for a default that is a real value, taken unboxed.
+aGetPS8 :: Arr -> Int -> Word8 -> Word8
+aGetPS8 arr i !d = case runRW# (aGetS8 arr i d) of (# _, r #) -> fromIntegral (W# r)
+{-# INLINE aGetPS8 #-}
+
+-- | `aPushU` for a `Word8` element: a live buffer of its kind with room is written in line.
+aPushU8 :: Arr -> Word8 -> IO Arr
+aPushU8 arr !v = do
+  node <- readIORef (aRef arr)
+  case node of
+    Direct (B8 a) c | c >= 0 -> do
+      cap <- getNumElements a
+      let k = aLen arr
+      if k < cap then unsafeWrite a k v >> return (Arr (k + 1) (aRef arr)) else slowPush8 arr v
+    _ -> slowPush8 arr v
+{-# INLINE aPushU8 #-}
+
+slowPush8 :: Arr -> Word8 -> IO Arr
+slowPush8 arr v = aPushU arr (unsafeCoerce v)
+{-# NOINLINE slowPush8 #-}
+
+-- | `aSetU` for a `Word8` element: a live buffer of its kind is written in line.
+aSetU8 :: Arr -> Int -> Word8 -> IO Arr
+aSetU8 arr i !v
+  | outOfRange i arr = return arr
+  | otherwise = do
+      node <- readIORef (aRef arr)
+      case node of
+        Direct (B8 a) c | c >= 0 -> unsafeWrite a i v >> return arr
+        _ -> slowSet8 arr i v
+{-# INLINE aSetU8 #-}
+
+slowSet8 :: Arr -> Int -> Word8 -> IO Arr
+slowSet8 arr i v = aSetU arr i (unsafeCoerce v)
+{-# NOINLINE slowSet8 #-}
+
+-- | Read element @i@ as a `Word16`, widened to a `Word#`; the default (not forced unless used) is returned
+-- when out of range. Works on unboxed words from end to end so that no box is built (see 'aGetWU').
+aGetS16 :: Arr -> Int -> Word16 -> State# RealWorld -> (# State# RealWorld, Word# #)
+aGetS16 arr i d s0
+  | outOfRange i arr = case (fromIntegral d :: Word) of W# d# -> (# s0, d# #)
+  | otherwise = case readIORef (aRef arr) of
+      IO m -> case m s0 of
+        (# s1, node #) -> case node of
+          Direct (B16 a) _ -> case unsafeRead a i of
+            IO r -> case r s1 of (# s2, w #) -> case (fromIntegral w :: Word) of W# w# -> (# s2, w# #)
+          _ -> getPN 16 arr i (unsafeCoerce d) s1
+{-# INLINE aGetS16 #-}
+
+-- | 'aGetS16' run purely; the default is not forced (use for a shared error value).
+aGetP16 :: Arr -> Int -> Word16 -> Word16
+aGetP16 arr i d = case runRW# (aGetS16 arr i d) of (# _, r #) -> fromIntegral (W# r)
+{-# INLINE aGetP16 #-}
+
+-- | 'aGetP16' for a default that is a real value, taken unboxed.
+aGetPS16 :: Arr -> Int -> Word16 -> Word16
+aGetPS16 arr i !d = case runRW# (aGetS16 arr i d) of (# _, r #) -> fromIntegral (W# r)
+{-# INLINE aGetPS16 #-}
+
+-- | `aPushU` for a `Word16` element: a live buffer of its kind with room is written in line.
+aPushU16 :: Arr -> Word16 -> IO Arr
+aPushU16 arr !v = do
+  node <- readIORef (aRef arr)
+  case node of
+    Direct (B16 a) c | c >= 0 -> do
+      cap <- getNumElements a
+      let k = aLen arr
+      if k < cap then unsafeWrite a k v >> return (Arr (k + 1) (aRef arr)) else slowPush16 arr v
+    _ -> slowPush16 arr v
+{-# INLINE aPushU16 #-}
+
+slowPush16 :: Arr -> Word16 -> IO Arr
+slowPush16 arr v = aPushU arr (unsafeCoerce v)
+{-# NOINLINE slowPush16 #-}
+
+-- | `aSetU` for a `Word16` element: a live buffer of its kind is written in line.
+aSetU16 :: Arr -> Int -> Word16 -> IO Arr
+aSetU16 arr i !v
+  | outOfRange i arr = return arr
+  | otherwise = do
+      node <- readIORef (aRef arr)
+      case node of
+        Direct (B16 a) c | c >= 0 -> unsafeWrite a i v >> return arr
+        _ -> slowSet16 arr i v
+{-# INLINE aSetU16 #-}
+
+slowSet16 :: Arr -> Int -> Word16 -> IO Arr
+slowSet16 arr i v = aSetU arr i (unsafeCoerce v)
+{-# NOINLINE slowSet16 #-}
+
+-- | Read element @i@ as a `Word32`, widened to a `Word#`; the default (not forced unless used) is returned
+-- when out of range. Works on unboxed words from end to end so that no box is built (see 'aGetWU').
+aGetS32 :: Arr -> Int -> Word32 -> State# RealWorld -> (# State# RealWorld, Word# #)
+aGetS32 arr i d s0
+  | outOfRange i arr = case (fromIntegral d :: Word) of W# d# -> (# s0, d# #)
+  | otherwise = case readIORef (aRef arr) of
+      IO m -> case m s0 of
+        (# s1, node #) -> case node of
+          Direct (B32 a) _ -> case unsafeRead a i of
+            IO r -> case r s1 of (# s2, w #) -> case (fromIntegral w :: Word) of W# w# -> (# s2, w# #)
+          _ -> getPN 32 arr i (unsafeCoerce d) s1
+{-# INLINE aGetS32 #-}
+
+-- | 'aGetS32' run purely; the default is not forced (use for a shared error value).
+aGetP32 :: Arr -> Int -> Word32 -> Word32
+aGetP32 arr i d = case runRW# (aGetS32 arr i d) of (# _, r #) -> fromIntegral (W# r)
+{-# INLINE aGetP32 #-}
+
+-- | 'aGetP32' for a default that is a real value, taken unboxed.
+aGetPS32 :: Arr -> Int -> Word32 -> Word32
+aGetPS32 arr i !d = case runRW# (aGetS32 arr i d) of (# _, r #) -> fromIntegral (W# r)
+{-# INLINE aGetPS32 #-}
+
+-- | `aPushU` for a `Word32` element: a live buffer of its kind with room is written in line.
+aPushU32 :: Arr -> Word32 -> IO Arr
+aPushU32 arr !v = do
+  node <- readIORef (aRef arr)
+  case node of
+    Direct (B32 a) c | c >= 0 -> do
+      cap <- getNumElements a
+      let k = aLen arr
+      if k < cap then unsafeWrite a k v >> return (Arr (k + 1) (aRef arr)) else slowPush32 arr v
+    _ -> slowPush32 arr v
+{-# INLINE aPushU32 #-}
+
+slowPush32 :: Arr -> Word32 -> IO Arr
+slowPush32 arr v = aPushU arr (unsafeCoerce v)
+{-# NOINLINE slowPush32 #-}
+
+-- | `aSetU` for a `Word32` element: a live buffer of its kind is written in line.
+aSetU32 :: Arr -> Int -> Word32 -> IO Arr
+aSetU32 arr i !v
+  | outOfRange i arr = return arr
+  | otherwise = do
+      node <- readIORef (aRef arr)
+      case node of
+        Direct (B32 a) c | c >= 0 -> unsafeWrite a i v >> return arr
+        _ -> slowSet32 arr i v
+{-# INLINE aSetU32 #-}
+
+slowSet32 :: Arr -> Int -> Word32 -> IO Arr
+slowSet32 arr i v = aSetU arr i (unsafeCoerce v)
+{-# NOINLINE slowSet32 #-}
+
+-- | Read element @i@ as a `Word64`, widened to a `Word#`; the default (not forced unless used) is returned
+-- when out of range. Works on unboxed words from end to end so that no box is built (see 'aGetWU').
+aGetS64 :: Arr -> Int -> Word64 -> State# RealWorld -> (# State# RealWorld, Word# #)
+aGetS64 arr i d s0
+  | outOfRange i arr = case (fromIntegral d :: Word) of W# d# -> (# s0, d# #)
+  | otherwise = case readIORef (aRef arr) of
+      IO m -> case m s0 of
+        (# s1, node #) -> case node of
+          Direct (B64 a) _ -> case unsafeRead a i of
+            IO r -> case r s1 of (# s2, w #) -> case (fromIntegral w :: Word) of W# w# -> (# s2, w# #)
+          _ -> getPN 64 arr i (unsafeCoerce d) s1
+{-# INLINE aGetS64 #-}
+
+-- | 'aGetS64' run purely; the default is not forced (use for a shared error value).
+aGetP64 :: Arr -> Int -> Word64 -> Word64
+aGetP64 arr i d = case runRW# (aGetS64 arr i d) of (# _, r #) -> fromIntegral (W# r)
+{-# INLINE aGetP64 #-}
+
+-- | 'aGetP64' for a default that is a real value, taken unboxed.
+aGetPS64 :: Arr -> Int -> Word64 -> Word64
+aGetPS64 arr i !d = case runRW# (aGetS64 arr i d) of (# _, r #) -> fromIntegral (W# r)
+{-# INLINE aGetPS64 #-}
+
+-- | `aPushU` for a `Word64` element: a live buffer of its kind with room is written in line.
+aPushU64 :: Arr -> Word64 -> IO Arr
+aPushU64 arr !v = do
+  node <- readIORef (aRef arr)
+  case node of
+    Direct (B64 a) c | c >= 0 -> do
+      cap <- getNumElements a
+      let k = aLen arr
+      if k < cap then unsafeWrite a k v >> return (Arr (k + 1) (aRef arr)) else slowPush64 arr v
+    _ -> slowPush64 arr v
+{-# INLINE aPushU64 #-}
+
+slowPush64 :: Arr -> Word64 -> IO Arr
+slowPush64 arr v = aPushU arr (unsafeCoerce v)
+{-# NOINLINE slowPush64 #-}
+
+-- | `aSetU` for a `Word64` element: a live buffer of its kind is written in line.
+aSetU64 :: Arr -> Int -> Word64 -> IO Arr
+aSetU64 arr i !v
+  | outOfRange i arr = return arr
+  | otherwise = do
+      node <- readIORef (aRef arr)
+      case node of
+        Direct (B64 a) c | c >= 0 -> unsafeWrite a i v >> return arr
+        _ -> slowSet64 arr i v
+{-# INLINE aSetU64 #-}
+
+slowSet64 :: Arr -> Int -> Word64 -> IO Arr
+slowSet64 arr i v = aSetU arr i (unsafeCoerce v)
+{-# NOINLINE slowSet64 #-}
+
+-- | `aSwapU` on a buffer of this kind: the exchange is done in line.
+aSwapU8 :: Arr -> Int -> Int -> IO Arr
+aSwapU8 !arr !i !j
+  | outOfRange i arr || outOfRange j arr = return arr
+  | otherwise = do
+      node <- readIORef (aRef arr)
+      case node of
+        Direct (B8 a) c | c >= 0 -> do
+          x <- unsafeRead a i
+          y <- unsafeRead a j
+          unsafeWrite a i y
+          unsafeWrite a j x
+          return arr
+        _ -> aSwapU arr i j
+{-# INLINE aSwapU8 #-}
+
+-- | `aSwapU` on a buffer of this kind: the exchange is done in line.
+aSwapU16 :: Arr -> Int -> Int -> IO Arr
+aSwapU16 !arr !i !j
+  | outOfRange i arr || outOfRange j arr = return arr
+  | otherwise = do
+      node <- readIORef (aRef arr)
+      case node of
+        Direct (B16 a) c | c >= 0 -> do
+          x <- unsafeRead a i
+          y <- unsafeRead a j
+          unsafeWrite a i y
+          unsafeWrite a j x
+          return arr
+        _ -> aSwapU arr i j
+{-# INLINE aSwapU16 #-}
+
+-- | `aSwapU` on a buffer of this kind: the exchange is done in line.
+aSwapU32 :: Arr -> Int -> Int -> IO Arr
+aSwapU32 !arr !i !j
+  | outOfRange i arr || outOfRange j arr = return arr
+  | otherwise = do
+      node <- readIORef (aRef arr)
+      case node of
+        Direct (B32 a) c | c >= 0 -> do
+          x <- unsafeRead a i
+          y <- unsafeRead a j
+          unsafeWrite a i y
+          unsafeWrite a j x
+          return arr
+        _ -> aSwapU arr i j
+{-# INLINE aSwapU32 #-}
+
+-- | `aSwapU` on a buffer of this kind: the exchange is done in line.
+aSwapU64 :: Arr -> Int -> Int -> IO Arr
+aSwapU64 !arr !i !j
+  | outOfRange i arr || outOfRange j arr = return arr
+  | otherwise = do
+      node <- readIORef (aRef arr)
+      case node of
+        Direct (B64 a) c | c >= 0 -> do
+          x <- unsafeRead a i
+          y <- unsafeRead a j
+          unsafeWrite a i y
+          unsafeWrite a j x
+          return arr
+        _ -> aSwapU arr i j
+{-# INLINE aSwapU64 #-}
+
+-- | `aSwapU` on a buffer of this kind: the exchange is done in line.
+aSwapUW :: Arr -> Int -> Int -> IO Arr
+aSwapUW !arr !i !j
+  | outOfRange i arr || outOfRange j arr = return arr
+  | otherwise = do
+      node <- readIORef (aRef arr)
+      case node of
+        Direct (BW a) c | c >= 0 -> do
+          x <- unsafeRead a i
+          y <- unsafeRead a j
+          unsafeWrite a i y
+          unsafeWrite a j x
+          return arr
+        _ -> aSwapU arr i j
+{-# INLINE aSwapUW #-}
+
+-- | The read for every case the inline narrow ones do not handle (a boxed buffer, an old version, a lazy
+-- handle). @kind@ is the element width: 8, 16, 32 or 64. The default arrives boxed and is not forced unless used.
+getPN :: Int -> Arr -> Int -> Any -> State# RealWorld -> (# State# RealWorld, Word# #)
+getPN kind arr i d s
+  | outOfRange i arr = case widenAny kind d of W# w -> (# s, w #)
+  | otherwise = case readIORef (aRef arr) of
+      IO m -> case m s of
+        (# s1, node #) -> case node of
+          Direct buf _ -> readBuf buf s1
+          Lazy src -> getPN kind src i d s1
+          _ -> case reroot arr of
+            IO m2 -> case m2 s1 of (# s2, buf #) -> readBuf buf s2
+  where
+    readBuf buf st = case bufRead buf i of
+      IO r -> case r st of (# st', v #) -> case widenAny kind v of W# w -> (# st', w #)
+{-# NOINLINE getPN #-}
+
+widenAny :: Int -> Any -> Word
+widenAny kind v = case kind of
+  8 -> fromIntegral (unsafeCoerce v :: Word8)
+  16 -> fromIntegral (unsafeCoerce v :: Word16)
+  32 -> fromIntegral (unsafeCoerce v :: Word32)
+  _ -> fromIntegral (unsafeCoerce v :: Word64)
 
 -- * Moving an element between arrays
 
