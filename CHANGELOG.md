@@ -3,9 +3,14 @@
 All notable changes. The project follows semantic versioning once it has a release; until then
 everything is pre-release (`0.1.0`).
 
-## Unreleased (0.1.0)
+## 0.1.0-rc2 (2026-10-29)
 
-First complete version.
+Bounded undo chains and lazy copies for shared arrays. Shared-array insertion sort: 18x (rc1) to 6.9x slower
+than Lean's C backend. Garden is 109 programs (3 new).
+
+### Known issue
+* `string_pos` (garden) exceeds 6 GB of GHC heap at `-O2` (INLINE pragmas on the unrolled `opaqueFix` chain);
+  it builds at `-O1`, which is what CI uses. Not fixed in this release.
 
 ### Changed
 * Persistent arrays bound their undo chain: once a buffer carries as many undo records as the array has

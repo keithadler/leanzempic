@@ -1,6 +1,6 @@
 {
  "meta": {
-  "commit": "7712b36",
+  "commit": "3093618",
   "date": "2026-10-29",
   "machine": "Apple M3",
   "dirty": false
@@ -8,171 +8,171 @@
  "rows": [
   {
    "label": "Float loop",
-   "native_s": 0.459,
-   "default_s": 0.05,
+   "native_s": 0.435,
+   "default_s": 0.046,
    "tuned_s": 0.055,
-   "default": 0.109,
-   "tuned": 0.12
+   "default": 0.106,
+   "tuned": 0.126
   },
   {
    "label": "Int arithmetic",
-   "native_s": 1.152,
-   "default_s": 0.261,
-   "tuned_s": 0.177,
-   "default": 0.227,
+   "native_s": 1.114,
+   "default_s": 0.269,
+   "tuned_s": 0.172,
+   "default": 0.241,
    "tuned": 0.154
   },
   {
    "label": "Tree map and sum",
    "native_s": 2.279,
-   "default_s": 1.046,
-   "tuned_s": 0.993,
-   "default": 0.459,
-   "tuned": 0.436
+   "default_s": 1.092,
+   "tuned_s": 0.976,
+   "default": 0.479,
+   "tuned": 0.428
   },
   {
    "label": "Record update loop",
-   "native_s": 0.101,
-   "default_s": 0.109,
-   "tuned_s": 0.053,
-   "default": 1.079,
-   "tuned": 0.525
+   "native_s": 0.1,
+   "default_s": 0.097,
+   "tuned_s": 0.04,
+   "default": 0.97,
+   "tuned": 0.4
   },
   {
    "label": "List merge sort",
-   "native_s": 0.079,
-   "default_s": 0.104,
-   "tuned_s": 0.133,
-   "default": 1.316,
-   "tuned": 1.684
+   "native_s": 0.075,
+   "default_s": 0.1,
+   "tuned_s": 0.13,
+   "default": 1.333,
+   "tuned": 1.733
   },
   {
    "label": "HashMap inserts",
-   "native_s": 0.074,
-   "default_s": 0.254,
-   "tuned_s": 0.147,
-   "default": 3.432,
-   "tuned": 1.986
+   "native_s": 0.073,
+   "default_s": 0.247,
+   "tuned_s": 0.142,
+   "default": 3.384,
+   "tuned": 1.945
   },
   {
    "label": "String iteration",
-   "native_s": 0.093,
-   "default_s": 0.351,
-   "tuned_s": 0.133,
-   "default": 3.774,
-   "tuned": 1.43
+   "native_s": 0.094,
+   "default_s": 0.348,
+   "tuned_s": 0.146,
+   "default": 3.702,
+   "tuned": 1.553
   },
   {
    "label": "List functions",
-   "native_s": 0.058,
-   "default_s": 0.121,
-   "tuned_s": 0.112,
-   "default": 2.086,
-   "tuned": 1.931
+   "native_s": 0.059,
+   "default_s": 0.111,
+   "tuned_s": 0.092,
+   "default": 1.881,
+   "tuned": 1.559
   },
   {
    "label": "Array map/filter/fold",
-   "native_s": 0.047,
-   "default_s": 0.271,
-   "tuned_s": 0.262,
-   "default": 5.766,
-   "tuned": 5.574
+   "native_s": 0.046,
+   "default_s": 0.258,
+   "tuned_s": 0.221,
+   "default": 5.609,
+   "tuned": 4.804
   },
   {
    "label": "Shared array, insertion sort",
-   "native_s": 0.009,
-   "default_s": 0.071,
-   "tuned_s": 0.079,
-   "default": 7.889,
-   "tuned": 8.778
+   "native_s": 0.01,
+   "default_s": 0.066,
+   "tuned_s": 0.069,
+   "default": 6.6,
+   "tuned": 6.9
   },
   {
    "label": "List of UInt8, hashed",
    "native_s": 0.053,
-   "default_s": 0.16,
-   "tuned_s": 0.047,
-   "default": 3.019,
-   "tuned": 0.887
+   "default_s": 0.157,
+   "tuned_s": 0.052,
+   "default": 2.962,
+   "tuned": 0.981
   },
   {
    "label": "Tuple-state fold",
-   "native_s": 0.1,
-   "default_s": 0.269,
-   "tuned_s": 0.096,
-   "default": 2.69,
+   "native_s": 0.099,
+   "default_s": 0.27,
+   "tuned_s": 0.095,
+   "default": 2.727,
    "tuned": 0.96
   },
   {
    "label": "Option chain",
-   "native_s": 0.122,
-   "default_s": 0.108,
-   "tuned_s": 0.035,
-   "default": 0.885,
-   "tuned": 0.287
+   "native_s": 0.127,
+   "default_s": 0.1,
+   "tuned_s": 0.04,
+   "default": 0.787,
+   "tuned": 0.315
   },
   {
    "label": "Nat sum loop",
-   "native_s": 0.45562291145324707,
-   "default_s": 0.1862640380859375,
-   "tuned_s": 0.19688081741333008,
-   "default": 0.409,
-   "tuned": 0.432
+   "native_s": 0.4554567337036133,
+   "default_s": 0.19134783744812012,
+   "tuned_s": 0.19526195526123047,
+   "default": 0.42,
+   "tuned": 0.429
   },
   {
    "label": "Fused list pipeline",
-   "native_s": 0.3666858673095703,
-   "default_s": 0.05087780952453613,
-   "tuned_s": 0.06852197647094727,
-   "default": 0.139,
-   "tuned": 0.187
+   "native_s": 0.3621668815612793,
+   "default_s": 0.05775785446166992,
+   "tuned_s": 0.06027507781982422,
+   "default": 0.159,
+   "tuned": 0.166
   },
   {
    "label": "Sieve (Bool array)",
-   "native_s": 0.10230398178100586,
-   "default_s": 0.13424396514892578,
-   "tuned_s": 0.1365818977355957,
-   "default": 1.312,
-   "tuned": 1.335
+   "native_s": 0.10285711288452148,
+   "default_s": 0.13368511199951172,
+   "tuned_s": 0.14320993423461914,
+   "default": 1.3,
+   "tuned": 1.392
   },
   {
    "label": "Prefix sums (Nat array)",
-   "native_s": 0.08192777633666992,
-   "default_s": 0.27315568923950195,
-   "tuned_s": 0.28448009490966797,
-   "default": 3.334,
-   "tuned": 3.472
+   "native_s": 0.0827782154083252,
+   "default_s": 0.2935597896575928,
+   "tuned_s": 0.29388427734375,
+   "default": 3.546,
+   "tuned": 3.55
   },
   {
    "label": "Array map and fold",
-   "native_s": 0.049295663833618164,
-   "default_s": 0.14623713493347168,
-   "tuned_s": 0.12285494804382324,
-   "default": 2.967,
-   "tuned": 2.492
+   "native_s": 0.0505373477935791,
+   "default_s": 0.14517688751220703,
+   "tuned_s": 0.12926578521728516,
+   "default": 2.873,
+   "tuned": 2.558
   },
   {
    "label": "Reverse by swaps",
-   "native_s": 0.04726886749267578,
-   "default_s": 0.08515501022338867,
-   "tuned_s": 0.07568097114562988,
-   "default": 1.802,
-   "tuned": 1.601
+   "native_s": 0.04788827896118164,
+   "default_s": 0.08237886428833008,
+   "tuned_s": 0.0714879035949707,
+   "default": 1.72,
+   "tuned": 1.493
   },
   {
    "label": "Push and pop stack",
-   "native_s": 0.08066296577453613,
-   "default_s": 0.08782792091369629,
-   "tuned_s": 0.09737086296081543,
-   "default": 1.089,
-   "tuned": 1.207
+   "native_s": 0.08069419860839844,
+   "default_s": 0.08424901962280273,
+   "tuned_s": 0.10038495063781738,
+   "default": 1.044,
+   "tuned": 1.244
   },
   {
    "label": "Proved AES-256",
    "native_s": 2.53,
-   "default_s": 4.65,
-   "tuned_s": 4.65,
-   "default": 1.838,
-   "tuned": 1.838
+   "default_s": 4.55,
+   "tuned_s": 4.55,
+   "default": 1.798,
+   "tuned": 1.798
   }
  ]
 }

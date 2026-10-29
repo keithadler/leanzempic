@@ -5,12 +5,12 @@ shaped like GHC Core, so that GHC's optimizer (strictness analysis, worker/wrapp
 list fusion, unboxing) decides how your Lean program runs, instead of Lean's C backend.
 
 * License: Apache-2.0, public
-* Status: pre-release (`v0.1.0-rc1` is the first tag), single maintainer
+* Status: pre-release (`v0.1.0-rc2` is the latest tag), single maintainer
 * Tested on: macOS arm64 (Apple M3, and macOS 15 in CI) and Linux x86_64 (Ubuntu, in CI); Lean 4.29.1
   and GHC 9.14.1 only. CI runs the test suite on both, with a 36-program subset of the garden.
 * Honest one-line summary: up to 9x faster than Lean's C backend on numeric, `Int`, `Float`, record and
   fused-list code; with the recommended settings, between level and 3x slower on lists, tuples,
-  strings and hash maps (up to 4x slower with defaults); 4x to 18x slower on arrays, which is the main
+  strings and hash maps (up to 4x slower with defaults); 3.5x to 7x slower on arrays, which is the main
   open problem. See [Benchmarks](#benchmarks) for every number, including the losses.
 
 ![Run time of the Haskell output relative to compiled Lean, with default settings and with list fusion on and -A256m -O1g](docs/bench-chart.png)
@@ -346,7 +346,7 @@ on.** Set the option before the definitions (the pass runs when Lean compiles th
 prints them). Measured on the garden with identical answers: a list pipeline over a `UInt8` hash 5x
 faster (0.15 s to 0.03 s), a tuple-state fold 3x (0.26 s to 0.08 s), `Int` list work 2x, `Option` and
 sum-type folds 2x to 3x. It is not free everywhere: a list merge sort got slower (0.09 s to 0.12 s).
-All 106 garden programs give the same answers with it on (`GARDEN_FUSE=1 python3 garden/run.py`).
+All 109 garden programs give the same answers with it on (`GARDEN_FUSE=1 python3 garden/run.py`).
 `#zempic` prints a warning when the code contains Lean's own list loops and the pass is off, so the
 speedup is not missed.
 
@@ -580,8 +580,8 @@ Reading these honestly:
 `garden/perf.py` times 40 or so of the garden programs against compiled native Lean (details and
 profiles in [`BENCH.md`](BENCH.md)). Short version: arithmetic, `Int`, `Float`, records and trees are
 level or faster (down to 0.1x for a `Float` loop); lists, arrays, hash maps and strings built from
-pieces are 2x to 7x slower; an array that a caller shares and a loop mutates is about 20x slower
-(Lean copies it once; this backend runs the loop on the persistent array).
+pieces are 2x to 7x slower; an array that a caller shares and a loop mutates is about 7x slower
+(Lean copies it once; this backend copies lazily on the first write, then runs in place).
 
 **Run Haskell output with a large allocation area, and know what it costs.** Garbage collection is
 about half the run time of the slow programs, because a copying collector copies every live boxed
@@ -620,7 +620,7 @@ An honest checklist, because "production" depends on what you need.
 |---|---|
 | Continuous integration | GitHub Actions runs the suite on Ubuntu and macOS 15 for every push, including the Cabal package build and a 36-program garden subset at `-O1` with fusion on |
 | Fails fast | an unsupported Lean version or a mistyped mode is a clear error; an unsupported Lean constant is an error that lists it, never silently dropped code |
-| Tested against Lean itself | the examples, 106 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
+| Tested against Lean itself | the examples, 109 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
 | Runtime tested against models | random operation sequences on arrays, strings, integers and the `Word`/`Natural` fast path, with deliberately broken runtimes caught |
 | Differential fuzzing | random Lean programs run by Lean and through leanzempic must agree (`tools/fuzz.py`) |
 | Machine-checked facts | Tenet verifies 265 of 265 declarations, including name-mangling injectivity |
@@ -631,7 +631,7 @@ An honest checklist, because "production" depends on what you need.
 
 | | |
 |---|---|
-| Pre-release | `v0.1.0-rc1` is tagged; there is no final `v0.1.0`, no package on Hackage or Reservoir, and the interface may change |
+| Pre-release | `v0.1.0-rc2` is tagged (`rc1` before it); there is no final `v0.1.0`, no package on Hackage or Reservoir, and the interface may change |
 | One Lean, one GHC | Lean 4.29.x and GHC 9.14.1 only. Windows is untested |
 | Pure functions only | no `IO`, so you compile functions and call them from Haskell; a Lean `main` cannot be compiled |
 | Missing | `IO`, `FloatArray`, `Float.toString`; any `@[extern]` constant that is not in the primitive table is reported, never dropped |
@@ -667,7 +667,7 @@ compile generated Haskell and compare it, value by value, with native Lean at se
 | `proptests` | random operation sequences on arrays, strings, fixed-width integers and the `Word`/`Natural` fast path, each step compared with a pure model |
 | `fuzz` | a short differential-fuzzing run: random Lean programs must give the same answers under Lean and leanzempic |
 | `aes` | AES-256 from the proved [lean-aes](https://github.com/keithadler/lean-aes) (`bench/aes`): Lean's C, the Haskell and OpenSSL (`tools/aes_oracle.py`) give the same ciphertext |
-| `garden` | the [garden](#the-garden): 106 programs locally, 36 in CI |
+| `garden` | the [garden](#the-garden): 109 programs locally, 38 in CI |
 
 ### The garden
 
@@ -793,7 +793,7 @@ runtime/Zempic/         the Haskell runtime (about 1,800 lines)
 examples/               Lean programs used as tests and benchmarks
 bench/                  Haskell drivers and bench/build.sh
 bench/aes/              AES-256 from lean-aes, built both ways and timed (run.sh)
-garden/                 106 small programs, one per feature: run.py (correctness), perf.py (timing)
+garden/                 109 small programs, one per feature: run.py (correctness), perf.py (timing)
 docs/                   the benchmark chart (make_chart.py draws it from chart-data.json)
 tests/run.sh            the test suite
 tests/PropTests.hs      model-based randomized tests of the runtime
@@ -915,8 +915,7 @@ Ideas in rough order of value, none promised:
 
 * the array gap (2x to 10x), the main open problem: copying a shared array once on entry to a loop
   that mutates it, as Lean does (the undo chain is already bounded, which took the shared-array insertion
-  sort from 18x to about 10x); the catch is a function that rarely writes, called many times on one
-  shared array, which would then copy every time
+  sort from 18x to about 10x, then lazy copies on first write to about 7x); the rest is the cost of the persistent representation
 * making fusion the default (it is 2x to 5x on list pipelines but slower natively and on one merge
   sort), and more combinators (`reverse`, `filterMap`, `zipWith`, array and `for` loops)
 * unboxed list elements and pair components (they are `Any` today)

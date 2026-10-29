@@ -384,7 +384,7 @@ process start-up, about 15 ms with `-A128m`) and are not reported. Of the rest:
 
 **The pattern.** Arithmetic, records, `Int`, `Float` and trees are level or faster. Everything that
 holds many boxed elements (lists, arrays, hash maps, strings built from pieces) is 2x to 7x slower,
-and the one case where an array is both shared and mutated in a loop is 20x.
+and the one case where an array is both shared and mutated in a loop is about 7x (lazy copies).
 
 **Why, from the profiles.**
 
@@ -466,7 +466,7 @@ first. With it set correctly, best of 3, identical answers:
 
 The reason is what tenet-hs found about copying collectors: live data is the cost, not allocation.
 A fused pipeline never builds the intermediate list, so there is nothing for the collector to copy.
-All 106 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
+All 109 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
 
 **A GHC panic, found by fusion.** `list_funcs` with fusion made GHC 9.14.1 panic ("the 'impossible'
 happened", `StgToCmm.Env: variable not found co5_Xc`). It was deterministic for a given invocation but
@@ -515,7 +515,7 @@ measurements) so the columns are comparable. All answers match native Lean.
 | `HashMap` inserts | 3e6 | 3.1x slower | 1.6x slower |
 | list functions | 1e6 | 4.3x slower | 2.7x slower |
 | array map/filter/fold | 2e6 | 5.4x slower | 4.2x slower |
-| shared array, insertion sort | 3e3 | 23x slower | 18x slower |
+| shared array, insertion sort | 3e3 | 23x slower | 6.9x slower |
 | list merge sort | 3e5 | 1.2x slower | 1.7x slower |
 | `Float` loop, tree map, `Nat` sum loop, AES-256 | | unchanged | unchanged |
 
