@@ -58,7 +58,7 @@ def one(name):
         return name, "EMIT", msgs[i:i + 4]
     prn_hs = "\n".join(f'  putStrLn ("{n} " ++ show (z_entry {n}))' for n in NS)
     open(f"{d}/Main.hs", "w").write("import Out\nimport Numeric.Natural\nmain :: IO ()\nmain = do\n" + prn_hs + "\n")
-    rc, out = sh(f"ghc {OPT} -i{ROOT}/runtime -i{d} -outputdir {d}/o -o {d}/m {d}/Main.hs", env=sysenv)
+    rc, out = sh(f"ghc {OPT} -i{ROOT}/runtime -i{d} -outputdir {d}/o -o {d}/m {d}/Main.hs +RTS -M6g -RTS", env=sysenv)
     if rc != 0:
         errs = [l for l in out.splitlines() if "error" in l.lower()]
         i = next((k for k, l in enumerate(out.splitlines()) if "error" in l.lower()), 0)

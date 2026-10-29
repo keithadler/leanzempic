@@ -43,7 +43,7 @@ def hs(name):
     d = os.path.join(B, name)
     open(f"{d}/PMain.hs", "w").write("import Out\nimport System.Environment\nmain :: IO ()\nmain = do\n  (n : _) <- getArgs\n  print (z_entry (fromInteger (read n)))\n")
     if os.path.exists(f"{d}/pm"): os.remove(f"{d}/pm")  # a changed RTS option alone does not relink
-    rc, out = sh(f"ghc -O2 -rtsopts '-with-rtsopts={RTS}' -i{ROOT}/runtime -i{d} -outputdir {d}/op -o {d}/pm {d}/PMain.hs", env=sysenv)
+    rc, out = sh(f"ghc -O2 -rtsopts '-with-rtsopts={RTS}' -i{ROOT}/runtime -i{d} -outputdir {d}/op -o {d}/pm {d}/PMain.hs +RTS -M6g -RTS", env=sysenv)
     return (None, out[:200]) if rc != 0 else (f"{d}/pm", "")
 
 def best(cmd, n, reps=3):
