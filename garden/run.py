@@ -15,6 +15,9 @@ from programs import P
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 B = os.path.join(ROOT, "build", "garden")
 NS = [0, 1, 2, 5, 10, 25]
+# GHC optimization level for the generated code. -O0 hides bugs that only optimization exposes (a type
+# mismatch in a data declaration crashed at -O1 and above), so CI uses -O1, which compiles faster than -O2.
+OPT = os.environ.get("GARDEN_OPT", "-O2")
 
 def sh(cmd, env=None, cwd=ROOT, timeout=600):
     r = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=cwd, env=env, timeout=timeout)
@@ -52,7 +55,7 @@ def one(name):
         return name, "EMIT", msgs[i:i + 4]
     prn_hs = "\n".join(f'  putStrLn ("{n} " ++ show (z_entry {n}))' for n in NS)
     open(f"{d}/Main.hs", "w").write("import Out\nimport Numeric.Natural\nmain :: IO ()\nmain = do\n" + prn_hs + "\n")
-    rc, out = sh(f"ghc -O2 -i{ROOT}/runtime -i{d} -outputdir {d}/o -o {d}/m {d}/Main.hs", env=sysenv)
+    rc, out = sh(f"ghc {OPT} -i{ROOT}/runtime -i{d} -outputdir {d}/o -o {d}/m {d}/Main.hs", env=sysenv)
     if rc != 0:
         errs = [l for l in out.splitlines() if "error" in l.lower()]
         i = next((k for k, l in enumerate(out.splitlines()) if "error" in l.lower()), 0)
@@ -64,8 +67,16 @@ def one(name):
         return name, "DIFF", [f"lean: {want.splitlines()}", f"hs:   {got.strip().splitlines()}"]
     return name, "OK", []
 
+# A subset that touches every feature area, for CI (the full garden is about 15 CPU-minutes).
+CI_SET = ["int_arith", "int_match", "float_math", "string_split", "string_chars", "string_pos", "str_ops",
+          "str_map_any", "hashmap", "hashmap_str", "hashset", "array_funcs", "array_misc", "array_qsort",
+          "subarray", "bytearray", "list_mergesort", "list_funcs", "state_monad", "except_monad",
+          "state_except_stack", "struct_update", "typeclass", "expr_tree", "functor_tree", "vec_indexed",
+          "mutual_rec", "partial_def", "deriving", "thunk_lazy", "bignum", "uint_conv", "closures",
+          "parser_monad", "early_return", "nested_loops_break"]
+
 if __name__ == "__main__":
-    names = sys.argv[1:] or sorted(P)
+    names = sys.argv[1:] or (CI_SET if os.environ.get("GARDEN_SET") == "ci" else sorted(P))
     with ThreadPoolExecutor(4) as ex:
         res = list(ex.map(one, names))
     counts = {}

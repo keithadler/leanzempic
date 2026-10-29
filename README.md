@@ -651,7 +651,9 @@ defines `entry : Nat → Nat`. `python3 garden/run.py [name ...]` runs every pro
 compiles it through leanzempic and GHC, and compares the outputs for several inputs. A status other
 than `OK` names the stage that failed: `NATIVE` (the program itself does not run), `EMIT` (leanzempic
 cannot compile it, with the missing primitive), `GHC` (the generated Haskell does not typecheck),
-`RUNERR` (the Haskell crashed) or `DIFF` (different answers). `tests/run.sh` runs the garden.
+`RUNERR` (the Haskell crashed) or `DIFF` (different answers). `tests/run.sh` runs the whole garden
+(about 15 CPU-minutes); CI runs a 36-program subset that touches every area, at `-O1` (`GARDEN_SET=ci
+GARDEN_OPT=-O1`; `-O0` would hide the crash class the garden once found).
 
 The garden is how the features above were found: the first run compiled 27 of 48 programs, and every
 failure was a missing primitive or a bug. Two were real bugs, not gaps: a single-field structure

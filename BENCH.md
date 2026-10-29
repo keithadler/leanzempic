@@ -417,3 +417,31 @@ and the one case where an array is both shared and mutated in a loop is 20x.
 
 Tried and dropped: inlining the array read primitives (no change), a tighter `mulLoop` (no change),
 an unboxed S-box table (7%, below the noise of the rest), `zempic.fuse` (no change).
+
+
+## Ideas from tenet-hs, tried (2026-10-29)
+
+tenet-hs (an independent Lean kernel in Haskell, same author) got a 2.5x memory cut and large speed-ups
+from packed two-word node metadata, `UNPACK`ed strict fields, unboxed key arrays and mutable arrays in
+place of persistent maps. Which of that carries over to generated code:
+
+* **`-funbox-strict-fields` on generated modules: no effect.** `struct_update`, `tuples`,
+  `functor_tree`, `typeclass`, `hashmap` all within noise. GHC already unpacks small strict fields
+  (`Word`, `Word8`, ...), and the fields that are not small are boxed `Any` on purpose.
+* **Unboxed array buffers chosen from the element type: no gain, and unsafe as built.** A
+  microbenchmark of a 4M-element fill, three read-modify-write passes and a sum takes 0.47 s with boxed
+  elements (0.56 s of it garbage collection) and 0.03 s with an unboxed array, which is the upper bound.
+  I built the real thing: the emitter picked a buffer kind (`Word8` ... `Word`, `Bool`) from the array's
+  Lean type, every operation dispatched on the buffer, and a property test checked all seven kinds
+  against a model (a deliberate bug in the growth copy was caught). On `array_funcs` the peak residency
+  fell from 378 MB to 133 MB and the collector's share shrank, but the run time stayed at 0.26 s, and
+  `usize_loop`, `subtype_index`, `array_misc` did not move either. The cost is in the persistent
+  machinery on every access (version check, dispatch, re-boxing a read element), not in the collector.
+  It also has a soundness hole: Lean's own library writes placeholder values into arrays
+  (`Array.modify`, `modifyM`, `swapAt` write `box(0)` and write the element back later) and
+  `Array.mapMUnsafe` changes the element type of an array in place, so a typed buffer can be handed a
+  value it cannot hold. Making that safe needs a static kind at every access site and typed in-place
+  primitives that bypass the generic path, which is a larger redesign than this round. **Reverted.**
+* **What did carry over, already in:** mutable arrays in place of persistent structures (`Zempic.Arr`),
+  strict fields and strict counters, a large allocation area (`-A256m -O1g`), and the habit of
+  profiling before changing anything.

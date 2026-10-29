@@ -55,4 +55,7 @@ jobs:
           cd runtime && cabal build
 
       - name: Test suite
+        env:
+          GARDEN_OPT: -O1
+          GARDEN_SET: ci
         run: sh tests/run.sh

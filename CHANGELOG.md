@@ -43,6 +43,10 @@ First complete version.
   0.080 s, `string_chars` 0.454 s to 0.345 s.
 * Documented `-with-rtsopts='-A256m -O1g'`: 25 to 40% on list and array programs.
 
+### Tooling
+* CI runs a 36-program subset of the garden at `-O1` (the full 106 take about 15 CPU-minutes and
+  exceeded the runner). `GARDEN_OPT` and `GARDEN_SET` select the level and the set.
+
 ### Fixed
 * A structure with one relevant field (`String.Pos`) was declared as a boxed constructor while the
   compiled code builds it as the bare field. GHC's worker/wrapper trusted the declared type and the

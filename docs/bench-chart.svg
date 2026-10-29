@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+<rect width="1600" height="900" fill="#0f172a"/>
+<text x="80" y="95" font-size="46" font-weight="700" fill="#e2e8f0">Lean through GHC, against Lean's C backend</text>
+<text x="80" y="140" font-size="26" fill="#94a3b8">Run time of the Haskell output compared with compiled Lean. Left of the line is faster.</text>
+<line x1="689.4" y1="201" x2="689.4" y2="787" stroke="#334155" stroke-width="1.5"/>
+<text x="689.4" y="189" font-size="20" text-anchor="middle" fill="#94a3b8">10x faster</text>
+<line x1="841.4" y1="201" x2="841.4" y2="787" stroke="#334155" stroke-width="1.5"/>
+<text x="841.4" y="189" font-size="20" text-anchor="middle" fill="#94a3b8">3x</text>
+<line x1="1008.0" y1="201" x2="1008.0" y2="787" stroke="#e2e8f0" stroke-width="3"/>
+<text x="1008.0" y="189" font-size="20" text-anchor="middle" fill="#e2e8f0">same</text>
+<line x1="1160.0" y1="201" x2="1160.0" y2="787" stroke="#334155" stroke-width="1.5"/>
+<text x="1160.0" y="189" font-size="20" text-anchor="middle" fill="#94a3b8">3x</text>
+<line x1="1326.6" y1="201" x2="1326.6" y2="787" stroke="#334155" stroke-width="1.5"/>
+<text x="1326.6" y="189" font-size="20" text-anchor="middle" fill="#94a3b8">10x slower</text>
+<line x1="1478.7" y1="201" x2="1478.7" y2="787" stroke="#334155" stroke-width="1.5"/>
+<text x="1478.7" y="189" font-size="20" text-anchor="middle" fill="#94a3b8">30x</text>
+<text x="600" y="245.0" font-size="26" text-anchor="end" fill="#e2e8f0">Float loop</text>
+<rect x="696.1" y="223.0" width="311.9" height="28" rx="4" fill="#2dd4bf"/>
+<text x="992.0" y="245.0" font-size="24" font-weight="700" text-anchor="end" fill="#0f172a">9.5x faster</text>
+<text x="600" y="289.0" font-size="26" text-anchor="end" fill="#e2e8f0">Fused list pipeline</text>
+<rect x="707.5" y="267.0" width="300.5" height="28" rx="4" fill="#2dd4bf"/>
+<text x="992.0" y="289.0" font-size="24" font-weight="700" text-anchor="end" fill="#0f172a">8.8x faster</text>
+<text x="600" y="333.0" font-size="26" text-anchor="end" fill="#e2e8f0">Int arithmetic</text>
+<rect x="804.6" y="311.0" width="203.4" height="28" rx="4" fill="#2dd4bf"/>
+<text x="992.0" y="333.0" font-size="24" font-weight="700" text-anchor="end" fill="#0f172a">4.3x faster</text>
+<text x="600" y="377.0" font-size="26" text-anchor="end" fill="#e2e8f0">Nat sum loop</text>
+<rect x="881.2" y="355.0" width="126.8" height="28" rx="4" fill="#2dd4bf"/>
+<text x="867.2" y="377.0" font-size="24" font-weight="700" text-anchor="end" fill="#2dd4bf">2.5x faster</text>
+<text x="600" y="421.0" font-size="26" text-anchor="end" fill="#e2e8f0">Tree map and sum</text>
+<rect x="897.5" y="399.0" width="110.5" height="28" rx="4" fill="#2dd4bf"/>
+<text x="883.5" y="421.0" font-size="24" font-weight="700" text-anchor="end" fill="#2dd4bf">2.2x faster</text>
+<text x="600" y="465.0" font-size="26" text-anchor="end" fill="#e2e8f0">Record update loop</text>
+<rect x="1004.0" y="443.0" width="8" height="28" fill="#e2e8f0"/>
+<text x="1028.0" y="465.0" font-size="24" font-weight="700" text-anchor="start" fill="#e2e8f0">level</text>
+<text x="600" y="509.0" font-size="26" text-anchor="end" fill="#e2e8f0">List merge sort</text>
+<rect x="1008.0" y="487.0" width="19.3" height="28" rx="4" fill="#fb923c"/>
+<text x="1041.3" y="509.0" font-size="24" font-weight="700" text-anchor="start" fill="#fb923c">1.1x slower</text>
+<text x="600" y="553.0" font-size="26" text-anchor="end" fill="#e2e8f0">Proved AES-256</text>
+<rect x="1008.0" y="531.0" width="81.3" height="28" rx="4" fill="#fb923c"/>
+<text x="1103.3" y="553.0" font-size="24" font-weight="700" text-anchor="start" fill="#fb923c">1.8x slower</text>
+<text x="600" y="597.0" font-size="26" text-anchor="end" fill="#e2e8f0">HashMap inserts</text>
+<rect x="1008.0" y="575.0" width="152.0" height="28" rx="4" fill="#fb923c"/>
+<text x="1174.0" y="597.0" font-size="24" font-weight="700" text-anchor="start" fill="#fb923c">3.0x slower</text>
+<text x="600" y="641.0" font-size="26" text-anchor="end" fill="#e2e8f0">String iteration</text>
+<rect x="1008.0" y="619.0" width="177.3" height="28" rx="4" fill="#fb923c"/>
+<text x="1199.3" y="641.0" font-size="24" font-weight="700" text-anchor="start" fill="#fb923c">3.6x slower</text>
+<text x="600" y="685.0" font-size="26" text-anchor="end" fill="#e2e8f0">List functions</text>
+<rect x="1008.0" y="663.0" width="205.0" height="28" rx="4" fill="#fb923c"/>
+<text x="1227.0" y="685.0" font-size="24" font-weight="700" text-anchor="start" fill="#fb923c">4.4x slower</text>
+<text x="600" y="729.0" font-size="26" text-anchor="end" fill="#e2e8f0">Array map/filter/fold</text>
+<rect x="1008.0" y="707.0" width="240.9" height="28" rx="4" fill="#fb923c"/>
+<text x="1262.9" y="729.0" font-size="24" font-weight="700" text-anchor="start" fill="#fb923c">5.7x slower</text>
+<text x="600" y="773.0" font-size="26" text-anchor="end" fill="#e2e8f0">Shared array, insertion sort</text>
+<rect x="1008.0" y="751.0" width="421.3" height="28" rx="4" fill="#fb923c"/>
+<text x="1443.3" y="773.0" font-size="24" font-weight="700" text-anchor="start" fill="#fb923c">21x slower</text>
+<text x="80" y="843" font-size="22" fill="#94a3b8">Apple M3, Lean 4.29.1, GHC 9.14.1 -O2, best of 3. Pure programs only, no IO.</text>
+<text x="80" y="881" font-size="26" font-weight="700" fill="#e2e8f0">leanzempic</text>
+<text x="250" y="881" font-size="26" fill="#94a3b8">Apache-2.0  github.com/keithadler/leanzempic</text>
+</svg>
