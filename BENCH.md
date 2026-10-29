@@ -485,6 +485,12 @@ loop starts from a lazy copy and doubles twice. `a ++ a` allocates more than bef
 128 MB) because the move is a `NOINLINE` call per element that the old read-then-push pair did not need;
 the time is level.
 
+Other array programs, `garden/perf.py` ratio against Lean C, same load, before then after: `usize_loop` 8.2x to
+1.6x, `subtype_index` 5.2x to 1.6x, `array_qsort` 1.60x to 1.53x, `prod_arrays` 2.3x to 1.9x,
+`array_2d_loop` 5.0x to 4.4x, `shared_twice` 3.7x to 2.4x, `shared_rare_write` 2.3x to 2.1x, `bytearray`
+2.0x to 1.9x, `array_misc` 5.2x to 5.3x (level; both runs are 11 to 17 ms of Lean time, so ratios there
+are noisy).
+
 **A bug found on the way, not fixed here.** Two `Array.mkEmpty 4` of different element types in one function
 are merged by Lean's common-subexpression elimination into one variable, and the buffer kind follows the
 first one's type. Pushing `Nat`s into an array that began as `Array UInt8` truncates them to bytes. The
