@@ -243,7 +243,8 @@ arrWord c g kind steps = do
           2 -> do b <- A.aPopU a; return (b, if null m then m else init m)
           3 -> do
             j <- subtract 1 <$> below g (length m + 3)
-            b <- A.aSwapU a k j
+            useW <- below g 2
+            b <- if useW == 0 then A.aSwapU a k j else A.aSwapUW a k j
             return (b, modelSwap k j m)
           _ -> do
             r <- A.aGetW a k 77

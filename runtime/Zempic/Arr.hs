@@ -25,11 +25,13 @@ module Zempic.Arr
   , aPushU8, aPushU16, aPushU32, aPushU64, aSetU8, aSetU16, aSetU32, aSetU64
   ) where
 
-import Data.Array.Base (MArray, getNumElements, unsafeRead, unsafeWrite)
+import Data.Array.Base (MArray, STUArray (..), getNumElements, unsafeRead, unsafeWrite)
 import Data.Array.IO (IOArray, IOUArray, newArray)
+import Data.Array.IO.Internals (IOArray (..), IOUArray (..))
+import GHC.Arr (STArray (..))
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word16, Word32, Word64, Word8)
-import GHC.Exts (Any, Int (I#), Int#, RealWorld, State#, Word (W#), Word#, isTrue#, reallyUnsafePtrEquality#, runRW#)
+import GHC.Exts (Any, Int (I#), Int#, RealWorld, State#, Word (W#), Word#, copyMutableArray#, copyMutableByteArray#, isTrue#, newArray#, newByteArray#, reallyUnsafePtrEquality#, runRW#, setByteArray#, (+#), (-#), (*#), (<#))
 import GHC.IO (IO (..))
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -158,26 +160,37 @@ bufSwap b i j = case b of
     {-# INLINE sw #-}
 {-# INLINE bufSwap #-}
 
--- | A new buffer of the same kind with room for @cap@ elements and the first @n@ copied over.
+-- | A new buffer of the same kind with room for @cap@ elements and the first @n@ copied over. The
+-- copy is one block move, and only the tail beyond the copied elements is cleared.
 bufGrow :: Buf -> Int -> Int -> IO Buf
 bufGrow b n cap = case b of
-  BBox a -> BBox <$> growWith a n cap filler
-  B8 a -> B8 <$> growWith a n cap 0
-  B16 a -> B16 <$> growWith a n cap 0
-  B32 a -> B32 <$> growWith a n cap 0
-  B64 a -> B64 <$> growWith a n cap 0
-  BW a -> BW <$> growWith a n cap 0
-  BBool a -> BBool <$> growWith a n cap 0
+  BBox (IOArray a) -> BBox . IOArray <$> growBoxed a n cap
+  B8 (IOUArray a) -> B8 . IOUArray <$> growRaw 1 a n cap
+  B16 (IOUArray a) -> B16 . IOUArray <$> growRaw 2 a n cap
+  B32 (IOUArray a) -> B32 . IOUArray <$> growRaw 4 a n cap
+  B64 (IOUArray a) -> B64 . IOUArray <$> growRaw 8 a n cap
+  BW (IOUArray a) -> BW . IOUArray <$> growRaw 8 a n cap
+  BBool (IOUArray a) -> BBool . IOUArray <$> growRaw 1 a n cap
 
-growWith :: (MArray a e IO) => a Int e -> Int -> Int -> e -> IO (a Int e)
-growWith a n cap z = do
-  b <- newArray (0, max 0 (cap - 1)) z
-  let copy :: Int -> IO ()
-      copy !k | k >= n = return ()
-              | otherwise = unsafeRead a k >>= unsafeWrite b k >> copy (k + 1)
-  copy 0
-  return b
-{-# INLINE growWith #-}
+-- | Grow an unboxed buffer whose elements are @sz@ bytes wide.
+growRaw :: Int -> STUArray RealWorld Int e -> Int -> Int -> IO (STUArray RealWorld Int e)
+growRaw (I# sz) (STUArray _ _ _ src) (I# n) (I# cap0) = IO $ \s0 ->
+  let cap = if isTrue# (cap0 <# 1#) then 1# else cap0
+      keep = if isTrue# (n <# cap) then n else cap
+  in case newByteArray# (cap *# sz) s0 of
+    (# s1, dst #) -> case copyMutableByteArray# src 0# dst 0# (keep *# sz) s1 of
+      s2 -> case setByteArray# dst (keep *# sz) ((cap -# keep) *# sz) 0# s2 of
+        s3 -> (# s3, STUArray 0 (I# (cap -# 1#)) (I# cap) dst #)
+{-# INLINE growRaw #-}
+
+-- | Grow a boxed buffer: the new slots hold the filler, as in a fresh buffer.
+growBoxed :: STArray RealWorld Int Any -> Int -> Int -> IO (STArray RealWorld Int Any)
+growBoxed (STArray _ _ _ src) (I# n) (I# cap0) = IO $ \s0 ->
+  let cap = if isTrue# (cap0 <# 1#) then 1# else cap0
+      keep = if isTrue# (n <# cap) then n else cap
+  in case newArray# cap filler s0 of
+    (# s1, dst #) -> case copyMutableArray# src 0# dst 0# keep s1 of
+      s2 -> (# s2, STArray 0 (I# (cap -# 1#)) (I# cap) dst #)
 
 -- * Arrays
 

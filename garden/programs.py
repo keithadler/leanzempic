@@ -345,8 +345,27 @@ def isort32 (a0 : Array UInt32) : Array UInt32 := Id.run do
       j := j - 1
   return a
 
+-- in-place writes with set! (the array is owned), including a write past the end that must do nothing
+def bump (n : Nat) : Nat := Id.run do
+  let mut a := fill32 n
+  let mut b := fill64 n
+  let mut c := fill16 n
+  let mut d := fill8 n
+  for i in [0:n + 3] do
+    a := a.set! i (a[i]! * 3 + i.toUInt32)
+    b := b.set! i (b[i]! * 5 + i.toUInt64)
+    c := c.set! i (c[i]! * 7 + i.toUInt16)
+    d := d.set! i (d[i]! * 9 + i.toUInt8)
+    a := a.swapIfInBounds i (n + 1 - i)
+    b := b.swapIfInBounds (i / 2) (n + 5 - i)
+    c := c.swapIfInBounds i (i * 2 % (n + 2))
+    d := d.swapIfInBounds (n + 6 - i) i
+  return a.foldl (fun acc x => (acc + x.toNat) % 1000003) 0 + b.foldl (fun acc x => (acc + x.toNat) % 1000003) 0
+    + c.foldl (fun acc x => (acc + x.toNat) % 1000003) 0 + d.foldl (fun acc x => (acc + x.toNat) % 1000003) 0
+
 def entry (n : Nat) : Nat :=
   let n := n % 300 + 2
+  let bumped := bump n
   let a := fill32 n
   let snap := a
   let s := isort32 a
@@ -359,13 +378,20 @@ def entry (n : Nat) : Nat :=
   let e := fillC n
   let e2 := e.swapIfInBounds 1 2
   let sorted := (List.range (s.size - 1)).all fun i => s[i]! <= s[i + 1]!
+  let loopSum := Id.run do
+    let mut t : Nat := 0
+    for x in s do t := (t * 3 + x.toNat) % 1000003
+    for x in b2 do t := (t * 5 + x.toNat) % 1000003
+    for x in d2 do t := (t * 7 + x.toNat) % 1000003
+    for x in c2 do t := (t * 11 + x.toNat) % 1000003
+    return t
   s.foldl (fun acc x => (acc * 31 + x.toNat) % 1000003) 0
     + snap.foldl (fun acc x => (acc * 17 + x.toNat) % 1000003) 0
     + b2.foldl (fun acc x => (acc * 13 + x.toNat) % 1000003) 0 + b.foldl (fun acc x => (acc + x.toNat) % 1000003) 0
     + c2.foldl (fun acc x => (acc * 7 + x.toNat) % 1000003) 0 + c.foldl (fun acc x => (acc + x.toNat) % 1000003) 0
     + d2.foldl (fun acc x => (acc * 5 + x.toNat) % 1000003) 0 + d.foldl (fun acc x => (acc + x.toNat) % 1000003) 0
     + e2.foldl (fun acc x => (acc * 3 + x.toNat) % 1000003) 0 + e.foldl (fun acc x => (acc + x.toNat) % 1000003) 0
-    + (if sorted then 1 else 0) + (a.getD (n + 5) 99).toNat + (b.getD (n + 5) 98).toNat + (c.getD (n + 5) 97).toNat
+    + bumped + loopSum + (if sorted then 1 else 0) + (a.getD (n + 5) 99).toNat + (b.getD (n + 5) 98).toNat + (c.getD (n + 5) 97).toNat
     + (d.getD (n + 5) 96).toNat + (e.getD (n + 5) 'z').toNat + (s.pop.pop.size)
 ''')
 add("array_list_conv", '''
