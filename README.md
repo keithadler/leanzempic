@@ -895,9 +895,12 @@ Negative results are part of the record, and several of them changed the design:
   exercises the thing it claims to test.
 * **`-funbox-strict-fields` on generated code.** No effect: GHC already unpacks small strict fields and
   the large ones are boxed on purpose.
-* **Unboxed array buffers, first attempt.** Chosen from the element type; no speedup on the garden
-  programs measured, and unsafe as built (Lean's library writes placeholder values into arrays and
-  changes element types in place). See [`BENCH.md`](BENCH.md).
+* **Unboxed array buffers.** Chosen from the element type; no speedup on the garden programs measured
+  (the cost is in the persistent machinery, not the collector), and the first attempt was unsafe
+  (Lean's library writes placeholder values into arrays and changes element types in place). The
+  current version ignores placeholder writes, converts a buffer to boxed (`aDeopt`) before code that
+  retypes it in place, and has property tests with mutation checks; `set_option zempic.typedArrays false`
+  turns it off. See [`BENCH.md`](BENCH.md).
 * **A GHC panic on cast-heavy code.** Core Lint named GHC 9.14.1's Float Inwards pass; generated
   modules now carry `-fno-float-in`.
 
@@ -905,9 +908,10 @@ Negative results are part of the record, and several of them changed the design:
 
 Ideas in rough order of value, none promised:
 
-* the array gap (4x to 18x), the main open problem: typed access primitives at every array use
-  site, so an array can have an unboxed buffer safely, and copying a shared array once on entry to
-  a loop that mutates it, as Lean does
+* the array gap (2x to 10x), the main open problem: copying a shared array once on entry to a loop
+  that mutates it, as Lean does (the undo chain is already bounded, which took the shared-array insertion
+  sort from 18x to about 10x); the catch is a function that rarely writes, called many times on one
+  shared array, which would then copy every time
 * making fusion the default (it is 2x to 5x on list pipelines but slower natively and on one merge
   sort), and more combinators (`reverse`, `filterMap`, `zipWith`, array and `for` loops)
 * unboxed list elements and pair components (they are `Any` today)

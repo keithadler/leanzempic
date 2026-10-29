@@ -45,7 +45,9 @@ The analysis can be wrong; these limit the damage:
 
 * Each in-place primitive checks that its array is the live version of its buffer and otherwise
   performs the persistent operation. This catches a stale array but **not** two live owners of one
-  array.
+  array. A version that a buffer copy was taken from (the persistent operations copy a buffer once it
+  carries as many undo records as the array has elements) is marked, and the in-place primitives treat
+  it as stale too.
 * Modules with in-place updates are compiled with `-fno-cse -fno-full-laziness`, so GHC cannot merge
   two array constructions into one object or float one out to top level, which would manufacture
   two owners.
