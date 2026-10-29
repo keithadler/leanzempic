@@ -4,13 +4,19 @@ A Haskell backend for Lean 4. It takes the terms Lean's compiler produces and pr
 shaped like GHC Core, so that GHC's optimizer (strictness analysis, worker/wrapper, join points,
 list fusion, unboxing) decides how your Lean program runs, instead of Lean's C backend.
 
-* License: Apache-2.0
-* Status: pre-release (`v0.1.0-rc1` is the first tag), Apache-2.0, single maintainer
+* License: Apache-2.0, public
+* Status: pre-release (`v0.1.0-rc1` is the first tag), single maintainer
 * Tested on: macOS arm64 (Apple M3, and macOS 15 in CI) and Linux x86_64 (Ubuntu, in CI); Lean 4.29.1
-  and GHC 9.14.1 only. CI runs the full test suite on both platforms.
-* Honest one-line summary: faster than Lean's C backend on numeric loops, record loops and fused list
-  pipelines; roughly level on small strings; slower on arrays at scale, allocation-heavy trees, and
-  decimal string building. See [Benchmarks](#benchmarks) for every number, including the losses.
+  and GHC 9.14.1 only. CI runs the test suite on both, with a 36-program subset of the garden.
+* Honest one-line summary: up to 9x faster than Lean's C backend on numeric, `Int`, `Float`, record and
+  fused-list code; with the recommended settings, between level and 3x slower on lists, tuples,
+  strings and hash maps (up to 4x slower with defaults); 4x to 18x slower on arrays, which is the main
+  open problem. See [Benchmarks](#benchmarks) for every number, including the losses.
+
+![Run time of the Haskell output relative to compiled Lean, with default settings and with list fusion on and -A256m -O1g](docs/bench-chart.png)
+
+**To get the speed:** put `set_option zempic.fuse true` before the definitions you compile, and run
+the Haskell with `-A256m -O1g` (`tools/zghc` does). Both are explained below, with their costs.
 
 ## Contents
 
@@ -130,8 +136,9 @@ PATH=/opt/homebrew/bin:/usr/bin:/bin:$HOME/.elan/bin sh tests/run.sh
 ```
 
 It builds every example, compiles the generated Haskell, and checks each result against native
-Lean. Sixteen checks print `ok` (the plugin check only if Cabal is installed); any failure aborts with
-`FAIL`.
+Lean, then runs the garden, the AES check and the fuzzer. Each check prints `ok` (the plugin check only
+if Cabal is installed); any failure aborts with `FAIL`. The whole garden takes about 15 CPU-minutes;
+`GARDEN_SET=ci GARDEN_OPT=-O1 GARDEN_FUSE=1 sh tests/run.sh` runs the 36-program subset CI uses.
 
 ## How it works
 
@@ -505,9 +512,9 @@ box, so an unused thunk is not forced.
 
 ## Benchmarks
 
-Apple M3, Lean 4.29.1 (C backend, as built by `lake`), GHC 9.14.1 `-O2` with `-A128m` (a larger
-allocation area for the garbage collector, applied to the Haskell programs). Best of 3 wall-clock
-runs. Numbers are rounded; the full logs, with heap figures, the failed first attempts and how to
+Apple M3, Lean 4.29.1 (C backend, as built by `lake`), GHC 9.14.1 `-O2`. The tables below use
+`-A128m` (a larger allocation area for the garbage collector) and no fusion; the chart also shows the
+recommended settings (fusion on, `-A256m -O1g`). Best of 3 wall-clock runs. Numbers are rounded; the full logs, with heap figures, the failed first attempts and how to
 reproduce each, are in [`BENCH.md`](BENCH.md). Every row prints the same value as Lean.
 
 ![Run time of the Haskell output relative to compiled Lean, with default settings and with list fusion on and -A256m -O1g](docs/bench-chart.png)
@@ -611,9 +618,9 @@ An honest checklist, because "production" depends on what you need.
 
 | | |
 |---|---|
-| Continuous integration | GitHub Actions runs the whole suite on Ubuntu and macOS 15 for every push |
+| Continuous integration | GitHub Actions runs the suite on Ubuntu and macOS 15 for every push, including the Cabal package build and a 36-program garden subset at `-O1` with fusion on |
 | Fails fast | an unsupported Lean version or a mistyped mode is a clear error; an unsupported Lean constant is an error that lists it, never silently dropped code |
-| Tested against Lean itself | 16 checks compare generated code with native Lean, value by value, at several sizes |
+| Tested against Lean itself | the examples, 106 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
 | Runtime tested against models | random operation sequences on arrays, strings, integers and the `Word`/`Natural` fast path, with deliberately broken runtimes caught |
 | Differential fuzzing | random Lean programs run by Lean and through leanzempic must agree (`tools/fuzz.py`) |
 | Machine-checked facts | Tenet verifies 265 of 265 declarations, including name-mangling injectivity |
@@ -640,7 +647,7 @@ cannot compare against Lean.
 
 ## Testing
 
-`tests/run.sh` is the whole suite, and CI runs it on every push (Ubuntu and macOS 15). Most checks
+`tests/run.sh` is the whole suite, and CI runs it on every push (Ubuntu and macOS 15, with the garden subset). Most checks
 compile generated Haskell and compare it, value by value, with native Lean at several sizes:
 
 | Check | What it covers |
@@ -659,6 +666,8 @@ compile generated Haskell and compare it, value by value, with native Lean at se
 | `core plugin` | injected Core passes `-dcore-lint` and gives the same answers (needs Cabal) |
 | `proptests` | random operation sequences on arrays, strings, fixed-width integers and the `Word`/`Natural` fast path, each step compared with a pure model |
 | `fuzz` | a short differential-fuzzing run: random Lean programs must give the same answers under Lean and leanzempic |
+| `aes` | AES-256 from the proved [lean-aes](https://github.com/keithadler/lean-aes) (`bench/aes`): Lean's C, the Haskell and OpenSSL (`tools/aes_oracle.py`) give the same ciphertext |
+| `garden` | the [garden](#the-garden): 106 programs locally, 36 in CI |
 
 ### The garden
 
@@ -761,7 +770,7 @@ particular is argued and tested, not verified.
 ## Repository layout
 
 ```
-Zempic/                 the Lean side (about 1,600 lines)
+Zempic/                 the Lean side (about 2,000 lines)
   Names.lean            name mangling, with the injectivity proof
   Emit.lean             LCNF -> Haskell and Core-notation printers, types, data, the wrapper
   Command.lean          the #zempic command
@@ -770,7 +779,7 @@ Zempic/                 the Lean side (about 1,600 lines)
   Own.lean              the ownership analysis
   Proofs.lean           machine-checked facts about the printer
 Zempic.lean             imports everything
-runtime/Zempic/         the Haskell runtime (about 1,200 lines)
+runtime/Zempic/         the Haskell runtime (about 1,800 lines)
   Runtime.hs            Any, zo, zu, zap
   Nat/Word.hs           Nat as Word (fast path) and the primitives built on it
   Nat/Exact.hs          Nat as Natural
@@ -778,14 +787,19 @@ runtime/Zempic/         the Haskell runtime (about 1,200 lines)
   List.hs               fusible list combinators
   Arr.hs                Baker persistent arrays, with in-place variants
   Str.hs                shared-buffer strings
+  Prims.hs              Int (Integer), Float (Double), Thunk, mixHash
   Auto.hs               tryFast, the auto-mode wrapper glue
   zempic-runtime.cabal  the runtime as a Cabal package
 examples/               Lean programs used as tests and benchmarks
 bench/                  Haskell drivers and bench/build.sh
+bench/aes/              AES-256 from lean-aes, built both ways and timed (run.sh)
+garden/                 106 small programs, one per feature: run.py (correctness), perf.py (timing)
+docs/                   the benchmark chart (make_chart.py draws it from chart-data.json)
 tests/run.sh            the test suite
 tests/PropTests.hs      model-based randomized tests of the runtime
 tools/gen_runtime.py    regenerates UInt.hs and the generated regions of Nat/*.hs
 tools/fuzz.py           differential fuzzer (random Lean programs, Lean against leanzempic)
+tools/aes_oracle.py     the AES benchmark's answer, computed by OpenSSL
 tools/zghc              GHC with the right flags, and without Lean's clang on PATH
 .github/workflows/      CI (macOS and Linux)
 plugin/                 GHC Core plugin spike (a separate Cabal package, see plugin/README.md)
@@ -875,16 +889,30 @@ Negative results are part of the record, and several of them changed the design:
   brought push level with Lean with no analysis, so the analysis was not built.
 * **A pessimistic first pass in the analysis.** Collapsed the summaries permanently. The fixpoint now
   starts optimistic and skips unreached code.
+* **Judging fusion with the option in the wrong place.** `set_option zempic.fuse true` just before
+  `#zempic` does nothing, because the pass runs when Lean compiles the definitions. My first test said
+  fusion changed nothing; set correctly it is 2x to 5x on list pipelines. Check that an experiment
+  exercises the thing it claims to test.
+* **`-funbox-strict-fields` on generated code.** No effect: GHC already unpacks small strict fields and
+  the large ones are boxed on purpose.
+* **Unboxed array buffers, first attempt.** Chosen from the element type; no speedup on the garden
+  programs measured, and unsafe as built (Lean's library writes placeholder values into arrays and
+  changes element types in place). See [`BENCH.md`](BENCH.md).
+* **A GHC panic on cast-heavy code.** Core Lint named GHC 9.14.1's Float Inwards pass; generated
+  modules now carry `-fno-float-in`.
 
 ## Roadmap
 
 Ideas in rough order of value, none promised:
 
-* more fusion combinators (`reverse`, `filterMap`, `zipWith`, array and `for` loops)
+* the array gap (4x to 18x), the main open problem: typed access primitives at every array use
+  site, so an array can have an unboxed buffer safely, and copying a shared array once on entry to
+  a loop that mutates it, as Lean does
+* making fusion the default (it is 2x to 5x on list pipelines but slower natively and on one merge
+  sort), and more combinators (`reverse`, `filterMap`, `zipWith`, array and `for` loops)
 * unboxed list elements and pair components (they are `Any` today)
 * typed values across the auto-mode wrapper, so structure-typed roots can use it
 * `IO`, so a Lean `main` can be compiled
-* narrowing the array gap further (boxed elements, a wider analysis)
 * support for other Lean versions
 * proving more: the `Word` fast path against `Nat`, and the soundness of the ownership analysis
 

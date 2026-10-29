@@ -23,6 +23,19 @@ to review.
 5. **Do not edit generated regions** of the runtime by hand; change `tools/gen_runtime.py` and rerun it.
 6. **No claims without evidence.** If a result was not measured or tested, say so.
 
+## The garden, and building the way CI does
+
+* **Add a garden program for every new language feature.** `garden/programs.py` holds small Lean
+  programs defining `entry : Nat → Nat`; `python3 garden/run.py [name ...]` compares each with native
+  Lean. The garden found a crash that appeared only under GHC optimization, so test at `-O1` or
+  higher (`GARDEN_OPT=-O1`), never only `-O0`.
+* **Build the Cabal package before you push a runtime change:** `cd runtime && cabal build`. It uses
+  Haskell2010 (CI builds it that way), which rejects code that a direct `ghc` run accepts, such as a
+  local helper with an inferred constraint that needs a type signature.
+* **Mirror CI locally:** `GARDEN_SET=ci GARDEN_OPT=-O1 GARDEN_FUSE=1 sh tests/run.sh`.
+* **Run one benchmark at a time.** `garden/perf.py` compiles with GHC and Lean's C compiler and
+  caps each run at 20 seconds; do not run several sweeps at once on a laptop.
+
 ## Adding support for a Lean constant
 
 See "Developing" in the README (add a row to `prims`, implement it in the runtime, test it).
