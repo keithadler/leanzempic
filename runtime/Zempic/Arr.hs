@@ -252,7 +252,7 @@ bufClone b n = do
   bufGrow b n cap
 
 aGet :: Arr -> Int -> Any -> IO Any
-aGet arr i d
+aGet !arr !i d
   | i < 0 || i >= aLen arr = return d
   | otherwise = do
       node <- readIORef (aRef arr)
@@ -263,9 +263,11 @@ aGet arr i d
           buf <- reroot arr
           bufRead buf i
 
+-- Index arguments are strict so the caller's @arrIdx@ is not allocated as a thunk per call.
+
 -- | Out-of-bounds sets leave the array unchanged, as in Lean.
 aSet :: Arr -> Int -> Any -> IO Arr
-aSet arr i v
+aSet !arr !i v
   | i < 0 || i >= aLen arr = return arr
   | otherwise = do
       nd <- rerootN arr
@@ -325,7 +327,7 @@ aPop arr
         Diff _ _ -> return arr
 
 aSwap :: Arr -> Int -> Int -> IO Arr
-aSwap arr i j
+aSwap !arr !i !j
   | i < 0 || j < 0 || i >= aLen arr || j >= aLen arr = return arr
   | otherwise = do
       nd <- rerootN arr
@@ -388,7 +390,7 @@ ownNode arr = do
     _ -> return node
 
 aSetU :: Arr -> Int -> Any -> IO Arr
-aSetU arr i v
+aSetU !arr !i v
   | i < 0 || i >= aLen arr = return arr
   | otherwise = do
       node <- ownNode arr
@@ -423,11 +425,18 @@ aPopU arr
         _ -> aPop arr
 
 aSwapU :: Arr -> Int -> Int -> IO Arr
-aSwapU arr i j
+aSwapU !arr !i !j
   | i < 0 || j < 0 || i >= aLen arr || j >= aLen arr = return arr
   | otherwise = do
       node <- ownNode arr
       case node of
+        -- boxed buffer (the common case): swap straight on the array, no per-element dispatch
+        Direct (BBox a) c | c >= 0 -> do
+          x <- unsafeRead a i
+          y <- unsafeRead a j
+          unsafeWrite a i y
+          unsafeWrite a j x
+          return arr
         Direct buf c | c >= 0 -> do
           x <- bufRead buf i
           y <- bufRead buf j
