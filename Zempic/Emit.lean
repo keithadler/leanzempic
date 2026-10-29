@@ -917,7 +917,7 @@ def hsVariant (d : Decl .pure) (ks : Array (Option Nat)) : EmitM String := do
       names := names.push nm
   let n := variantName d.name ks
   let body ← hsCode body 1 ret
-  return s!"{n} :: {" -> ".intercalate (sig ++ [ret])}\n{n} {" ".intercalate names.toList} =\n{pad 1}{pre}{body}\n\{-# INLINE {n} #-}\n"
+  return s!"{n} :: {" -> ".intercalate (sig ++ [ret])}\n{n} {" ".intercalate names.toList} =\n{pad 1}{pre}{body}\n\{-# INLINABLE {n} #-}\n"
 
 /-! ## Core-notation printer (for reading; GHC cannot ingest this) -/
 
