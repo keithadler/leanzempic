@@ -1,0 +1,130 @@
+[
+ {
+  "label": "Float loop",
+  "native_s": 0.429,
+  "default_s": 0.045,
+  "tuned_s": 0.05,
+  "default": 0.105,
+  "tuned": 0.117
+ },
+ {
+  "label": "Int arithmetic",
+  "native_s": 1.12,
+  "default_s": 0.265,
+  "tuned_s": 0.17,
+  "default": 0.237,
+  "tuned": 0.152
+ },
+ {
+  "label": "Tree map and sum",
+  "native_s": 2.301,
+  "default_s": 1.063,
+  "tuned_s": 1.015,
+  "default": 0.462,
+  "tuned": 0.441
+ },
+ {
+  "label": "Record update loop",
+  "native_s": 0.105,
+  "default_s": 0.092,
+  "tuned_s": 0.047,
+  "default": 0.876,
+  "tuned": 0.448
+ },
+ {
+  "label": "List merge sort",
+  "native_s": 0.078,
+  "default_s": 0.097,
+  "tuned_s": 0.136,
+  "default": 1.244,
+  "tuned": 1.744
+ },
+ {
+  "label": "HashMap inserts",
+  "native_s": 0.072,
+  "default_s": 0.22,
+  "tuned_s": 0.112,
+  "default": 3.056,
+  "tuned": 1.556
+ },
+ {
+  "label": "String iteration",
+  "native_s": 0.095,
+  "default_s": 0.346,
+  "tuned_s": 0.137,
+  "default": 3.642,
+  "tuned": 1.442
+ },
+ {
+  "label": "List functions",
+  "native_s": 0.062,
+  "default_s": 0.267,
+  "tuned_s": 0.17,
+  "default": 4.306,
+  "tuned": 2.742
+ },
+ {
+  "label": "Array map/filter/fold",
+  "native_s": 0.048,
+  "default_s": 0.258,
+  "tuned_s": 0.2,
+  "default": 5.375,
+  "tuned": 4.167
+ },
+ {
+  "label": "Shared array, insertion sort",
+  "native_s": 0.008,
+  "default_s": 0.182,
+  "tuned_s": 0.146,
+  "default": 22.75,
+  "tuned": 18.25
+ },
+ {
+  "label": "List of UInt8, hashed",
+  "native_s": 0.054,
+  "default_s": 0.172,
+  "tuned_s": 0.048,
+  "default": 3.185,
+  "tuned": 0.889
+ },
+ {
+  "label": "Tuple-state fold",
+  "native_s": 0.1,
+  "default_s": 0.272,
+  "tuned_s": 0.098,
+  "default": 2.72,
+  "tuned": 0.98
+ },
+ {
+  "label": "Option chain",
+  "native_s": 0.125,
+  "default_s": 0.098,
+  "tuned_s": 0.037,
+  "default": 0.784,
+  "tuned": 0.296
+ },
+ {
+  "label": "Nat sum loop",
+  "native_s": 0.45,
+  "default_s": 0.18,
+  "tuned_s": 0.18,
+  "default": 0.4,
+  "tuned": 0.4
+ },
+ {
+  "label": "Fused list pipeline",
+  "native_s": 0.35,
+  "default_s": 0.04,
+  "tuned_s": 0.04,
+  "default": 0.114,
+  "tuned": 0.114
+ },
+ {
+  "label": "Proved AES-256 (1e6 blocks)",
+  "native_s": 8.81,
+  "default_s": 15.63,
+  "tuned_s": 15.63,
+  "default": 1.77,
+  "tuned": 1.77
+ }
+]

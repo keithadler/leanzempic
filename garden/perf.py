@@ -10,6 +10,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from programs import P
 from run import ROOT, B, lake_env, lean, sysenv, split_imports, sh
 
+# RTS options baked into the Haskell program (PERF_RTS="-A256m -O1g" to measure the tuned setting)
+RTS = os.environ.get("PERF_RTS", "-A128m")
+
 # program -> n to use (chosen so the native run takes roughly 0.05 to 2 s)
 N = {
  "list_mergesort": 300000, "array_qsort": 300000, "hashmap": 3000000, "struct_update": 5000000,
@@ -39,7 +42,8 @@ def native(name, n):
 def hs(name):
     d = os.path.join(B, name)
     open(f"{d}/PMain.hs", "w").write("import Out\nimport System.Environment\nmain :: IO ()\nmain = do\n  (n : _) <- getArgs\n  print (z_entry (fromInteger (read n)))\n")
-    rc, out = sh(f"ghc -O2 -rtsopts '-with-rtsopts=-A128m' -i{ROOT}/runtime -i{d} -outputdir {d}/op -o {d}/pm {d}/PMain.hs", env=sysenv)
+    if os.path.exists(f"{d}/pm"): os.remove(f"{d}/pm")  # a changed RTS option alone does not relink
+    rc, out = sh(f"ghc -O2 -rtsopts '-with-rtsopts={RTS}' -i{ROOT}/runtime -i{d} -outputdir {d}/op -o {d}/pm {d}/PMain.hs", env=sysenv)
     return (None, out[:200]) if rc != 0 else (f"{d}/pm", "")
 
 def best(cmd, n, reps=3):

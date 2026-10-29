@@ -495,3 +495,30 @@ which was the lesson most worth checking. The live data is the boxing we already
 cells and `W#` boxes; `list_funcs` adds about 50 MB of persistent-array version records (`Arr`, `Diff`,
 `MutVar`) and 39 MB of stack. Sharing preallocated boxes for small values would not help these, since
 the values are large.
+
+
+## The recommended settings, measured against the defaults (2026-10-29)
+
+Same programs, same machine, one session. "Default" is `-A128m` and no fusion; "recommended" is list
+fusion on (`set_option zempic.fuse true` before the definitions) and `-A256m -O1g`. The ratio is the
+Haskell run time over compiled Lean's, using one native time per program (the faster of the two
+measurements) so the columns are comparable. All answers match native Lean.
+
+| Program | n | default | recommended |
+|---|---|---|---|
+| list of `UInt8`, hashed | 3e6 | 3.2x slower | 1.1x faster |
+| tuple-state fold | 5e6 | 2.7x slower | level |
+| record update loop | 5e6 | 1.1x faster | 2.2x faster |
+| `Option` chain | 5e6 | 1.3x faster | 3.4x faster |
+| `Int` arithmetic | 3e6 | 4.2x faster | 6.6x faster |
+| string iteration | 1e6 | 3.6x slower | 1.4x slower |
+| `HashMap` inserts | 3e6 | 3.1x slower | 1.6x slower |
+| list functions | 1e6 | 4.3x slower | 2.7x slower |
+| array map/filter/fold | 2e6 | 5.4x slower | 4.2x slower |
+| shared array, insertion sort | 3e3 | 23x slower | 18x slower |
+| list merge sort | 3e5 | 1.2x slower | 1.7x slower |
+| `Float` loop, tree map, `Nat` sum loop, AES-256 | | unchanged | unchanged |
+
+Two rows get worse and are in the chart: list merge sort (fusion makes it slower) and, within noise,
+the `Float` loop. The remaining large gaps are all arrays (a persistent array on every access) and
+the boxed values in lists.

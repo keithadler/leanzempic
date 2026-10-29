@@ -508,6 +508,12 @@ allocation area for the garbage collector, applied to the Haskell programs). Bes
 runs. Numbers are rounded; the full logs, with heap figures, the failed first attempts and how to
 reproduce each, are in [`BENCH.md`](BENCH.md). Every row prints the same value as Lean.
 
+![Run time of the Haskell output relative to compiled Lean, with default settings and with list fusion on and -A256m -O1g](docs/bench-chart.png)
+
+The chart is drawn by `docs/make_chart.py` from `docs/chart-data.json`. Each row is the Haskell
+output's run time divided by compiled Lean's, with default settings and with the recommended ones
+(list fusion on, `-A256m -O1g`).
+
 ### Where leanzempic is faster
 
 | Workload | n | Lean | leanzempic | Speedup |
