@@ -419,6 +419,85 @@ Tried and dropped: inlining the array read primitives (no change), a tighter `mu
 an unboxed S-box table (7%, below the noise of the rest), `zempic.fuse` (no change).
 
 
+## Narrow integer arrays and the real-world `qsort`: 2.83x to 1.58x (2026-10-29)
+
+`bench/realworld` `qsort` (Lean's own benchmark, `UInt32` elements, `partitionAux` over an `Array UInt32`,
+n = 300) was 2.83x slower than Lean's C backend. Reading the generated STG showed what the per-step cost was:
+every `a[j]!` went through the generic `Any` reader (`arrGetD`), which boxed the `UInt32` (a `W32#`, 16 bytes)
+and was un-boxed again by the caller, with the element's inhabited default boxed too. The swaps were a call
+to a `NOINLINE` primitive. Same machine, A/B against a worktree of `main`, interleaved, best of 5; the CPU
+time is user plus system, and `instructions retired` and `cycles elapsed` come from `/usr/bin/time -l`,
+which are steadier than seconds on a loaded machine.
+
+| `qsort`, default settings | before | after |
+|---|---|---|
+| CPU, best of 5 (native Lean C: 0.78 s) | 2.21 s, 2.83x | 1.23 s, 1.58x |
+| CPU, recommended settings (`zempic.fuse`, `-A256m -O1g`) | 2.20 s, 2.86x | 1.24 s, 1.61x |
+| allocated | 5283 MB | 1835 MB |
+| instructions retired (native: 15.1 G) | 41.5 G, 2.74x | 21.9 G, 1.45x |
+
+What changed:
+
+* **Narrow-typed element access.** `UInt8/16/32/64` (and `Char`) reads, pushes and in-place writes are chosen
+  by the emitter from the Haskell type of the element, as the `Word` ones already were: `arrGetD32`,
+  `arrGetI32`, `arrUGet32`, `arrPushU32`, `arrSetU32`, `arrUSetU32`, and the 8, 16 and 64 bit versions. The
+  common case (a live buffer of the matching kind) is read or written in line with no box; all else goes to a
+  `NOINLINE` function using the generic operations. The `partitionAux` loop now allocates nothing per step.
+  This is what takes `qsort` from 5283 MB to 1627 MB.
+* **In-line swaps** for arrays of a known word-like element type (`arrSwapU8` ... `arrSwapUW`), and a bounds
+  check that is one unsigned comparison. A `Word` index is not clamped in word mode.
+* **The caller's array is handed back.** The first version of the narrow swap returned its `Arr` argument,
+  and GHC rebuilt the 24-byte record on every swap because the argument had been unpacked by the worker:
+  allocation went back up to 3568 MB and the speedup shrank. The fix is for the in-line paths to return a
+  flag and for the wrapper to return the `Any` it was given (`aSwapF32`, `aSetF32`). Before the later changes
+  (unsigned bounds, the lazy default on the slow path) allocation was 1627 MB; after the fix it is 1835 MB.
+  I did not find where the extra 208 MB comes from.
+* **Block-copy growth.** `bufGrow` copies with `copyMutableByteArray#` / `copyMutableArray#` and clears only the
+  tail, instead of an element loop after filling the whole new buffer. Prefix sums (10M pushes) 0.488 to
+  0.456 G cycles.
+* `UNPACK` on the buffer constructors (one pointer less per access). Alone it moved `qsort` from 1.82x to
+  1.75x of native in cycles in a noisy run; kept, because it does not hurt, but that is within noise.
+
+What did not work or was not done:
+
+* The returned pair of `partitionAux` (a `W32#` and a tuple per call, about 40 bytes) is not unboxed: the
+  function returns `Any` (the pair coerced), so GHC's CPR analysis has no product to unbox. Ticky counts at
+  n = 100 put it at about a third of what `qsort` still allocates; the rest is the 24-byte `Arr` of each push in
+  `mkRandomArray` and the `MProd` of each step of `isSorted`. Fixing the pair needs the emitter to give
+  pair-returning functions a typed result, which is a larger change than this one.
+* (b), `Array.foldl`/`foldlM` loops: `Nat` and `USize` elements already used `arrUGetW` on `main`
+  (`mapFold` reads through it); what was missing was the other widths, which the narrow reads cover
+  (`arrUGet32` and friends, exercised by `array_narrow_paths`). There was nothing further to change for
+  `Nat`.
+* (c), the 24-byte `Arr` per in-place push is not removed. The length lives in the immutable `Arr`, and
+  every version needs its own, so returning the same record would need a mutable length and a redesign of
+  the undo records; one `Word` set returning the caller's array (the same trick as the swap) changed neither
+  allocation (508 MB) nor time on Prefix sums, so I reverted it.
+* `Float` elements have no unboxed buffer kind (the kinds are `Word8/16/32/64`, `Word`, `Bool`), so they
+  are untouched.
+* What remains of the 1.58x is structural: each access is a `readMutVar#`, a tag test on `Direct`, a tag test
+  on the buffer kind, then the load, where native Lean does one load. Hoisting that out of a loop whose array
+  is owned would need the emitter to pass the buffer into the loop.
+
+Other `bench/realworld` programs, before and after, same method (cycles elapsed relative to native; these
+programs do not use the changed paths, and their allocation is identical): `binarytrees` 0.73x / 0.73x,
+`const_fold` 1.01x / 1.03x (instructions retired identical: layout noise), `deriv` 1.16x / 1.16x,
+`unionfind` 1.16x / 1.16x, `nat_repr` 1.13x / 1.13x (default settings; `rbmap` does not compile on this
+branch, a separate fix). Chart rows (cycles elapsed relative to native, before / after; the chart itself was
+not refreshed, and differences of 0.03 are noise): Sieve 1.21x / 1.18x, Prefix sums 1.77x / 1.57x, Array map
+and fold 0.91x / 0.89x, Reverse by swaps 0.74x / 0.67x, Push and pop stack 1.05x / 1.00x. Garden:
+`array_funcs` instructions retired 2.39 G to 2.18 G, `array_misc` 0.58 G to 0.48 G, `array_qsort` and
+`uint64_hash` unchanged.
+
+Tests: `tests/PropTests.hs` `arrNarrow` drives each width on a boxed buffer and on a buffer of the matching
+kind (push, set, pop, swap, get, lazy handle, stale versions, indexes -1, `minBound`, `maxBound`, 2^63, 2^64,
+2^70) against a list model, in word and exact mode. Mutations caught: a swap that drops one write, a set at
+the wrong slot, a get at the wrong slot, a push that bumps the length by two, an off-by-one in the bounds
+check, a signed instead of unsigned bounds check, a slow-path read off by one, a slow path that forces the
+default, a growth copy that is one element short (it crashes). A mutation that fills the grown tail with
+garbage is not caught and is not observable: the tail is never read before it is written. New garden program
+`array_narrow_paths` (UInt8/16/32/64 and `Char`, in place and on a kept snapshot, `set!`, swaps, `for` loops).
+
 ## Array reads and writes without boxes: `array_funcs` 3.9x to 2.5x (2026-10-29)
 
 `array_funcs` (range, map, filter, zip, foldl, any/all, contains, reverse, extract, append at n = 2e6)

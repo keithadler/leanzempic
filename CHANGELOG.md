@@ -13,6 +13,12 @@ everything is pre-release (`0.1.0`).
   Merged with the Prefix-sums and `array_misc` work: `array_funcs` allocation 485 MB to 321 MB (3.9x to
   2.5x of Lean's C backend), Prefix sums 1308 MB to 508 MB (3.6x to 1.7x), `array_misc` 115 MB to 0.7 MB.
   New garden program `array_word_paths`. Details and the failures along the way are in `BENCH.md`.
+* `UInt8/16/32/64` and `Char` array elements are read, pushed and written in place with no box
+  (`arrGetD32`, `arrUGet32`, `arrPushU32`, `arrSetU32`, ... and the 8, 16, 64 bit versions), swaps on arrays of
+  a known word-like element type exchange in line (`arrSwapU32`, ...), bounds checks are one unsigned
+  comparison, and buffers grow with a block copy. The real-world `qsort` (Lean's own benchmark) goes from
+  2.83x to 1.58x of Lean's C backend and from 5283 MB to 1835 MB allocated. New garden program
+  `array_narrow_paths`; new property test `arrNarrow`. Details, and what did not help, are in `BENCH.md`.
 * `Array.map`'s placeholder write is skipped when the next write overwrites it (array map/filter/fold 5.3x to 3.9x).
 * Unrolled variants use `INLINABLE`, so `string_pos` builds at `-O2`; known issue below is fixed.
 
