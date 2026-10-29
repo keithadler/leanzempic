@@ -384,7 +384,7 @@ process start-up, about 15 ms with `-A128m`) and are not reported. Of the rest:
 
 **The pattern.** Arithmetic, records, `Int`, `Float` and trees are level or faster. Everything that
 holds many boxed elements (lists, arrays, hash maps, strings built from pieces) is 2x to 7x slower,
-and the one case where an array is both shared and mutated in a loop is about 7x (lazy copies).
+and the one case where an array is both shared and mutated in a loop is about 5x to 9x (lazy copies).
 
 **Why, from the profiles.**
 
@@ -514,8 +514,8 @@ measurements) so the columns are comparable. All answers match native Lean.
 | string iteration | 1e6 | 3.6x slower | 1.4x slower |
 | `HashMap` inserts | 3e6 | 3.1x slower | 1.6x slower |
 | list functions | 1e6 | 4.3x slower | 2.7x slower |
-| array map/filter/fold | 2e6 | 5.4x slower | 4.2x slower |
-| shared array, insertion sort | 3e3 | 23x slower | 6.9x slower |
+| array map/filter/fold | 2e6 | 5.4x slower | 3.8x slower |
+| shared array, insertion sort | 3e3 | 23x slower | 5x to 9.5x slower (a 9 ms run, noisy) |
 | list merge sort | 3e5 | 1.2x slower | 1.7x slower |
 | `Float` loop, tree map, `Nat` sum loop, AES-256 | | unchanged | unchanged |
 

@@ -3,6 +3,11 @@
 All notable changes. The project follows semantic versioning once it has a release; until then
 everything is pre-release (`0.1.0`).
 
+## Unreleased
+
+* `Array.map`'s placeholder write is skipped when the next write overwrites it (array map/filter/fold 5.3x to 3.9x).
+* Unrolled variants use `INLINABLE`, so `string_pos` builds at `-O2`; known issue below is fixed.
+
 ## 0.1.0-rc2 (2026-10-29)
 
 Bounded undo chains and lazy copies for shared arrays. Shared-array insertion sort: 18x (rc1) to 6.9x slower
