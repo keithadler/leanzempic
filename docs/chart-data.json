@@ -1,130 +1,178 @@
-[
- {
-  "label": "Float loop",
-  "native_s": 0.429,
-  "default_s": 0.045,
-  "tuned_s": 0.05,
-  "default": 0.105,
-  "tuned": 0.117
+{
+ "meta": {
+  "commit": "3c18d81",
+  "date": "2026-10-28",
+  "machine": "Apple M3",
+  "dirty": false
  },
- {
-  "label": "Int arithmetic",
-  "native_s": 1.12,
-  "default_s": 0.265,
-  "tuned_s": 0.17,
-  "default": 0.237,
-  "tuned": 0.152
- },
- {
-  "label": "Tree map and sum",
-  "native_s": 2.301,
-  "default_s": 1.063,
-  "tuned_s": 1.015,
-  "default": 0.462,
-  "tuned": 0.441
- },
- {
-  "label": "Record update loop",
-  "native_s": 0.105,
-  "default_s": 0.092,
-  "tuned_s": 0.047,
-  "default": 0.876,
-  "tuned": 0.448
- },
- {
-  "label": "List merge sort",
-  "native_s": 0.078,
-  "default_s": 0.097,
-  "tuned_s": 0.136,
-  "default": 1.244,
-  "tuned": 1.744
- },
- {
-  "label": "HashMap inserts",
-  "native_s": 0.072,
-  "default_s": 0.22,
-  "tuned_s": 0.112,
-  "default": 3.056,
-  "tuned": 1.556
- },
- {
-  "label": "String iteration",
-  "native_s": 0.095,
-  "default_s": 0.346,
-  "tuned_s": 0.137,
-  "default": 3.642,
-  "tuned": 1.442
- },
- {
-  "label": "List functions",
-  "native_s": 0.062,
-  "default_s": 0.267,
-  "tuned_s": 0.17,
-  "default": 4.306,
-  "tuned": 2.742
- },
- {
-  "label": "Array map/filter/fold",
-  "native_s": 0.048,
-  "default_s": 0.258,
-  "tuned_s": 0.2,
-  "default": 5.375,
-  "tuned": 4.167
- },
- {
-  "label": "Shared array, insertion sort",
-  "native_s": 0.008,
-  "default_s": 0.182,
-  "tuned_s": 0.146,
-  "default": 22.75,
-  "tuned": 18.25
- },
- {
-  "label": "List of UInt8, hashed",
-  "native_s": 0.054,
-  "default_s": 0.172,
-  "tuned_s": 0.048,
-  "default": 3.185,
-  "tuned": 0.889
- },
- {
-  "label": "Tuple-state fold",
-  "native_s": 0.1,
-  "default_s": 0.272,
-  "tuned_s": 0.098,
-  "default": 2.72,
-  "tuned": 0.98
- },
- {
-  "label": "Option chain",
-  "native_s": 0.125,
-  "default_s": 0.098,
-  "tuned_s": 0.037,
-  "default": 0.784,
-  "tuned": 0.296
- },
- {
-  "label": "Nat sum loop",
-  "native_s": 0.45,
-  "default_s": 0.18,
-  "tuned_s": 0.18,
-  "default": 0.4,
-  "tuned": 0.4
- },
- {
-  "label": "Fused list pipeline",
-  "native_s": 0.35,
-  "default_s": 0.04,
-  "tuned_s": 0.04,
-  "default": 0.114,
-  "tuned": 0.114
- },
- {
-  "label": "Proved AES-256 (1e6 blocks)",
-  "native_s": 8.81,
-  "default_s": 15.63,
-  "tuned_s": 15.63,
-  "default": 1.77,
-  "tuned": 1.77
- }
-]
+ "rows": [
+  {
+   "label": "Float loop",
+   "native_s": 0.433,
+   "default_s": 0.044,
+   "tuned_s": 0.056,
+   "default": 0.102,
+   "tuned": 0.129
+  },
+  {
+   "label": "Int arithmetic",
+   "native_s": 1.1,
+   "default_s": 0.259,
+   "tuned_s": 0.171,
+   "default": 0.235,
+   "tuned": 0.155
+  },
+  {
+   "label": "Tree map and sum",
+   "native_s": 2.261,
+   "default_s": 1.05,
+   "tuned_s": 0.955,
+   "default": 0.464,
+   "tuned": 0.422
+  },
+  {
+   "label": "Record update loop",
+   "native_s": 0.1,
+   "default_s": 0.098,
+   "tuned_s": 0.053,
+   "default": 0.98,
+   "tuned": 0.53
+  },
+  {
+   "label": "List merge sort",
+   "native_s": 0.073,
+   "default_s": 0.097,
+   "tuned_s": 0.136,
+   "default": 1.329,
+   "tuned": 1.863
+  },
+  {
+   "label": "HashMap inserts",
+   "native_s": 0.073,
+   "default_s": 0.222,
+   "tuned_s": 0.124,
+   "default": 3.041,
+   "tuned": 1.699
+  },
+  {
+   "label": "String iteration",
+   "native_s": 0.092,
+   "default_s": 0.336,
+   "tuned_s": 0.136,
+   "default": 3.652,
+   "tuned": 1.478
+  },
+  {
+   "label": "List functions",
+   "native_s": 0.058,
+   "default_s": 0.209,
+   "tuned_s": 0.15,
+   "default": 3.603,
+   "tuned": 2.586
+  },
+  {
+   "label": "Array map/filter/fold",
+   "native_s": 0.045,
+   "default_s": 0.27,
+   "tuned_s": 0.235,
+   "default": 6.0,
+   "tuned": 5.222
+  },
+  {
+   "label": "Shared array, insertion sort",
+   "native_s": 0.008,
+   "default_s": 0.181,
+   "tuned_s": 0.163,
+   "default": 22.625,
+   "tuned": 20.375
+  },
+  {
+   "label": "List of UInt8, hashed",
+   "native_s": 0.052,
+   "default_s": 0.145,
+   "tuned_s": 0.051,
+   "default": 2.788,
+   "tuned": 0.981
+  },
+  {
+   "label": "Tuple-state fold",
+   "native_s": 0.098,
+   "default_s": 0.294,
+   "tuned_s": 0.098,
+   "default": 3.0,
+   "tuned": 1.0
+  },
+  {
+   "label": "Option chain",
+   "native_s": 0.122,
+   "default_s": 0.101,
+   "tuned_s": 0.04,
+   "default": 0.828,
+   "tuned": 0.328
+  },
+  {
+   "label": "Nat sum loop",
+   "native_s": 0.45272397994995117,
+   "default_s": 0.18816089630126953,
+   "tuned_s": 0.19468212127685547,
+   "default": 0.416,
+   "tuned": 0.43
+  },
+  {
+   "label": "Fused list pipeline",
+   "native_s": 0.34874987602233887,
+   "default_s": 0.05142402648925781,
+   "tuned_s": 0.06873965263366699,
+   "default": 0.147,
+   "tuned": 0.197
+  },
+  {
+   "label": "Sieve (Bool array)",
+   "native_s": 0.11149215698242188,
+   "default_s": 0.125014066696167,
+   "tuned_s": 0.13916516304016113,
+   "default": 1.121,
+   "tuned": 1.248
+  },
+  {
+   "label": "Prefix sums (Nat array)",
+   "native_s": 0.0811309814453125,
+   "default_s": 0.2658531665802002,
+   "tuned_s": 0.277940034866333,
+   "default": 3.277,
+   "tuned": 3.426
+  },
+  {
+   "label": "Array map and fold",
+   "native_s": 0.04954218864440918,
+   "default_s": 0.13478922843933105,
+   "tuned_s": 0.11381721496582031,
+   "default": 2.721,
+   "tuned": 2.297
+  },
+  {
+   "label": "Reverse by swaps",
+   "native_s": 0.04761004447937012,
+   "default_s": 0.07528805732727051,
+   "tuned_s": 0.06476020812988281,
+   "default": 1.581,
+   "tuned": 1.36
+  },
+  {
+   "label": "Push and pop stack",
+   "native_s": 0.08133602142333984,
+   "default_s": 0.0751800537109375,
+   "tuned_s": 0.08864617347717285,
+   "default": 0.924,
+   "tuned": 1.09
+  },
+  {
+   "label": "Proved AES-256",
+   "native_s": 2.51,
+   "default_s": 4.6,
+   "tuned_s": 4.6,
+   "default": 1.833,
+   "tuned": 1.833
+  }
+ ]
+}
