@@ -841,3 +841,33 @@ def entry (n : Nat) : Nat :=
   let opts := a.map (fun x => if x > 4 then some x else none)
   pairs.foldl (fun s (p, q) => s + p * q) 0 + opts.foldl (fun s o => s + o.getD 100) 0
 ''')
+add("variant_poly_const", '''
+inductive T where
+  | leaf
+  | node : T -> Nat -> T -> T
+
+def T.ins : T -> Nat -> T
+  | .leaf, k => .node .leaf k .leaf
+  | .node l x r, k => if k < x then .node (l.ins k) x r else .node l x (r.ins k)
+
+def T.fold (f : Nat -> σ -> σ) : T -> σ -> σ
+  | .leaf, b => b
+  | .node l k r, b => T.fold f r (f k (T.fold f l b))
+
+def entry (n : Nat) : Nat :=
+  let t := (List.range (n + 3)).foldl (fun t i => t.ins ((i * 7) % 11)) T.leaf
+  t.fold (fun k acc => acc * 3 + k) 0
+''')
+add("array_same_cap", '''
+def entry (n : Nat) : Nat :=
+  let u8 : Array UInt8 := Id.run do
+    let mut r := Array.mkEmpty 4
+    for x in [0:n + 1] do r := r.push x.toUInt8
+    return r
+  let v := u8.map (fun x => x.toNat * 1000)
+  let r := Id.run do
+    let mut arr : Array Nat := Array.mkEmpty 4
+    for i in [0:n + 1] do arr := arr.push (i * i)
+    return arr
+  r.foldl (fun acc x => acc * 5 + x) 0 + v.foldl (· + ·) 0
+''')

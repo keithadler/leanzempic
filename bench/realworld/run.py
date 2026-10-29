@@ -6,8 +6,8 @@ bench: interleaved best-of-5 wall/CPU/peak RSS (via /usr/bin/time -l), output co
 import os, subprocess, sys, json, time, re, resource, shutil
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(os.path.dirname(HERE))
 OUT = f"{HERE}/out"
-NAMES = ["binarytrees", "const_fold", "deriv", "qsort", "rbmap", "unionfind"]
-CANDIDATES = NAMES + ["rbmap_checkpoint", "nat_repr"]
+NAMES = ["binarytrees", "const_fold", "deriv", "qsort", "rbmap", "rbmap_checkpoint", "unionfind"]
+CANDIDATES = NAMES + ["nat_repr"]
 SIZES = json.load(open(f"{HERE}/sizes.json")) if os.path.exists(f"{HERE}/sizes.json") else {}
 REPS = int(os.environ.get("REPS", "5"))
 CFG = {"default": ("", "-A128m"), "recommended": ("set_option zempic.fuse true\n", "-A256m -O1g")}

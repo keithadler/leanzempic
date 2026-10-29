@@ -72,11 +72,11 @@ def one(name):
 
 # A subset that touches every feature area, for CI (the full garden is about 15 CPU-minutes).
 CI_SET = ["shared_rare_write", "shared_twice", "int_arith", "int_match", "float_math", "string_split", "string_chars", "string_pos", "str_ops",
-          "str_map_any", "hashmap", "hashmap_str", "hashset", "array_funcs", "array_word_paths", "array_misc", "array_qsort",
+          "str_map_any", "hashmap", "hashmap_str", "hashset", "array_funcs", "array_word_paths", "array_same_cap", "array_misc", "array_qsort",
           "subarray", "bytearray", "list_mergesort", "list_funcs", "state_monad", "except_monad",
           "state_except_stack", "struct_update", "typeclass", "expr_tree", "functor_tree", "vec_indexed",
           "mutual_rec", "partial_def", "deriving", "thunk_lazy", "bignum", "uint_conv", "closures",
-          "parser_monad", "early_return", "nested_loops_break"]
+          "variant_poly_const", "parser_monad", "early_return", "nested_loops_break"]
 
 if __name__ == "__main__":
     names = sys.argv[1:] or (CI_SET if os.environ.get("GARDEN_SET") == "ci" else sorted(P))

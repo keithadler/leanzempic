@@ -255,6 +255,9 @@ structure St where
   shares : Std.HashSet (Name × FVarId × Nat) := {}
   /-- The function being printed (variable ids repeat across functions). -/
   cur : Name := Name.anonymous
+  /-- Fresh arrays whose uses disagree about the element type (Lean's CSE merged two `Array.mkEmpty`
+  calls of different element types): they get a boxed buffer. -/
+  mixedArrs : Std.HashSet FVarId := {}
   /-- Variables known to be this `Nat` literal in the function being printed. -/
   known : Std.HashMap FVarId Nat := {}
   /-- Variables known to be this `Bool` (a comparison of known numbers). -/
@@ -794,7 +797,7 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
       let hs ← if hs == "arrMkEmpty" || hs == "arrReplicate" || hs == "arrOfList" then
           match elem? with
           | some elem =>
-            let k ← elemKind elem
+            let k ← if (← get).mixedArrs.contains letId then pure 0 else elemKind elem
             pure (if k == 0 then hs else s!"{hs}K {k}")
           | none => pure hs
         else pure hs
@@ -860,6 +863,41 @@ partial def onlyOverwrittenAt (x i : FVarId) : Code .pure → Bool
     | .default k => onlyOverwrittenAt x i k
   | _ => false
 
+/-- The element kinds (see `elemKind`) that the code demands of array variable `x`, from the type
+argument of an `Array.*` primitive that takes it and from the parameter type of a function it is
+passed to. A use whose element type is erased, unknown or the `NonScalar` pun of the in-place
+`Array.map` says nothing and is skipped. -/
+partial def useKinds (x : FVarId) : Code .pure → EmitM (List Nat)
+  | .let d k => do
+    let here : List Nat ← match d.value with
+      | .const c _ args => do
+        let mut out : List Nat := []
+        let isEl := fun (e : Expr) => !e.isErased && !(e.isConstOf `Zempic.NonScalar) && !(e.isConstOf `NonScalar)
+        for a in args, i in [0:args.size] do
+          if let .fvar y := a then
+            if y == x then
+              if c.getPrefix == `Array then
+                if let some (Arg.type e _) := args[0]? then
+                  if isEl e then out := (← elemKind e) :: out
+              else if let some cd ← monoDecl? c then
+                if let some prm := cd.params[i]? then
+                  if let .app (.const `Array _) e := prm.type then
+                    if isEl e then out := (← elemKind e) :: out
+        pure out
+      | _ => pure []
+    return here ++ (← useKinds x k)
+  | .fun d k => return (← useKinds x d.value) ++ (← useKinds x k)
+  | .jp d k => return (← useKinds x d.value) ++ (← useKinds x k)
+  | .cases cs => do
+    let mut out : List Nat := []
+    for alt in cs.alts do
+      match alt with
+      | .alt _ _ k => out := out ++ (← useKinds x k)
+      | .default k => out := out ++ (← useKinds x k)
+    return out
+  | _ => return []
+
+
 mutual
 /-- Print LCNF code as a Haskell expression whose result has type `ret`. -/
 partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String := do
@@ -894,6 +932,17 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
           else (d, k)
         | _ => (d, k)
       | _, _ => (d, k)
+    -- Lean's CSE merges `Array.mkEmpty` calls of different element types into one variable, and the
+    -- type on the `let` is only the first one's. Pick an unboxed buffer only if every use agrees.
+    match d.value with
+    | .const c _ _ =>
+      if [`Array.mkEmpty, `Array.emptyWithCapacity, `Array.replicate, `List.toArray, `List.toArrayImpl, `Array.mk].contains c then
+        let ks ← useKinds d.fvarId k
+        let want ← match d.type.getAppFn, d.type.getAppArgs with
+          | .const `Array _, #[elem] => elemKind elem
+          | _, _ => pure 0
+        if ks.any (· != want) then modify fun s => { s with mixedArrs := s.mixedArrs.insert d.fvarId }
+    | _ => pure ()
     let (rhs, ty) ← hsLetValue d.value d.type d.fvarId
     noteExpr d.fvarId d.type
     let x ← bindT d.fvarId d.binderName ty
@@ -1022,7 +1071,9 @@ def hsVariant (d : Decl .pure) (ks : Array (Option Nat)) : EmitM String := do
   for p in d.params, k in ks, nm in ps, t in tys do
     match k with
     | some v =>
-      modify fun s => { s with known := s.known.insert p.fvarId v }
+      -- The fixed parameter is bound below as a `ZNat` whatever its declared type: a polymorphic
+      -- parameter is `Any`, and its uses would otherwise skip the cast (`zo`) to `Any`.
+      modify fun s => { s with known := s.known.insert p.fvarId v, tys := s.tys.insert p.fvarId "ZNat" }
       pre := pre ++ s!"let \{ !{nm} = ({v} :: ZNat) } in\n{pad 1}"
     | none =>
       sig := sig ++ [t]

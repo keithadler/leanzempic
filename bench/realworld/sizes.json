@@ -1,1 +1,1 @@
-{"binarytrees":19,"const_fold":500,"deriv":10,"qsort":300,"unionfind":3000000,"nat_repr":10000}
+{"binarytrees":19,"const_fold":500,"deriv":10,"qsort":300,"unionfind":3000000,"nat_repr":10000,"rbmap":2000000,"rbmap_checkpoint":2000000}

@@ -51,24 +51,24 @@ load averages at the start of each program's runs (1/5/15 min): binarytrees 4.7/
 Ratios are wall time of leanzempic over native Lean, so below 1.00x means leanzempic is faster. CPU time
 tracks wall time everywhere (single-threaded on both sides).
 
-## The failure
+## The failure (fixed)
 
-**rbmap** (the classic red-black tree benchmark) does not compile. `#zempic` emits the Haskell, GHC rejects it:
+**rbmap** and **rbmap_checkpoint** originally did not compile: GHC rejected `ZC_Tree_leaf -> v326_x2` ("Couldn't
+match expected type 'Any' with actual type 'ZNat'"). Real cause: not a missing box in the specialization, but
+`hsVariant` (the copy of a recursive function with a literal argument fixed, `z_fold_..._ux_x_0`) bound the fixed
+parameter as a `ZNat` while still recording the parameter's declared type, `Any` (upstream's `fold` is
+polymorphic in the accumulator), so uses of it skipped the `zo` cast. Fixed in `Zempic/Emit.lean`; the garden
+program `variant_poly_const` reproduces it. Both now pass. Timings with the fix (best of 5, interleaved; machine
+loaded, load average about 10, so absolute times are inflated and ratios approximate):
 
-```
-out/rbmap/default/Out/Fast.hs:238:7: error: [GHC-83865]
-    Couldn't match expected type 'Any' with actual type 'ZNat'
-    In the expression: v326_x2
-    In a case alternative: ZC_Tree_leaf -> v326_x2
-```
+| program | n | native s | default s, ratio | recommended s, ratio |
+|---|---|---|---|---|
+| rbmap | 2000000 | 1.22 | 0.51, 0.42x | 0.51, 0.42x |
+| rbmap_checkpoint | 2000000 | 1.45 | 1.11, 0.77x | 1.00, 0.69x |
 
-Cause (from the generated code): upstream's `fold (f : Nat -> Bool -> sigma -> sigma) : Tree -> sigma -> sigma` is
-polymorphic in `sigma`. leanzempic specializes it at `sigma := Nat` (`z_fold_'uredArg_ux_x_0`), declares the
-result as `Any`, but returns the specialized leaf case as an unboxed `ZNat` literal (`let !v326_x2 = (0 :: ZNat)`
-then `ZC_Tree_leaf -> v326_x2`) with no `zo` cast. It is a leanzempic bug (a missing box on the base case of a
-specialized polymorphic fold), not a limitation. Same failure with fusion on, and the next candidate
-`rbmap_checkpoint` (same `fold`) fails identically, so it was replaced by `nat_repr`, which compiled. Not fixed
-here (out of scope); fix is probably where the specialization wraps return values.
+Outputs identical across native, default and recommended. rbmap matches upstream's expected output at its own
+argument (10000); rbmap_checkpoint has no upstream expected file, so `verify.py` checks it against upstream's own
+`main` run natively at `100000 10` ("10001 10000").
 
 Also not attempted (and not committed): `liasolver` (needs `Lean.AssocList`/`Std.HashMap`/iterators imports and reads a file),
 `binarytrees` in its upstream parallel form, and the `IO`-based benchmarks, because there is no `IO`.
