@@ -1,0 +1,85 @@
+inductive Expr
+| Var : Nat → Expr
+| Val : Nat → Expr
+| Add : Expr → Expr → Expr
+| Mul : Expr → Expr → Expr
+
+namespace Expr
+open Nat
+
+def mkExpr : Nat → Nat → Expr
+| 0,     v => if v = 0 then Var 1 else Val v
+| n+1,   v => Add (mkExpr n (v+1)) (mkExpr n (v-1))
+
+def appendAdd : Expr → Expr → Expr
+| Add e₁ e₂,   e₃ => Add e₁ (appendAdd e₂ e₃)
+| e₁,          e₂ => Add e₁ e₂
+
+def appendMul : Expr → Expr → Expr
+| Mul e₁ e₂,   e₃ => Mul e₁ (appendMul e₂ e₃)
+| e₁,          e₂ => Mul e₁ e₂
+
+def reassoc : Expr → Expr
+| Add e₁ e₂   =>
+  let e₁' := reassoc e₁;
+  let e₂' := reassoc e₂;
+  appendAdd e₁' e₂'
+| Mul e₁ e₂   =>
+  let e₁' := reassoc e₁;
+  let e₂' := reassoc e₂;
+  appendMul e₁' e₂'
+| e => e
+
+def constFolding : Expr → Expr
+| Add e₁ e₂   =>
+  let e₁ := constFolding e₁;
+  let e₂ := constFolding e₂;
+  (match e₁, e₂ with
+   | Val a, Val b         => Val (a+b)
+   | Val a, Add e (Val b) => Add (Val (a+b)) e
+   | Val a, Add (Val b) e => Add (Val (a+b)) e
+   | _,     _             => Add e₁ e₂)
+| Mul e₁ e₂   =>
+  let e₁ := constFolding e₁;
+  let e₂ := constFolding e₂;
+  (match e₁, e₂ with
+   | Val a, Val b         => Val (a*b)
+   | Val a, Mul e (Val b) => Mul (Val (a*b)) e
+   | Val a, Mul (Val b) e => Mul (Val (a*b)) e
+   | _,     _             => Mul e₁ e₂)
+| e         => e
+
+def size : Expr → Nat
+| Add l r   => size l + size r + 1
+| Mul l r   => size l + size r + 1
+| e         => 1
+
+def toStringAux : Expr → String → String
+| Var v,       r => r ++ "#" ++ toString v
+| Val v,       r => r ++ toString v
+| Add e₁ e₂,   r => (toStringAux e₂ ((toStringAux e₁ (r ++ "(")) ++ " + ")) ++ ")"
+| Mul e₁ e₂,   r => (toStringAux e₂ ((toStringAux e₁ (r ++ "(")) ++ " * ")) ++ ")"
+
+def eval : Expr → Nat
+| Var x   => 0
+| Val v   => v
+| Add l r   => eval l + eval r
+| Mul l r   => eval l * eval r
+
+end Expr
+
+
+open Expr
+
+-- ADAPTER (pure): upstream main prints "v1 v2" for ONE tree of depth n (default 15).  Native Lean overflows
+-- its 8 MB stack above depth 16 (non-tail recursion down a 2^n right spine), so to get a measurable run the
+-- depth stays at 15 and the work is repeated `reps` times with a different leaf seed each time (so no
+-- repetition can be shared).  reps=1 reproduces upstream's answer.
+def entry (reps : Nat) : Nat := Id.run do
+  let mut a := 0
+  let mut b := 0
+  for r in [0:reps] do
+    let e  := mkExpr 15 (1 + r)
+    a := a + eval e
+    b := b + eval (constFolding (reassoc e))
+  return a * 1099511627776 + b
