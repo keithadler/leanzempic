@@ -119,38 +119,38 @@ uszAdd :: Word -> Word -> Word =
     \r [eta_B0 eta_B1] $fNumWord_$c+ eta_B0 eta_B1;
 
 u64ToUsz :: Word64 -> Word =
-    \r [eta_swIG]
-        case eta_swIG of wild_swIH {
-        W64# x#_swII ->
-        case word64ToWord# [x#_swII] of u64ToUsz_sat_swIJ {
-        __DEFAULT -> W# [u64ToUsz_sat_swIJ];
+    \r [eta_sxzq]
+        case eta_sxzq of wild_sxzr {
+        W64# x#_sxzs ->
+        case word64ToWord# [x#_sxzs] of u64ToUsz_sat_sxzt {
+        __DEFAULT -> W# [u64ToUsz_sat_sxzt];
         };
         };
 
 u32ToUsz :: Word32 -> Word =
-    \r [eta_swIK]
-        case eta_swIK of wild_swIL {
-        W32# x#_swIM ->
-        case word32ToWord# [x#_swIM] of u32ToUsz_sat_swIN {
-        __DEFAULT -> W# [u32ToUsz_sat_swIN];
+    \r [eta_sxzu]
+        case eta_sxzu of wild_sxzv {
+        W32# x#_sxzw ->
+        case word32ToWord# [x#_sxzw] of u32ToUsz_sat_sxzx {
+        __DEFAULT -> W# [u32ToUsz_sat_sxzx];
         };
         };
 
 u16ToUsz :: Word16 -> Word =
-    \r [eta_swIO]
-        case eta_swIO of wild_swIP {
-        W16# x#_swIQ ->
-        case word16ToWord# [x#_swIQ] of u16ToUsz_sat_swIR {
-        __DEFAULT -> W# [u16ToUsz_sat_swIR];
+    \r [eta_sxzy]
+        case eta_sxzy of wild_sxzz {
+        W16# x#_sxzA ->
+        case word16ToWord# [x#_sxzA] of u16ToUsz_sat_sxzB {
+        __DEFAULT -> W# [u16ToUsz_sat_sxzB];
         };
         };
 
 u8ToUsz :: Word8 -> Word =
-    \r [eta_swIS]
-        case eta_swIS of wild_swIT {
-        W8# x#_swIU ->
-        case word8ToWord# [x#_swIU] of u8ToUsz_sat_swIV {
-        __DEFAULT -> W# [u8ToUsz_sat_swIV];
+    \r [eta_sxzC]
+        case eta_sxzC of wild_sxzD {
+        W8# x#_sxzE ->
+        case word8ToWord# [x#_sxzE] of u8ToUsz_sat_sxzF {
+        __DEFAULT -> W# [u8ToUsz_sat_sxzF];
         };
         };
 
@@ -164,37 +164,37 @@ uszLt :: Word -> Word -> Bool =
     \r [eta_B0 eta_B1] ltWord eta_B0 eta_B1;
 
 u64ToU8 :: Word64 -> Word8 =
-    \r [eta_swIW]
-        case eta_swIW of wild_swIX {
-        W64# x#_swIY ->
-        case word64ToWord# [x#_swIY] of u64ToU8_sat_swIZ {
+    \r [eta_sxzG]
+        case eta_sxzG of wild_sxzH {
+        W64# x#_sxzI ->
+        case word64ToWord# [x#_sxzI] of u64ToU8_sat_sxzJ {
         __DEFAULT ->
-        case wordToWord8# [u64ToU8_sat_swIZ] of u64ToU8_sat_swJ0 {
-        __DEFAULT -> W8# [u64ToU8_sat_swJ0];
+        case wordToWord8# [u64ToU8_sat_sxzJ] of u64ToU8_sat_sxzK {
+        __DEFAULT -> W8# [u64ToU8_sat_sxzK];
         };
         };
         };
 
 u32ToU8 :: Word32 -> Word8 =
-    \r [eta_swJ1]
-        case eta_swJ1 of wild_swJ2 {
-        W32# x#_swJ3 ->
-        case word32ToWord# [x#_swJ3] of u32ToU8_sat_swJ4 {
+    \r [eta_sxzL]
+        case eta_sxzL of wild_sxzM {
+        W32# x#_sxzN ->
+        case word32ToWord# [x#_sxzN] of u32ToU8_sat_sxzO {
         __DEFAULT ->
-        case wordToWord8# [u32ToU8_sat_swJ4] of u32ToU8_sat_swJ5 {
-        __DEFAULT -> W8# [u32ToU8_sat_swJ5];
+        case wordToWord8# [u32ToU8_sat_sxzO] of u32ToU8_sat_sxzP {
+        __DEFAULT -> W8# [u32ToU8_sat_sxzP];
         };
         };
         };
 
 u16ToU8 :: Word16 -> Word8 =
-    \r [eta_swJ6]
-        case eta_swJ6 of wild_swJ7 {
-        W16# x#_swJ8 ->
-        case word16ToWord# [x#_swJ8] of u16ToU8_sat_swJ9 {
+    \r [eta_sxzQ]
+        case eta_sxzQ of wild_sxzR {
+        W16# x#_sxzS ->
+        case word16ToWord# [x#_sxzS] of u16ToU8_sat_sxzT {
         __DEFAULT ->
-        case wordToWord8# [u16ToU8_sat_swJ9] of u16ToU8_sat_swJa {
-        __DEFAULT -> W8# [u16ToU8_sat_swJa];
+        case wordToWord8# [u16ToU8_sat_sxzT] of u16ToU8_sat_sxzU {
+        __DEFAULT -> W8# [u16ToU8_sat_sxzU];
         };
         };
         };
@@ -202,38 +202,38 @@ u16ToU8 :: Word16 -> Word8 =
 u8Neg :: Word8 -> Word8 = \r [eta_B0] $fNumWord8_$cnegate eta_B0;
 
 u8Shr :: Word8 -> Word8 -> Word8 =
-    \r [x_swJb y_swJc]
-        case x_swJb of wild_swJd {
-        W8# x#_swJe ->
-        case y_swJc of wild1_swJf {
-        W8# x#1_swJg ->
-        case remWord8# [x#1_swJg 8#Word8] of ds_u8Shr_sat_swJi {
+    \r [x_sxzV y_sxzW]
+        case x_sxzV of wild_sxzX {
+        W8# x#_sxzY ->
+        case y_sxzW of wild1_sxzZ {
+        W8# x#1_sxA0 ->
+        case remWord8# [x#1_sxA0 8#Word8] of ds_u8Shr_sat_sxA2 {
         __DEFAULT ->
-        case word8ToWord# [ds_u8Shr_sat_swJi] of ds_swJh {
+        case word8ToWord# [ds_u8Shr_sat_sxA2] of ds_sxA1 {
         __DEFAULT ->
-        case word2Int# [ds_swJh] of ds1_swJj {
+        case word2Int# [ds_sxA1] of ds1_sxA3 {
         __DEFAULT ->
-        case >=# [ds1_swJj 0#] of lwild_swJk {
+        case >=# [ds1_sxA3 0#] of lwild_sxA4 {
           __DEFAULT -> overflowError;
           1# ->
-              case <# [ds1_swJj 64#] of u8Shr_sat_swJn {
+              case <# [ds1_sxA3 64#] of u8Shr_sat_sxA7 {
               __DEFAULT ->
-              case negateInt# [u8Shr_sat_swJn] of u8Shr_sat_swJo {
+              case negateInt# [u8Shr_sat_sxA7] of u8Shr_sat_sxA8 {
               __DEFAULT ->
-              case int2Word# [u8Shr_sat_swJo] of u8Shr_sat_swJp {
+              case int2Word# [u8Shr_sat_sxA8] of u8Shr_sat_sxA9 {
               __DEFAULT ->
-              case word8ToWord# [x#_swJe] of u8Shr_sat_swJl {
+              case word8ToWord# [x#_sxzY] of u8Shr_sat_sxA5 {
               __DEFAULT ->
               case
-                  uncheckedShiftRL# [u8Shr_sat_swJl ds1_swJj]
+                  uncheckedShiftRL# [u8Shr_sat_sxA5 ds1_sxA3]
               of
-              u8Shr_sat_swJm
+              u8Shr_sat_sxA6
               {
               __DEFAULT ->
-              case and# [u8Shr_sat_swJm u8Shr_sat_swJp] of u8Shr_sat_swJq {
+              case and# [u8Shr_sat_sxA6 u8Shr_sat_sxA9] of u8Shr_sat_sxAa {
               __DEFAULT ->
-              case wordToWord8# [u8Shr_sat_swJq] of u8Shr_sat_swJr {
-              __DEFAULT -> W8# [u8Shr_sat_swJr];
+              case wordToWord8# [u8Shr_sat_sxAa] of u8Shr_sat_sxAb {
+              __DEFAULT -> W8# [u8Shr_sat_sxAb];
               };
               };
               };
@@ -249,34 +249,34 @@ u8Shr :: Word8 -> Word8 -> Word8 =
         };
 
 u8Shl :: Word8 -> Word8 -> Word8 =
-    \r [x_swJs y_swJt]
-        case x_swJs of wild_swJu {
-        W8# x#_swJv ->
-        case y_swJt of wild1_swJw {
-        W8# x#1_swJx ->
-        case remWord8# [x#1_swJx 8#Word8] of ds_u8Shl_sat_swJz {
+    \r [x_sxAc y_sxAd]
+        case x_sxAc of wild_sxAe {
+        W8# x#_sxAf ->
+        case y_sxAd of wild1_sxAg {
+        W8# x#1_sxAh ->
+        case remWord8# [x#1_sxAh 8#Word8] of ds_u8Shl_sat_sxAj {
         __DEFAULT ->
-        case word8ToWord# [ds_u8Shl_sat_swJz] of ds_swJy {
+        case word8ToWord# [ds_u8Shl_sat_sxAj] of ds_sxAi {
         __DEFAULT ->
-        case word2Int# [ds_swJy] of ds1_swJA {
+        case word2Int# [ds_sxAi] of ds1_sxAk {
         __DEFAULT ->
-        case >=# [ds1_swJA 0#] of lwild_swJB {
+        case >=# [ds1_sxAk 0#] of lwild_sxAl {
           __DEFAULT -> overflowError;
           1# ->
-              case <# [ds1_swJA 64#] of u8Shl_sat_swJE {
+              case <# [ds1_sxAk 64#] of u8Shl_sat_sxAo {
               __DEFAULT ->
-              case negateInt# [u8Shl_sat_swJE] of u8Shl_sat_swJF {
+              case negateInt# [u8Shl_sat_sxAo] of u8Shl_sat_sxAp {
               __DEFAULT ->
-              case int2Word# [u8Shl_sat_swJF] of u8Shl_sat_swJG {
+              case int2Word# [u8Shl_sat_sxAp] of u8Shl_sat_sxAq {
               __DEFAULT ->
-              case word8ToWord# [x#_swJv] of u8Shl_sat_swJC {
+              case word8ToWord# [x#_sxAf] of u8Shl_sat_sxAm {
               __DEFAULT ->
-              case uncheckedShiftL# [u8Shl_sat_swJC ds1_swJA] of u8Shl_sat_swJD {
+              case uncheckedShiftL# [u8Shl_sat_sxAm ds1_sxAk] of u8Shl_sat_sxAn {
               __DEFAULT ->
-              case and# [u8Shl_sat_swJD u8Shl_sat_swJG] of u8Shl_sat_swJH {
+              case and# [u8Shl_sat_sxAn u8Shl_sat_sxAq] of u8Shl_sat_sxAr {
               __DEFAULT ->
-              case wordToWord8# [u8Shl_sat_swJH] of u8Shl_sat_swJI {
-              __DEFAULT -> W8# [u8Shl_sat_swJI];
+              case wordToWord8# [u8Shl_sat_sxAr] of u8Shl_sat_sxAs {
+              __DEFAULT -> W8# [u8Shl_sat_sxAs];
               };
               };
               };
@@ -292,36 +292,36 @@ u8Shl :: Word8 -> Word8 -> Word8 =
         };
 
 u8Mod :: Word8 -> Word8 -> Word8 =
-    \r [x_swJJ y_swJK]
-        case y_swJK of wild_swJL {
-        W8# x1_swJM ->
-        case word8ToWord# [x1_swJM] of wild1_swJN {
+    \r [x_sxAt y_sxAu]
+        case y_sxAu of wild_sxAv {
+        W8# x1_sxAw ->
+        case word8ToWord# [x1_sxAw] of wild1_sxAx {
           __DEFAULT ->
-              case x_swJJ of wild2_swJO {
-              W8# x#_swJP ->
-              case remWord8# [x#_swJP x1_swJM] of ds1_swJQ {
-              __DEFAULT -> W8# [ds1_swJQ];
+              case x_sxAt of wild2_sxAy {
+              W8# x#_sxAz ->
+              case remWord8# [x#_sxAz x1_sxAw] of ds1_sxAA {
+              __DEFAULT -> W8# [ds1_sxAA];
               };
               };
-          0## -> x_swJJ;
+          0## -> x_sxAt;
         };
         };
 
-lvl_rwIB :: Word8 = W8#! [0#Word8];
+lvl_rxzl :: Word8 = W8#! [0#Word8];
 
 u8Div :: Word8 -> Word8 -> Word8 =
-    \r [x_swJR y_swJS]
-        case y_swJS of wild_swJT {
-        W8# x1_swJU ->
-        case word8ToWord# [x1_swJU] of wild1_swJV {
+    \r [x_sxAB y_sxAC]
+        case y_sxAC of wild_sxAD {
+        W8# x1_sxAE ->
+        case word8ToWord# [x1_sxAE] of wild1_sxAF {
           __DEFAULT ->
-              case x_swJR of wild2_swJW {
-              W8# x#_swJX ->
-              case quotWord8# [x#_swJX x1_swJU] of ds1_swJY {
-              __DEFAULT -> W8# [ds1_swJY];
+              case x_sxAB of wild2_sxAG {
+              W8# x#_sxAH ->
+              case quotWord8# [x#_sxAH x1_sxAE] of ds1_sxAI {
+              __DEFAULT -> W8# [ds1_sxAI];
               };
               };
-          0## -> lvl_rwIB<TagProper>;
+          0## -> lvl_rxzl<TagProper>;
         };
         };
 
@@ -335,25 +335,25 @@ u8Add :: Word8 -> Word8 -> Word8 =
     \r [eta_B0 eta_B1] $fNumWord8_$c+ eta_B0 eta_B1;
 
 u64ToU16 :: Word64 -> Word16 =
-    \r [eta_swJZ]
-        case eta_swJZ of wild_swK0 {
-        W64# x#_swK1 ->
-        case word64ToWord# [x#_swK1] of u64ToU16_sat_swK2 {
+    \r [eta_sxAJ]
+        case eta_sxAJ of wild_sxAK {
+        W64# x#_sxAL ->
+        case word64ToWord# [x#_sxAL] of u64ToU16_sat_sxAM {
         __DEFAULT ->
-        case wordToWord16# [u64ToU16_sat_swK2] of u64ToU16_sat_swK3 {
-        __DEFAULT -> W16# [u64ToU16_sat_swK3];
+        case wordToWord16# [u64ToU16_sat_sxAM] of u64ToU16_sat_sxAN {
+        __DEFAULT -> W16# [u64ToU16_sat_sxAN];
         };
         };
         };
 
 u32ToU16 :: Word32 -> Word16 =
-    \r [eta_swK4]
-        case eta_swK4 of wild_swK5 {
-        W32# x#_swK6 ->
-        case word32ToWord# [x#_swK6] of u32ToU16_sat_swK7 {
+    \r [eta_sxAO]
+        case eta_sxAO of wild_sxAP {
+        W32# x#_sxAQ ->
+        case word32ToWord# [x#_sxAQ] of u32ToU16_sat_sxAR {
         __DEFAULT ->
-        case wordToWord16# [u32ToU16_sat_swK7] of u32ToU16_sat_swK8 {
-        __DEFAULT -> W16# [u32ToU16_sat_swK8];
+        case wordToWord16# [u32ToU16_sat_sxAR] of u32ToU16_sat_sxAS {
+        __DEFAULT -> W16# [u32ToU16_sat_sxAS];
         };
         };
         };
@@ -362,38 +362,38 @@ u16Neg :: Word16 -> Word16 =
     \r [eta_B0] $fNumWord16_$cnegate eta_B0;
 
 u16Shr :: Word16 -> Word16 -> Word16 =
-    \r [x_swK9 y_swKa]
-        case x_swK9 of wild_swKb {
-        W16# x#_swKc ->
-        case y_swKa of wild1_swKd {
-        W16# x#1_swKe ->
-        case remWord16# [x#1_swKe 16#Word16] of ds_u16Shr_sat_swKg {
+    \r [x_sxAT y_sxAU]
+        case x_sxAT of wild_sxAV {
+        W16# x#_sxAW ->
+        case y_sxAU of wild1_sxAX {
+        W16# x#1_sxAY ->
+        case remWord16# [x#1_sxAY 16#Word16] of ds_u16Shr_sat_sxB0 {
         __DEFAULT ->
-        case word16ToWord# [ds_u16Shr_sat_swKg] of ds_swKf {
+        case word16ToWord# [ds_u16Shr_sat_sxB0] of ds_sxAZ {
         __DEFAULT ->
-        case word2Int# [ds_swKf] of ds1_swKh {
+        case word2Int# [ds_sxAZ] of ds1_sxB1 {
         __DEFAULT ->
-        case >=# [ds1_swKh 0#] of lwild_swKi {
+        case >=# [ds1_sxB1 0#] of lwild_sxB2 {
           __DEFAULT -> overflowError;
           1# ->
-              case <# [ds1_swKh 64#] of u16Shr_sat_swKl {
+              case <# [ds1_sxB1 64#] of u16Shr_sat_sxB5 {
               __DEFAULT ->
-              case negateInt# [u16Shr_sat_swKl] of u16Shr_sat_swKm {
+              case negateInt# [u16Shr_sat_sxB5] of u16Shr_sat_sxB6 {
               __DEFAULT ->
-              case int2Word# [u16Shr_sat_swKm] of u16Shr_sat_swKn {
+              case int2Word# [u16Shr_sat_sxB6] of u16Shr_sat_sxB7 {
               __DEFAULT ->
-              case word16ToWord# [x#_swKc] of u16Shr_sat_swKj {
+              case word16ToWord# [x#_sxAW] of u16Shr_sat_sxB3 {
               __DEFAULT ->
               case
-                  uncheckedShiftRL# [u16Shr_sat_swKj ds1_swKh]
+                  uncheckedShiftRL# [u16Shr_sat_sxB3 ds1_sxB1]
               of
-              u16Shr_sat_swKk
+              u16Shr_sat_sxB4
               {
               __DEFAULT ->
-              case and# [u16Shr_sat_swKk u16Shr_sat_swKn] of u16Shr_sat_swKo {
+              case and# [u16Shr_sat_sxB4 u16Shr_sat_sxB7] of u16Shr_sat_sxB8 {
               __DEFAULT ->
-              case wordToWord16# [u16Shr_sat_swKo] of u16Shr_sat_swKp {
-              __DEFAULT -> W16# [u16Shr_sat_swKp];
+              case wordToWord16# [u16Shr_sat_sxB8] of u16Shr_sat_sxB9 {
+              __DEFAULT -> W16# [u16Shr_sat_sxB9];
               };
               };
               };
@@ -409,38 +409,38 @@ u16Shr :: Word16 -> Word16 -> Word16 =
         };
 
 u16Shl :: Word16 -> Word16 -> Word16 =
-    \r [x_swKq y_swKr]
-        case x_swKq of wild_swKs {
-        W16# x#_swKt ->
-        case y_swKr of wild1_swKu {
-        W16# x#1_swKv ->
-        case remWord16# [x#1_swKv 16#Word16] of ds_u16Shl_sat_swKx {
+    \r [x_sxBa y_sxBb]
+        case x_sxBa of wild_sxBc {
+        W16# x#_sxBd ->
+        case y_sxBb of wild1_sxBe {
+        W16# x#1_sxBf ->
+        case remWord16# [x#1_sxBf 16#Word16] of ds_u16Shl_sat_sxBh {
         __DEFAULT ->
-        case word16ToWord# [ds_u16Shl_sat_swKx] of ds_swKw {
+        case word16ToWord# [ds_u16Shl_sat_sxBh] of ds_sxBg {
         __DEFAULT ->
-        case word2Int# [ds_swKw] of ds1_swKy {
+        case word2Int# [ds_sxBg] of ds1_sxBi {
         __DEFAULT ->
-        case >=# [ds1_swKy 0#] of lwild_swKz {
+        case >=# [ds1_sxBi 0#] of lwild_sxBj {
           __DEFAULT -> overflowError;
           1# ->
-              case <# [ds1_swKy 64#] of u16Shl_sat_swKC {
+              case <# [ds1_sxBi 64#] of u16Shl_sat_sxBm {
               __DEFAULT ->
-              case negateInt# [u16Shl_sat_swKC] of u16Shl_sat_swKD {
+              case negateInt# [u16Shl_sat_sxBm] of u16Shl_sat_sxBn {
               __DEFAULT ->
-              case int2Word# [u16Shl_sat_swKD] of u16Shl_sat_swKE {
+              case int2Word# [u16Shl_sat_sxBn] of u16Shl_sat_sxBo {
               __DEFAULT ->
-              case word16ToWord# [x#_swKt] of u16Shl_sat_swKA {
+              case word16ToWord# [x#_sxBd] of u16Shl_sat_sxBk {
               __DEFAULT ->
               case
-                  uncheckedShiftL# [u16Shl_sat_swKA ds1_swKy]
+                  uncheckedShiftL# [u16Shl_sat_sxBk ds1_sxBi]
               of
-              u16Shl_sat_swKB
+              u16Shl_sat_sxBl
               {
               __DEFAULT ->
-              case and# [u16Shl_sat_swKB u16Shl_sat_swKE] of u16Shl_sat_swKF {
+              case and# [u16Shl_sat_sxBl u16Shl_sat_sxBo] of u16Shl_sat_sxBp {
               __DEFAULT ->
-              case wordToWord16# [u16Shl_sat_swKF] of u16Shl_sat_swKG {
-              __DEFAULT -> W16# [u16Shl_sat_swKG];
+              case wordToWord16# [u16Shl_sat_sxBp] of u16Shl_sat_sxBq {
+              __DEFAULT -> W16# [u16Shl_sat_sxBq];
               };
               };
               };
@@ -456,36 +456,36 @@ u16Shl :: Word16 -> Word16 -> Word16 =
         };
 
 u16Mod :: Word16 -> Word16 -> Word16 =
-    \r [x_swKH y_swKI]
-        case y_swKI of wild_swKJ {
-        W16# x1_swKK ->
-        case word16ToWord# [x1_swKK] of wild1_swKL {
+    \r [x_sxBr y_sxBs]
+        case y_sxBs of wild_sxBt {
+        W16# x1_sxBu ->
+        case word16ToWord# [x1_sxBu] of wild1_sxBv {
           __DEFAULT ->
-              case x_swKH of wild2_swKM {
-              W16# x#_swKN ->
-              case remWord16# [x#_swKN x1_swKK] of ds1_swKO {
-              __DEFAULT -> W16# [ds1_swKO];
+              case x_sxBr of wild2_sxBw {
+              W16# x#_sxBx ->
+              case remWord16# [x#_sxBx x1_sxBu] of ds1_sxBy {
+              __DEFAULT -> W16# [ds1_sxBy];
               };
               };
-          0## -> x_swKH;
+          0## -> x_sxBr;
         };
         };
 
-lvl1_rwIC :: Word16 = W16#! [0#Word16];
+lvl1_rxzm :: Word16 = W16#! [0#Word16];
 
 u16Div :: Word16 -> Word16 -> Word16 =
-    \r [x_swKP y_swKQ]
-        case y_swKQ of wild_swKR {
-        W16# x1_swKS ->
-        case word16ToWord# [x1_swKS] of wild1_swKT {
+    \r [x_sxBz y_sxBA]
+        case y_sxBA of wild_sxBB {
+        W16# x1_sxBC ->
+        case word16ToWord# [x1_sxBC] of wild1_sxBD {
           __DEFAULT ->
-              case x_swKP of wild2_swKU {
-              W16# x#_swKV ->
-              case quotWord16# [x#_swKV x1_swKS] of ds1_swKW {
-              __DEFAULT -> W16# [ds1_swKW];
+              case x_sxBz of wild2_sxBE {
+              W16# x#_sxBF ->
+              case quotWord16# [x#_sxBF x1_sxBC] of ds1_sxBG {
+              __DEFAULT -> W16# [ds1_sxBG];
               };
               };
-          0## -> lvl1_rwIC<TagProper>;
+          0## -> lvl1_rxzm<TagProper>;
         };
         };
 
@@ -499,25 +499,25 @@ u16Add :: Word16 -> Word16 -> Word16 =
     \r [eta_B0 eta_B1] $fNumWord16_$c+ eta_B0 eta_B1;
 
 u8ToU16 :: Word8 -> Word16 =
-    \r [eta_swKX]
-        case eta_swKX of wild_swKY {
-        W8# x#_swKZ ->
-        case word8ToWord# [x#_swKZ] of u8ToU16_sat_swL0 {
+    \r [eta_sxBH]
+        case eta_sxBH of wild_sxBI {
+        W8# x#_sxBJ ->
+        case word8ToWord# [x#_sxBJ] of u8ToU16_sat_sxBK {
         __DEFAULT ->
-        case wordToWord16# [u8ToU16_sat_swL0] of u8ToU16_sat_swL1 {
-        __DEFAULT -> W16# [u8ToU16_sat_swL1];
+        case wordToWord16# [u8ToU16_sat_sxBK] of u8ToU16_sat_sxBL {
+        __DEFAULT -> W16# [u8ToU16_sat_sxBL];
         };
         };
         };
 
 u64ToU32 :: Word64 -> Word32 =
-    \r [eta_swL2]
-        case eta_swL2 of wild_swL3 {
-        W64# x#_swL4 ->
-        case word64ToWord# [x#_swL4] of u64ToU32_sat_swL5 {
+    \r [eta_sxBM]
+        case eta_sxBM of wild_sxBN {
+        W64# x#_sxBO ->
+        case word64ToWord# [x#_sxBO] of u64ToU32_sat_sxBP {
         __DEFAULT ->
-        case wordToWord32# [u64ToU32_sat_swL5] of u64ToU32_sat_swL6 {
-        __DEFAULT -> W32# [u64ToU32_sat_swL6];
+        case wordToWord32# [u64ToU32_sat_sxBP] of u64ToU32_sat_sxBQ {
+        __DEFAULT -> W32# [u64ToU32_sat_sxBQ];
         };
         };
         };
@@ -526,38 +526,38 @@ u32Neg :: Word32 -> Word32 =
     \r [eta_B0] $fNumWord32_$cnegate eta_B0;
 
 u32Shr :: Word32 -> Word32 -> Word32 =
-    \r [x_swL7 y_swL8]
-        case x_swL7 of wild_swL9 {
-        W32# x#_swLa ->
-        case y_swL8 of wild1_swLb {
-        W32# x#1_swLc ->
-        case remWord32# [x#1_swLc 32#Word32] of ds_u32Shr_sat_swLe {
+    \r [x_sxBR y_sxBS]
+        case x_sxBR of wild_sxBT {
+        W32# x#_sxBU ->
+        case y_sxBS of wild1_sxBV {
+        W32# x#1_sxBW ->
+        case remWord32# [x#1_sxBW 32#Word32] of ds_u32Shr_sat_sxBY {
         __DEFAULT ->
-        case word32ToWord# [ds_u32Shr_sat_swLe] of ds_swLd {
+        case word32ToWord# [ds_u32Shr_sat_sxBY] of ds_sxBX {
         __DEFAULT ->
-        case word2Int# [ds_swLd] of ds1_swLf {
+        case word2Int# [ds_sxBX] of ds1_sxBZ {
         __DEFAULT ->
-        case >=# [ds1_swLf 0#] of lwild_swLg {
+        case >=# [ds1_sxBZ 0#] of lwild_sxC0 {
           __DEFAULT -> overflowError;
           1# ->
-              case <# [ds1_swLf 64#] of u32Shr_sat_swLj {
+              case <# [ds1_sxBZ 64#] of u32Shr_sat_sxC3 {
               __DEFAULT ->
-              case negateInt# [u32Shr_sat_swLj] of u32Shr_sat_swLk {
+              case negateInt# [u32Shr_sat_sxC3] of u32Shr_sat_sxC4 {
               __DEFAULT ->
-              case int2Word# [u32Shr_sat_swLk] of u32Shr_sat_swLl {
+              case int2Word# [u32Shr_sat_sxC4] of u32Shr_sat_sxC5 {
               __DEFAULT ->
-              case word32ToWord# [x#_swLa] of u32Shr_sat_swLh {
+              case word32ToWord# [x#_sxBU] of u32Shr_sat_sxC1 {
               __DEFAULT ->
               case
-                  uncheckedShiftRL# [u32Shr_sat_swLh ds1_swLf]
+                  uncheckedShiftRL# [u32Shr_sat_sxC1 ds1_sxBZ]
               of
-              u32Shr_sat_swLi
+              u32Shr_sat_sxC2
               {
               __DEFAULT ->
-              case and# [u32Shr_sat_swLi u32Shr_sat_swLl] of u32Shr_sat_swLm {
+              case and# [u32Shr_sat_sxC2 u32Shr_sat_sxC5] of u32Shr_sat_sxC6 {
               __DEFAULT ->
-              case wordToWord32# [u32Shr_sat_swLm] of u32Shr_sat_swLn {
-              __DEFAULT -> W32# [u32Shr_sat_swLn];
+              case wordToWord32# [u32Shr_sat_sxC6] of u32Shr_sat_sxC7 {
+              __DEFAULT -> W32# [u32Shr_sat_sxC7];
               };
               };
               };
@@ -573,38 +573,38 @@ u32Shr :: Word32 -> Word32 -> Word32 =
         };
 
 u32Shl :: Word32 -> Word32 -> Word32 =
-    \r [x_swLo y_swLp]
-        case x_swLo of wild_swLq {
-        W32# x#_swLr ->
-        case y_swLp of wild1_swLs {
-        W32# x#1_swLt ->
-        case remWord32# [x#1_swLt 32#Word32] of ds_u32Shl_sat_swLv {
+    \r [x_sxC8 y_sxC9]
+        case x_sxC8 of wild_sxCa {
+        W32# x#_sxCb ->
+        case y_sxC9 of wild1_sxCc {
+        W32# x#1_sxCd ->
+        case remWord32# [x#1_sxCd 32#Word32] of ds_u32Shl_sat_sxCf {
         __DEFAULT ->
-        case word32ToWord# [ds_u32Shl_sat_swLv] of ds_swLu {
+        case word32ToWord# [ds_u32Shl_sat_sxCf] of ds_sxCe {
         __DEFAULT ->
-        case word2Int# [ds_swLu] of ds1_swLw {
+        case word2Int# [ds_sxCe] of ds1_sxCg {
         __DEFAULT ->
-        case >=# [ds1_swLw 0#] of lwild_swLx {
+        case >=# [ds1_sxCg 0#] of lwild_sxCh {
           __DEFAULT -> overflowError;
           1# ->
-              case <# [ds1_swLw 64#] of u32Shl_sat_swLA {
+              case <# [ds1_sxCg 64#] of u32Shl_sat_sxCk {
               __DEFAULT ->
-              case negateInt# [u32Shl_sat_swLA] of u32Shl_sat_swLB {
+              case negateInt# [u32Shl_sat_sxCk] of u32Shl_sat_sxCl {
               __DEFAULT ->
-              case int2Word# [u32Shl_sat_swLB] of u32Shl_sat_swLC {
+              case int2Word# [u32Shl_sat_sxCl] of u32Shl_sat_sxCm {
               __DEFAULT ->
-              case word32ToWord# [x#_swLr] of u32Shl_sat_swLy {
+              case word32ToWord# [x#_sxCb] of u32Shl_sat_sxCi {
               __DEFAULT ->
               case
-                  uncheckedShiftL# [u32Shl_sat_swLy ds1_swLw]
+                  uncheckedShiftL# [u32Shl_sat_sxCi ds1_sxCg]
               of
-              u32Shl_sat_swLz
+              u32Shl_sat_sxCj
               {
               __DEFAULT ->
-              case and# [u32Shl_sat_swLz u32Shl_sat_swLC] of u32Shl_sat_swLD {
+              case and# [u32Shl_sat_sxCj u32Shl_sat_sxCm] of u32Shl_sat_sxCn {
               __DEFAULT ->
-              case wordToWord32# [u32Shl_sat_swLD] of u32Shl_sat_swLE {
-              __DEFAULT -> W32# [u32Shl_sat_swLE];
+              case wordToWord32# [u32Shl_sat_sxCn] of u32Shl_sat_sxCo {
+              __DEFAULT -> W32# [u32Shl_sat_sxCo];
               };
               };
               };
@@ -620,36 +620,36 @@ u32Shl :: Word32 -> Word32 -> Word32 =
         };
 
 u32Mod :: Word32 -> Word32 -> Word32 =
-    \r [x_swLF y_swLG]
-        case y_swLG of wild_swLH {
-        W32# x1_swLI ->
-        case word32ToWord# [x1_swLI] of wild1_swLJ {
+    \r [x_sxCp y_sxCq]
+        case y_sxCq of wild_sxCr {
+        W32# x1_sxCs ->
+        case word32ToWord# [x1_sxCs] of wild1_sxCt {
           __DEFAULT ->
-              case x_swLF of wild2_swLK {
-              W32# x#_swLL ->
-              case remWord32# [x#_swLL x1_swLI] of ds1_swLM {
-              __DEFAULT -> W32# [ds1_swLM];
+              case x_sxCp of wild2_sxCu {
+              W32# x#_sxCv ->
+              case remWord32# [x#_sxCv x1_sxCs] of ds1_sxCw {
+              __DEFAULT -> W32# [ds1_sxCw];
               };
               };
-          0## -> x_swLF;
+          0## -> x_sxCp;
         };
         };
 
-lvl2_rwID :: Word32 = W32#! [0#Word32];
+lvl2_rxzn :: Word32 = W32#! [0#Word32];
 
 u32Div :: Word32 -> Word32 -> Word32 =
-    \r [x_swLN y_swLO]
-        case y_swLO of wild_swLP {
-        W32# x1_swLQ ->
-        case word32ToWord# [x1_swLQ] of wild1_swLR {
+    \r [x_sxCx y_sxCy]
+        case y_sxCy of wild_sxCz {
+        W32# x1_sxCA ->
+        case word32ToWord# [x1_sxCA] of wild1_sxCB {
           __DEFAULT ->
-              case x_swLN of wild2_swLS {
-              W32# x#_swLT ->
-              case quotWord32# [x#_swLT x1_swLQ] of ds1_swLU {
-              __DEFAULT -> W32# [ds1_swLU];
+              case x_sxCx of wild2_sxCC {
+              W32# x#_sxCD ->
+              case quotWord32# [x#_sxCD x1_sxCA] of ds1_sxCE {
+              __DEFAULT -> W32# [ds1_sxCE];
               };
               };
-          0## -> lvl2_rwID<TagProper>;
+          0## -> lvl2_rxzn<TagProper>;
         };
         };
 
@@ -663,25 +663,25 @@ u32Add :: Word32 -> Word32 -> Word32 =
     \r [eta_B0 eta_B1] $fNumWord32_$c+ eta_B0 eta_B1;
 
 u16ToU32 :: Word16 -> Word32 =
-    \r [eta_swLV]
-        case eta_swLV of wild_swLW {
-        W16# x#_swLX ->
-        case word16ToWord# [x#_swLX] of u16ToU32_sat_swLY {
+    \r [eta_sxCF]
+        case eta_sxCF of wild_sxCG {
+        W16# x#_sxCH ->
+        case word16ToWord# [x#_sxCH] of u16ToU32_sat_sxCI {
         __DEFAULT ->
-        case wordToWord32# [u16ToU32_sat_swLY] of u16ToU32_sat_swLZ {
-        __DEFAULT -> W32# [u16ToU32_sat_swLZ];
+        case wordToWord32# [u16ToU32_sat_sxCI] of u16ToU32_sat_sxCJ {
+        __DEFAULT -> W32# [u16ToU32_sat_sxCJ];
         };
         };
         };
 
 u8ToU32 :: Word8 -> Word32 =
-    \r [eta_swM0]
-        case eta_swM0 of wild_swM1 {
-        W8# x#_swM2 ->
-        case word8ToWord# [x#_swM2] of u8ToU32_sat_swM3 {
+    \r [eta_sxCK]
+        case eta_sxCK of wild_sxCL {
+        W8# x#_sxCM ->
+        case word8ToWord# [x#_sxCM] of u8ToU32_sat_sxCN {
         __DEFAULT ->
-        case wordToWord32# [u8ToU32_sat_swM3] of u8ToU32_sat_swM4 {
-        __DEFAULT -> W32# [u8ToU32_sat_swM4];
+        case wordToWord32# [u8ToU32_sat_sxCN] of u8ToU32_sat_sxCO {
+        __DEFAULT -> W32# [u8ToU32_sat_sxCO];
         };
         };
         };
@@ -690,32 +690,32 @@ u64Neg :: Word64 -> Word64 =
     \r [eta_B0] $fNumWord64_$cnegate eta_B0;
 
 u64Shr :: Word64 -> Word64 -> Word64 =
-    \r [x_swM5 y_swM6]
-        case x_swM5 of wild_swM7 {
-        W64# x#_swM8 ->
-        case y_swM6 of wild1_swM9 {
-        W64# x#1_swMa ->
-        case remWord64# [x#1_swMa 64#Word64] of ds_u64Shr_sat_swMc {
+    \r [x_sxCP y_sxCQ]
+        case x_sxCP of wild_sxCR {
+        W64# x#_sxCS ->
+        case y_sxCQ of wild1_sxCT {
+        W64# x#1_sxCU ->
+        case remWord64# [x#1_sxCU 64#Word64] of ds_u64Shr_sat_sxCW {
         __DEFAULT ->
-        case word64ToWord# [ds_u64Shr_sat_swMc] of ds_swMb {
+        case word64ToWord# [ds_u64Shr_sat_sxCW] of ds_sxCV {
         __DEFAULT ->
-        case word2Int# [ds_swMb] of ds1_swMd {
+        case word2Int# [ds_sxCV] of ds1_sxCX {
         __DEFAULT ->
-        case >=# [ds1_swMd 0#] of lwild_swMe {
+        case >=# [ds1_sxCX 0#] of lwild_sxCY {
           __DEFAULT -> overflowError;
           1# ->
-              case <# [ds1_swMd 64#] of u64Shr_sat_swMg {
+              case <# [ds1_sxCX 64#] of u64Shr_sat_sxD0 {
               __DEFAULT ->
-              case negateInt# [u64Shr_sat_swMg] of u64Shr_sat_swMh {
+              case negateInt# [u64Shr_sat_sxD0] of u64Shr_sat_sxD1 {
               __DEFAULT ->
-              case intToInt64# [u64Shr_sat_swMh] of u64Shr_sat_swMi {
+              case intToInt64# [u64Shr_sat_sxD1] of u64Shr_sat_sxD2 {
               __DEFAULT ->
-              case int64ToWord64# [u64Shr_sat_swMi] of u64Shr_sat_swMj {
+              case int64ToWord64# [u64Shr_sat_sxD2] of u64Shr_sat_sxD3 {
               __DEFAULT ->
-              case uncheckedShiftRL64# [x#_swM8 ds1_swMd] of u64Shr_sat_swMf {
+              case uncheckedShiftRL64# [x#_sxCS ds1_sxCX] of u64Shr_sat_sxCZ {
               __DEFAULT ->
-              case and64# [u64Shr_sat_swMf u64Shr_sat_swMj] of u64Shr_sat_swMk {
-              __DEFAULT -> W64# [u64Shr_sat_swMk];
+              case and64# [u64Shr_sat_sxCZ u64Shr_sat_sxD3] of u64Shr_sat_sxD4 {
+              __DEFAULT -> W64# [u64Shr_sat_sxD4];
               };
               };
               };
@@ -730,32 +730,32 @@ u64Shr :: Word64 -> Word64 -> Word64 =
         };
 
 u64Shl :: Word64 -> Word64 -> Word64 =
-    \r [x_swMl y_swMm]
-        case x_swMl of wild_swMn {
-        W64# x#_swMo ->
-        case y_swMm of wild1_swMp {
-        W64# x#1_swMq ->
-        case remWord64# [x#1_swMq 64#Word64] of ds_u64Shl_sat_swMs {
+    \r [x_sxD5 y_sxD6]
+        case x_sxD5 of wild_sxD7 {
+        W64# x#_sxD8 ->
+        case y_sxD6 of wild1_sxD9 {
+        W64# x#1_sxDa ->
+        case remWord64# [x#1_sxDa 64#Word64] of ds_u64Shl_sat_sxDc {
         __DEFAULT ->
-        case word64ToWord# [ds_u64Shl_sat_swMs] of ds_swMr {
+        case word64ToWord# [ds_u64Shl_sat_sxDc] of ds_sxDb {
         __DEFAULT ->
-        case word2Int# [ds_swMr] of ds1_swMt {
+        case word2Int# [ds_sxDb] of ds1_sxDd {
         __DEFAULT ->
-        case >=# [ds1_swMt 0#] of lwild_swMu {
+        case >=# [ds1_sxDd 0#] of lwild_sxDe {
           __DEFAULT -> overflowError;
           1# ->
-              case <# [ds1_swMt 64#] of u64Shl_sat_swMw {
+              case <# [ds1_sxDd 64#] of u64Shl_sat_sxDg {
               __DEFAULT ->
-              case negateInt# [u64Shl_sat_swMw] of u64Shl_sat_swMx {
+              case negateInt# [u64Shl_sat_sxDg] of u64Shl_sat_sxDh {
               __DEFAULT ->
-              case intToInt64# [u64Shl_sat_swMx] of u64Shl_sat_swMy {
+              case intToInt64# [u64Shl_sat_sxDh] of u64Shl_sat_sxDi {
               __DEFAULT ->
-              case int64ToWord64# [u64Shl_sat_swMy] of u64Shl_sat_swMz {
+              case int64ToWord64# [u64Shl_sat_sxDi] of u64Shl_sat_sxDj {
               __DEFAULT ->
-              case uncheckedShiftL64# [x#_swMo ds1_swMt] of u64Shl_sat_swMv {
+              case uncheckedShiftL64# [x#_sxD8 ds1_sxDd] of u64Shl_sat_sxDf {
               __DEFAULT ->
-              case and64# [u64Shl_sat_swMv u64Shl_sat_swMz] of u64Shl_sat_swMA {
-              __DEFAULT -> W64# [u64Shl_sat_swMA];
+              case and64# [u64Shl_sat_sxDf u64Shl_sat_sxDj] of u64Shl_sat_sxDk {
+              __DEFAULT -> W64# [u64Shl_sat_sxDk];
               };
               };
               };
@@ -770,36 +770,36 @@ u64Shl :: Word64 -> Word64 -> Word64 =
         };
 
 u64Mod :: Word64 -> Word64 -> Word64 =
-    \r [x_swMB y_swMC]
-        case y_swMC of wild_swMD {
-        W64# x1_swME ->
-        case x1_swME<TagProper> of wild1_swMF {
+    \r [x_sxDl y_sxDm]
+        case y_sxDm of wild_sxDn {
+        W64# x1_sxDo ->
+        case x1_sxDo<TagProper> of wild1_sxDp {
           __DEFAULT ->
-              case x_swMB of wild2_swMG {
-              W64# x#_swMH ->
-              case remWord64# [x#_swMH wild1_swMF] of ds1_swMI {
-              __DEFAULT -> W64# [ds1_swMI];
+              case x_sxDl of wild2_sxDq {
+              W64# x#_sxDr ->
+              case remWord64# [x#_sxDr wild1_sxDp] of ds1_sxDs {
+              __DEFAULT -> W64# [ds1_sxDs];
               };
               };
-          0#Word64 -> x_swMB;
+          0#Word64 -> x_sxDl;
         };
         };
 
-lvl3_rwIE :: Word64 = W64#! [0#Word64];
+lvl3_rxzo :: Word64 = W64#! [0#Word64];
 
 u64Div :: Word64 -> Word64 -> Word64 =
-    \r [x_swMJ y_swMK]
-        case y_swMK of wild_swML {
-        W64# x1_swMM ->
-        case x1_swMM<TagProper> of wild1_swMN {
+    \r [x_sxDt y_sxDu]
+        case y_sxDu of wild_sxDv {
+        W64# x1_sxDw ->
+        case x1_sxDw<TagProper> of wild1_sxDx {
           __DEFAULT ->
-              case x_swMJ of wild2_swMO {
-              W64# x#_swMP ->
-              case quotWord64# [x#_swMP wild1_swMN] of ds1_swMQ {
-              __DEFAULT -> W64# [ds1_swMQ];
+              case x_sxDt of wild2_sxDy {
+              W64# x#_sxDz ->
+              case quotWord64# [x#_sxDz wild1_sxDx] of ds1_sxDA {
+              __DEFAULT -> W64# [ds1_sxDA];
               };
               };
-          0#Word64 -> lvl3_rwIE<TagProper>;
+          0#Word64 -> lvl3_rxzo<TagProper>;
         };
         };
 
@@ -813,17 +813,17 @@ u64Add :: Word64 -> Word64 -> Word64 =
     \r [eta_B0 eta_B1] $fNumWord64_$c+ eta_B0 eta_B1;
 
 u32ToU64 :: Word32 -> Word64 =
-    \r [eta_swMR]
-        case eta_swMR of wild_swMS {
-        W32# x#_swMT ->
-        case word32ToWord# [x#_swMT] of u32ToU64_sat_swMU {
+    \r [eta_sxDB]
+        case eta_sxDB of wild_sxDC {
+        W32# x#_sxDD ->
+        case word32ToWord# [x#_sxDD] of u32ToU64_sat_sxDE {
         __DEFAULT ->
-        case word2Int# [u32ToU64_sat_swMU] of u32ToU64_sat_swMV {
+        case word2Int# [u32ToU64_sat_sxDE] of u32ToU64_sat_sxDF {
         __DEFAULT ->
-        case intToInt64# [u32ToU64_sat_swMV] of u32ToU64_sat_swMW {
+        case intToInt64# [u32ToU64_sat_sxDF] of u32ToU64_sat_sxDG {
         __DEFAULT ->
-        case int64ToWord64# [u32ToU64_sat_swMW] of u32ToU64_sat_swMX {
-        __DEFAULT -> W64# [u32ToU64_sat_swMX];
+        case int64ToWord64# [u32ToU64_sat_sxDG] of u32ToU64_sat_sxDH {
+        __DEFAULT -> W64# [u32ToU64_sat_sxDH];
         };
         };
         };
@@ -831,17 +831,17 @@ u32ToU64 :: Word32 -> Word64 =
         };
 
 u16ToU64 :: Word16 -> Word64 =
-    \r [eta_swMY]
-        case eta_swMY of wild_swMZ {
-        W16# x#_swN0 ->
-        case word16ToWord# [x#_swN0] of u16ToU64_sat_swN1 {
+    \r [eta_sxDI]
+        case eta_sxDI of wild_sxDJ {
+        W16# x#_sxDK ->
+        case word16ToWord# [x#_sxDK] of u16ToU64_sat_sxDL {
         __DEFAULT ->
-        case word2Int# [u16ToU64_sat_swN1] of u16ToU64_sat_swN2 {
+        case word2Int# [u16ToU64_sat_sxDL] of u16ToU64_sat_sxDM {
         __DEFAULT ->
-        case intToInt64# [u16ToU64_sat_swN2] of u16ToU64_sat_swN3 {
+        case intToInt64# [u16ToU64_sat_sxDM] of u16ToU64_sat_sxDN {
         __DEFAULT ->
-        case int64ToWord64# [u16ToU64_sat_swN3] of u16ToU64_sat_swN4 {
-        __DEFAULT -> W64# [u16ToU64_sat_swN4];
+        case int64ToWord64# [u16ToU64_sat_sxDN] of u16ToU64_sat_sxDO {
+        __DEFAULT -> W64# [u16ToU64_sat_sxDO];
         };
         };
         };
@@ -849,17 +849,17 @@ u16ToU64 :: Word16 -> Word64 =
         };
 
 u8ToU64 :: Word8 -> Word64 =
-    \r [eta_swN5]
-        case eta_swN5 of wild_swN6 {
-        W8# x#_swN7 ->
-        case word8ToWord# [x#_swN7] of u8ToU64_sat_swN8 {
+    \r [eta_sxDP]
+        case eta_sxDP of wild_sxDQ {
+        W8# x#_sxDR ->
+        case word8ToWord# [x#_sxDR] of u8ToU64_sat_sxDS {
         __DEFAULT ->
-        case word2Int# [u8ToU64_sat_swN8] of u8ToU64_sat_swN9 {
+        case word2Int# [u8ToU64_sat_sxDS] of u8ToU64_sat_sxDT {
         __DEFAULT ->
-        case intToInt64# [u8ToU64_sat_swN9] of u8ToU64_sat_swNa {
+        case intToInt64# [u8ToU64_sat_sxDT] of u8ToU64_sat_sxDU {
         __DEFAULT ->
-        case int64ToWord64# [u8ToU64_sat_swNa] of u8ToU64_sat_swNb {
-        __DEFAULT -> W64# [u8ToU64_sat_swNb];
+        case int64ToWord64# [u8ToU64_sat_sxDU] of u8ToU64_sat_sxDV {
+        __DEFAULT -> W64# [u8ToU64_sat_sxDV];
         };
         };
         };
@@ -867,64 +867,64 @@ u8ToU64 :: Word8 -> Word64 =
         };
 
 uszToU64 :: Word -> Word64 =
-    \r [eta_swNc]
-        case eta_swNc of wild_swNd {
-        W# x#_swNe ->
-        case wordToWord64# [x#_swNe] of uszToU64_sat_swNf {
-        __DEFAULT -> W64# [uszToU64_sat_swNf];
+    \r [eta_sxDW]
+        case eta_sxDW of wild_sxDX {
+        W# x#_sxDY ->
+        case wordToWord64# [x#_sxDY] of uszToU64_sat_sxDZ {
+        __DEFAULT -> W64# [uszToU64_sat_sxDZ];
         };
         };
 
 uszToU32 :: Word -> Word32 =
-    \r [eta_swNg]
-        case eta_swNg of wild_swNh {
-        W# x#_swNi ->
-        case wordToWord32# [x#_swNi] of uszToU32_sat_swNj {
-        __DEFAULT -> W32# [uszToU32_sat_swNj];
+    \r [eta_sxE0]
+        case eta_sxE0 of wild_sxE1 {
+        W# x#_sxE2 ->
+        case wordToWord32# [x#_sxE2] of uszToU32_sat_sxE3 {
+        __DEFAULT -> W32# [uszToU32_sat_sxE3];
         };
         };
 
 uszToU16 :: Word -> Word16 =
-    \r [eta_swNk]
-        case eta_swNk of wild_swNl {
-        W# x#_swNm ->
-        case wordToWord16# [x#_swNm] of uszToU16_sat_swNn {
-        __DEFAULT -> W16# [uszToU16_sat_swNn];
+    \r [eta_sxE4]
+        case eta_sxE4 of wild_sxE5 {
+        W# x#_sxE6 ->
+        case wordToWord16# [x#_sxE6] of uszToU16_sat_sxE7 {
+        __DEFAULT -> W16# [uszToU16_sat_sxE7];
         };
         };
 
 uszToU8 :: Word -> Word8 =
-    \r [eta_swNo]
-        case eta_swNo of wild_swNp {
-        W# x#_swNq ->
-        case wordToWord8# [x#_swNq] of uszToU8_sat_swNr {
-        __DEFAULT -> W8# [uszToU8_sat_swNr];
+    \r [eta_sxE8]
+        case eta_sxE8 of wild_sxE9 {
+        W# x#_sxEa ->
+        case wordToWord8# [x#_sxEa] of uszToU8_sat_sxEb {
+        __DEFAULT -> W8# [uszToU8_sat_sxEb];
         };
         };
 
 uszShr :: Word -> Word -> Word =
-    \r [x_swNs y_swNt]
-        case x_swNs of wild_swNu {
-        W# x#_swNv ->
-        case y_swNt of wild1_swNw {
-        W# x#1_swNx ->
-        case remWord# [x#1_swNx 64##] of ds_swNy {
+    \r [x_sxEc y_sxEd]
+        case x_sxEc of wild_sxEe {
+        W# x#_sxEf ->
+        case y_sxEd of wild1_sxEg {
+        W# x#1_sxEh ->
+        case remWord# [x#1_sxEh 64##] of ds_sxEi {
         __DEFAULT ->
-        case word2Int# [ds_swNy] of ds1_swNz {
+        case word2Int# [ds_sxEi] of ds1_sxEj {
         __DEFAULT ->
-        case >=# [ds1_swNz 0#] of lwild_swNA {
+        case >=# [ds1_sxEj 0#] of lwild_sxEk {
           __DEFAULT -> overflowError;
           1# ->
-              case <# [ds1_swNz 64#] of uszShr_sat_swNC {
+              case <# [ds1_sxEj 64#] of uszShr_sat_sxEm {
               __DEFAULT ->
-              case negateInt# [uszShr_sat_swNC] of uszShr_sat_swND {
+              case negateInt# [uszShr_sat_sxEm] of uszShr_sat_sxEn {
               __DEFAULT ->
-              case int2Word# [uszShr_sat_swND] of uszShr_sat_swNE {
+              case int2Word# [uszShr_sat_sxEn] of uszShr_sat_sxEo {
               __DEFAULT ->
-              case uncheckedShiftRL# [x#_swNv ds1_swNz] of uszShr_sat_swNB {
+              case uncheckedShiftRL# [x#_sxEf ds1_sxEj] of uszShr_sat_sxEl {
               __DEFAULT ->
-              case and# [uszShr_sat_swNB uszShr_sat_swNE] of uszShr_sat_swNF {
-              __DEFAULT -> W# [uszShr_sat_swNF];
+              case and# [uszShr_sat_sxEl uszShr_sat_sxEo] of uszShr_sat_sxEp {
+              __DEFAULT -> W# [uszShr_sat_sxEp];
               };
               };
               };
@@ -937,28 +937,28 @@ uszShr :: Word -> Word -> Word =
         };
 
 uszShl :: Word -> Word -> Word =
-    \r [x_swNG y_swNH]
-        case x_swNG of wild_swNI {
-        W# x#_swNJ ->
-        case y_swNH of wild1_swNK {
-        W# x#1_swNL ->
-        case remWord# [x#1_swNL 64##] of ds_swNM {
+    \r [x_sxEq y_sxEr]
+        case x_sxEq of wild_sxEs {
+        W# x#_sxEt ->
+        case y_sxEr of wild1_sxEu {
+        W# x#1_sxEv ->
+        case remWord# [x#1_sxEv 64##] of ds_sxEw {
         __DEFAULT ->
-        case word2Int# [ds_swNM] of ds1_swNN {
+        case word2Int# [ds_sxEw] of ds1_sxEx {
         __DEFAULT ->
-        case >=# [ds1_swNN 0#] of lwild_swNO {
+        case >=# [ds1_sxEx 0#] of lwild_sxEy {
           __DEFAULT -> overflowError;
           1# ->
-              case <# [ds1_swNN 64#] of uszShl_sat_swNQ {
+              case <# [ds1_sxEx 64#] of uszShl_sat_sxEA {
               __DEFAULT ->
-              case negateInt# [uszShl_sat_swNQ] of uszShl_sat_swNR {
+              case negateInt# [uszShl_sat_sxEA] of uszShl_sat_sxEB {
               __DEFAULT ->
-              case int2Word# [uszShl_sat_swNR] of uszShl_sat_swNS {
+              case int2Word# [uszShl_sat_sxEB] of uszShl_sat_sxEC {
               __DEFAULT ->
-              case uncheckedShiftL# [x#_swNJ ds1_swNN] of uszShl_sat_swNP {
+              case uncheckedShiftL# [x#_sxEt ds1_sxEx] of uszShl_sat_sxEz {
               __DEFAULT ->
-              case and# [uszShl_sat_swNP uszShl_sat_swNS] of uszShl_sat_swNT {
-              __DEFAULT -> W# [uszShl_sat_swNT];
+              case and# [uszShl_sat_sxEz uszShl_sat_sxEC] of uszShl_sat_sxED {
+              __DEFAULT -> W# [uszShl_sat_sxED];
               };
               };
               };
@@ -971,36 +971,36 @@ uszShl :: Word -> Word -> Word =
         };
 
 uszMod :: Word -> Word -> Word =
-    \r [x_swNU y_swNV]
-        case y_swNV of wild_swNW {
-        W# x1_swNX ->
-        case x1_swNX<TagProper> of wild1_swNY {
+    \r [x_sxEE y_sxEF]
+        case y_sxEF of wild_sxEG {
+        W# x1_sxEH ->
+        case x1_sxEH<TagProper> of wild1_sxEI {
           __DEFAULT ->
-              case x_swNU of wild2_swNZ {
-              W# x#_swO0 ->
-              case remWord# [x#_swO0 wild1_swNY] of ds1_swO1 {
-              __DEFAULT -> W# [ds1_swO1];
+              case x_sxEE of wild2_sxEJ {
+              W# x#_sxEK ->
+              case remWord# [x#_sxEK wild1_sxEI] of ds1_sxEL {
+              __DEFAULT -> W# [ds1_sxEL];
               };
               };
-          0## -> x_swNU;
+          0## -> x_sxEE;
         };
         };
 
-lvl4_rwIF :: Word = W#! [0##];
+lvl4_rxzp :: Word = W#! [0##];
 
 uszDiv :: Word -> Word -> Word =
-    \r [x_swO2 y_swO3]
-        case y_swO3 of wild_swO4 {
-        W# x1_swO5 ->
-        case x1_swO5<TagProper> of wild1_swO6 {
+    \r [x_sxEM y_sxEN]
+        case y_sxEN of wild_sxEO {
+        W# x1_sxEP ->
+        case x1_sxEP<TagProper> of wild1_sxEQ {
           __DEFAULT ->
-              case x_swO2 of wild2_swO7 {
-              W# x#_swO8 ->
-              case quotWord# [x#_swO8 wild1_swO6] of ds1_swO9 {
-              __DEFAULT -> W# [ds1_swO9];
+              case x_sxEM of wild2_sxER {
+              W# x#_sxES ->
+              case quotWord# [x#_sxES wild1_sxEQ] of ds1_sxET {
+              __DEFAULT -> W# [ds1_sxET];
               };
               };
-          0## -> lvl4_rwIF<TagProper>;
+          0## -> lvl4_rxzp<TagProper>;
         };
         };
 

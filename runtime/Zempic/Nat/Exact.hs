@@ -360,11 +360,11 @@ arrPushU8 _ !a !v = arrIO (zo <$> aPushU8 (zu a) v)
 {-# INLINE arrPushU8 #-}
 
 arrSetU8 :: Any -> Any -> ZNat -> Word8 -> Any
-arrSetU8 _ !a !i !v = arrIO (zo <$> aSetU8 (zu a) (arrIx i) v)
+arrSetU8 _ !a !i !v = arrIO (aSetF8 (zu a) (arrIx i) v >>= \ok -> if ok then return a else zo <$> aSetU8 (zu a) (arrIx i) v)
 {-# INLINE arrSetU8 #-}
 
 arrUSetU8 :: Any -> Any -> Word -> Word8 -> Any -> Any
-arrUSetU8 _ !a !i !v _ = arrIO (zo <$> aSetU8 (zu a) (fromIntegral i) v)
+arrUSetU8 _ !a !i !v _ = arrIO (aSetF8 (zu a) (fromIntegral i) v >>= \ok -> if ok then return a else zo <$> aSetU8 (zu a) (fromIntegral i) v)
 {-# INLINE arrUSetU8 #-}
 
 idxErr16 :: Word16
@@ -388,11 +388,11 @@ arrPushU16 _ !a !v = arrIO (zo <$> aPushU16 (zu a) v)
 {-# INLINE arrPushU16 #-}
 
 arrSetU16 :: Any -> Any -> ZNat -> Word16 -> Any
-arrSetU16 _ !a !i !v = arrIO (zo <$> aSetU16 (zu a) (arrIx i) v)
+arrSetU16 _ !a !i !v = arrIO (aSetF16 (zu a) (arrIx i) v >>= \ok -> if ok then return a else zo <$> aSetU16 (zu a) (arrIx i) v)
 {-# INLINE arrSetU16 #-}
 
 arrUSetU16 :: Any -> Any -> Word -> Word16 -> Any -> Any
-arrUSetU16 _ !a !i !v _ = arrIO (zo <$> aSetU16 (zu a) (fromIntegral i) v)
+arrUSetU16 _ !a !i !v _ = arrIO (aSetF16 (zu a) (fromIntegral i) v >>= \ok -> if ok then return a else zo <$> aSetU16 (zu a) (fromIntegral i) v)
 {-# INLINE arrUSetU16 #-}
 
 idxErr32 :: Word32
@@ -416,11 +416,11 @@ arrPushU32 _ !a !v = arrIO (zo <$> aPushU32 (zu a) v)
 {-# INLINE arrPushU32 #-}
 
 arrSetU32 :: Any -> Any -> ZNat -> Word32 -> Any
-arrSetU32 _ !a !i !v = arrIO (zo <$> aSetU32 (zu a) (arrIx i) v)
+arrSetU32 _ !a !i !v = arrIO (aSetF32 (zu a) (arrIx i) v >>= \ok -> if ok then return a else zo <$> aSetU32 (zu a) (arrIx i) v)
 {-# INLINE arrSetU32 #-}
 
 arrUSetU32 :: Any -> Any -> Word -> Word32 -> Any -> Any
-arrUSetU32 _ !a !i !v _ = arrIO (zo <$> aSetU32 (zu a) (fromIntegral i) v)
+arrUSetU32 _ !a !i !v _ = arrIO (aSetF32 (zu a) (fromIntegral i) v >>= \ok -> if ok then return a else zo <$> aSetU32 (zu a) (fromIntegral i) v)
 {-# INLINE arrUSetU32 #-}
 
 idxErr64 :: Word64
@@ -444,51 +444,51 @@ arrPushU64 _ !a !v = arrIO (zo <$> aPushU64 (zu a) v)
 {-# INLINE arrPushU64 #-}
 
 arrSetU64 :: Any -> Any -> ZNat -> Word64 -> Any
-arrSetU64 _ !a !i !v = arrIO (zo <$> aSetU64 (zu a) (arrIx i) v)
+arrSetU64 _ !a !i !v = arrIO (aSetF64 (zu a) (arrIx i) v >>= \ok -> if ok then return a else zo <$> aSetU64 (zu a) (arrIx i) v)
 {-# INLINE arrSetU64 #-}
 
 arrUSetU64 :: Any -> Any -> Word -> Word64 -> Any -> Any
-arrUSetU64 _ !a !i !v _ = arrIO (zo <$> aSetU64 (zu a) (fromIntegral i) v)
+arrUSetU64 _ !a !i !v _ = arrIO (aSetF64 (zu a) (fromIntegral i) v >>= \ok -> if ok then return a else zo <$> aSetU64 (zu a) (fromIntegral i) v)
 {-# INLINE arrUSetU64 #-}
 
 arrSwapU8 :: Any -> Any -> ZNat -> ZNat -> Any
-arrSwapU8 _ !a !i !j = arrIO (zo <$> aSwapU8 (zu a) (arrIx i) (arrIx j))
+arrSwapU8 _ !a !i !j = arrIO (aSwapF8 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
 {-# INLINE arrSwapU8 #-}
 
 arrSwapPU8 :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
-arrSwapPU8 _ !a !i !j _ _ = arrIO (zo <$> aSwapU8 (zu a) (arrIx i) (arrIx j))
+arrSwapPU8 _ !a !i !j _ _ = arrIO (aSwapF8 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
 {-# INLINE arrSwapPU8 #-}
 
 arrSwapU16 :: Any -> Any -> ZNat -> ZNat -> Any
-arrSwapU16 _ !a !i !j = arrIO (zo <$> aSwapU16 (zu a) (arrIx i) (arrIx j))
+arrSwapU16 _ !a !i !j = arrIO (aSwapF16 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
 {-# INLINE arrSwapU16 #-}
 
 arrSwapPU16 :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
-arrSwapPU16 _ !a !i !j _ _ = arrIO (zo <$> aSwapU16 (zu a) (arrIx i) (arrIx j))
+arrSwapPU16 _ !a !i !j _ _ = arrIO (aSwapF16 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
 {-# INLINE arrSwapPU16 #-}
 
 arrSwapU32 :: Any -> Any -> ZNat -> ZNat -> Any
-arrSwapU32 _ !a !i !j = arrIO (zo <$> aSwapU32 (zu a) (arrIx i) (arrIx j))
+arrSwapU32 _ !a !i !j = arrIO (aSwapF32 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
 {-# INLINE arrSwapU32 #-}
 
 arrSwapPU32 :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
-arrSwapPU32 _ !a !i !j _ _ = arrIO (zo <$> aSwapU32 (zu a) (arrIx i) (arrIx j))
+arrSwapPU32 _ !a !i !j _ _ = arrIO (aSwapF32 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
 {-# INLINE arrSwapPU32 #-}
 
 arrSwapU64 :: Any -> Any -> ZNat -> ZNat -> Any
-arrSwapU64 _ !a !i !j = arrIO (zo <$> aSwapU64 (zu a) (arrIx i) (arrIx j))
+arrSwapU64 _ !a !i !j = arrIO (aSwapF64 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
 {-# INLINE arrSwapU64 #-}
 
 arrSwapPU64 :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
-arrSwapPU64 _ !a !i !j _ _ = arrIO (zo <$> aSwapU64 (zu a) (arrIx i) (arrIx j))
+arrSwapPU64 _ !a !i !j _ _ = arrIO (aSwapF64 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
 {-# INLINE arrSwapPU64 #-}
 
 arrSwapUW :: Any -> Any -> ZNat -> ZNat -> Any
-arrSwapUW _ !a !i !j = arrIO (zo <$> aSwapUW (zu a) (arrIx i) (arrIx j))
+arrSwapUW _ !a !i !j = arrIO (aSwapFW (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
 {-# INLINE arrSwapUW #-}
 
 arrSwapPUW :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
-arrSwapPUW _ !a !i !j _ _ = arrIO (zo <$> aSwapUW (zu a) (arrIx i) (arrIx j))
+arrSwapPUW _ !a !i !j _ _ = arrIO (aSwapFW (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
 {-# INLINE arrSwapPUW #-}
 
 -- Lean's String as a shared UTF-8 buffer (see Zempic.Str): amortized O(1) push and append.

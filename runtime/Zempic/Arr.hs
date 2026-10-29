@@ -21,7 +21,8 @@ module Zempic.Arr
   , aSetU, aPushU, aPopU, aSwapU, aDeopt, aShare
   , aRangeW, aDeoptW, aGetW, aGetWU, aGetWI, aGetWIS, aPushFromU, aPushUW, aSetUW, aSetUWB
   , aGetP8, aGetP16, aGetP32, aGetP64, aGetPS8, aGetPS16, aGetPS32, aGetPS64
-  , aSwapU8, aSwapU16, aSwapU32, aSwapU64, aSwapUW
+  , aSwapU8, aSwapU16, aSwapU32, aSwapU64, aSwapUW, aSwapF8, aSwapF16, aSwapF32, aSwapF64, aSwapFW
+  , aSetF8, aSetF16, aSetF32, aSetF64
   , aPushU8, aPushU16, aPushU32, aPushU64, aSetU8, aSetU16, aSetU32, aSetU64
   ) where
 
@@ -698,15 +699,22 @@ slowPush8 :: Arr -> Word8 -> IO Arr
 slowPush8 arr v = aPushU arr (unsafeCoerce v)
 {-# NOINLINE slowPush8 #-}
 
--- | `aSetU` for a `Word8` element: a live buffer of its kind is written in line.
-aSetU8 :: Arr -> Int -> Word8 -> IO Arr
-aSetU8 arr i !v
-  | outOfRange i arr = return arr
+-- | `aSetU` for a `Word8` element: a live buffer of its kind is written in line. 'aSetF8' says whether it was
+-- (an index out of range is a no-op and counts as done); otherwise the caller uses the generic set.
+aSetF8 :: Arr -> Int -> Word8 -> IO Bool
+aSetF8 arr i !v
+  | outOfRange i arr = return True
   | otherwise = do
       node <- readIORef (aRef arr)
       case node of
-        Direct (B8 a) c | c >= 0 -> unsafeWrite a i v >> return arr
-        _ -> slowSet8 arr i v
+        Direct (B8 a) c | c >= 0 -> unsafeWrite a i v >> return True
+        _ -> return False
+{-# INLINE aSetF8 #-}
+
+aSetU8 :: Arr -> Int -> Word8 -> IO Arr
+aSetU8 arr i !v = do
+  ok <- aSetF8 arr i v
+  if ok then return arr else slowSet8 arr i v
 {-# INLINE aSetU8 #-}
 
 slowSet8 :: Arr -> Int -> Word8 -> IO Arr
@@ -752,15 +760,22 @@ slowPush16 :: Arr -> Word16 -> IO Arr
 slowPush16 arr v = aPushU arr (unsafeCoerce v)
 {-# NOINLINE slowPush16 #-}
 
--- | `aSetU` for a `Word16` element: a live buffer of its kind is written in line.
-aSetU16 :: Arr -> Int -> Word16 -> IO Arr
-aSetU16 arr i !v
-  | outOfRange i arr = return arr
+-- | `aSetU` for a `Word16` element: a live buffer of its kind is written in line. 'aSetF16' says whether it was
+-- (an index out of range is a no-op and counts as done); otherwise the caller uses the generic set.
+aSetF16 :: Arr -> Int -> Word16 -> IO Bool
+aSetF16 arr i !v
+  | outOfRange i arr = return True
   | otherwise = do
       node <- readIORef (aRef arr)
       case node of
-        Direct (B16 a) c | c >= 0 -> unsafeWrite a i v >> return arr
-        _ -> slowSet16 arr i v
+        Direct (B16 a) c | c >= 0 -> unsafeWrite a i v >> return True
+        _ -> return False
+{-# INLINE aSetF16 #-}
+
+aSetU16 :: Arr -> Int -> Word16 -> IO Arr
+aSetU16 arr i !v = do
+  ok <- aSetF16 arr i v
+  if ok then return arr else slowSet16 arr i v
 {-# INLINE aSetU16 #-}
 
 slowSet16 :: Arr -> Int -> Word16 -> IO Arr
@@ -806,15 +821,22 @@ slowPush32 :: Arr -> Word32 -> IO Arr
 slowPush32 arr v = aPushU arr (unsafeCoerce v)
 {-# NOINLINE slowPush32 #-}
 
--- | `aSetU` for a `Word32` element: a live buffer of its kind is written in line.
-aSetU32 :: Arr -> Int -> Word32 -> IO Arr
-aSetU32 arr i !v
-  | outOfRange i arr = return arr
+-- | `aSetU` for a `Word32` element: a live buffer of its kind is written in line. 'aSetF32' says whether it was
+-- (an index out of range is a no-op and counts as done); otherwise the caller uses the generic set.
+aSetF32 :: Arr -> Int -> Word32 -> IO Bool
+aSetF32 arr i !v
+  | outOfRange i arr = return True
   | otherwise = do
       node <- readIORef (aRef arr)
       case node of
-        Direct (B32 a) c | c >= 0 -> unsafeWrite a i v >> return arr
-        _ -> slowSet32 arr i v
+        Direct (B32 a) c | c >= 0 -> unsafeWrite a i v >> return True
+        _ -> return False
+{-# INLINE aSetF32 #-}
+
+aSetU32 :: Arr -> Int -> Word32 -> IO Arr
+aSetU32 arr i !v = do
+  ok <- aSetF32 arr i v
+  if ok then return arr else slowSet32 arr i v
 {-# INLINE aSetU32 #-}
 
 slowSet32 :: Arr -> Int -> Word32 -> IO Arr
@@ -860,25 +882,34 @@ slowPush64 :: Arr -> Word64 -> IO Arr
 slowPush64 arr v = aPushU arr (unsafeCoerce v)
 {-# NOINLINE slowPush64 #-}
 
--- | `aSetU` for a `Word64` element: a live buffer of its kind is written in line.
-aSetU64 :: Arr -> Int -> Word64 -> IO Arr
-aSetU64 arr i !v
-  | outOfRange i arr = return arr
+-- | `aSetU` for a `Word64` element: a live buffer of its kind is written in line. 'aSetF64' says whether it was
+-- (an index out of range is a no-op and counts as done); otherwise the caller uses the generic set.
+aSetF64 :: Arr -> Int -> Word64 -> IO Bool
+aSetF64 arr i !v
+  | outOfRange i arr = return True
   | otherwise = do
       node <- readIORef (aRef arr)
       case node of
-        Direct (B64 a) c | c >= 0 -> unsafeWrite a i v >> return arr
-        _ -> slowSet64 arr i v
+        Direct (B64 a) c | c >= 0 -> unsafeWrite a i v >> return True
+        _ -> return False
+{-# INLINE aSetF64 #-}
+
+aSetU64 :: Arr -> Int -> Word64 -> IO Arr
+aSetU64 arr i !v = do
+  ok <- aSetF64 arr i v
+  if ok then return arr else slowSet64 arr i v
 {-# INLINE aSetU64 #-}
 
 slowSet64 :: Arr -> Int -> Word64 -> IO Arr
 slowSet64 arr i v = aSetU arr i (unsafeCoerce v)
 {-# NOINLINE slowSet64 #-}
 
--- | `aSwapU` on a buffer of this kind: the exchange is done in line.
-aSwapU8 :: Arr -> Int -> Int -> IO Arr
-aSwapU8 !arr !i !j
-  | outOfRange i arr || outOfRange j arr = return arr
+-- | `aSwapU` on a buffer of this kind: the exchange is done in line. 'aSwapF' says whether it was; when it
+-- was not, the caller uses the generic swap. It returns a flag, not the array, so that a caller hands back the
+-- array it already has and no new 'Arr' record is built.
+aSwapF8 :: Arr -> Int -> Int -> IO Bool
+aSwapF8 !arr !i !j
+  | outOfRange i arr || outOfRange j arr = return True
   | otherwise = do
       node <- readIORef (aRef arr)
       case node of
@@ -887,14 +918,19 @@ aSwapU8 !arr !i !j
           y <- unsafeRead a j
           unsafeWrite a i y
           unsafeWrite a j x
-          return arr
-        _ -> aSwapU arr i j
+          return True
+        _ -> return False
+{-# INLINE aSwapF8 #-}
+
+aSwapU8 :: Arr -> Int -> Int -> IO Arr
+aSwapU8 !arr !i !j = do
+  ok <- aSwapF8 arr i j
+  if ok then return arr else aSwapU arr i j
 {-# INLINE aSwapU8 #-}
 
--- | `aSwapU` on a buffer of this kind: the exchange is done in line.
-aSwapU16 :: Arr -> Int -> Int -> IO Arr
-aSwapU16 !arr !i !j
-  | outOfRange i arr || outOfRange j arr = return arr
+aSwapF16 :: Arr -> Int -> Int -> IO Bool
+aSwapF16 !arr !i !j
+  | outOfRange i arr || outOfRange j arr = return True
   | otherwise = do
       node <- readIORef (aRef arr)
       case node of
@@ -903,14 +939,19 @@ aSwapU16 !arr !i !j
           y <- unsafeRead a j
           unsafeWrite a i y
           unsafeWrite a j x
-          return arr
-        _ -> aSwapU arr i j
+          return True
+        _ -> return False
+{-# INLINE aSwapF16 #-}
+
+aSwapU16 :: Arr -> Int -> Int -> IO Arr
+aSwapU16 !arr !i !j = do
+  ok <- aSwapF16 arr i j
+  if ok then return arr else aSwapU arr i j
 {-# INLINE aSwapU16 #-}
 
--- | `aSwapU` on a buffer of this kind: the exchange is done in line.
-aSwapU32 :: Arr -> Int -> Int -> IO Arr
-aSwapU32 !arr !i !j
-  | outOfRange i arr || outOfRange j arr = return arr
+aSwapF32 :: Arr -> Int -> Int -> IO Bool
+aSwapF32 !arr !i !j
+  | outOfRange i arr || outOfRange j arr = return True
   | otherwise = do
       node <- readIORef (aRef arr)
       case node of
@@ -919,14 +960,19 @@ aSwapU32 !arr !i !j
           y <- unsafeRead a j
           unsafeWrite a i y
           unsafeWrite a j x
-          return arr
-        _ -> aSwapU arr i j
+          return True
+        _ -> return False
+{-# INLINE aSwapF32 #-}
+
+aSwapU32 :: Arr -> Int -> Int -> IO Arr
+aSwapU32 !arr !i !j = do
+  ok <- aSwapF32 arr i j
+  if ok then return arr else aSwapU arr i j
 {-# INLINE aSwapU32 #-}
 
--- | `aSwapU` on a buffer of this kind: the exchange is done in line.
-aSwapU64 :: Arr -> Int -> Int -> IO Arr
-aSwapU64 !arr !i !j
-  | outOfRange i arr || outOfRange j arr = return arr
+aSwapF64 :: Arr -> Int -> Int -> IO Bool
+aSwapF64 !arr !i !j
+  | outOfRange i arr || outOfRange j arr = return True
   | otherwise = do
       node <- readIORef (aRef arr)
       case node of
@@ -935,14 +981,19 @@ aSwapU64 !arr !i !j
           y <- unsafeRead a j
           unsafeWrite a i y
           unsafeWrite a j x
-          return arr
-        _ -> aSwapU arr i j
+          return True
+        _ -> return False
+{-# INLINE aSwapF64 #-}
+
+aSwapU64 :: Arr -> Int -> Int -> IO Arr
+aSwapU64 !arr !i !j = do
+  ok <- aSwapF64 arr i j
+  if ok then return arr else aSwapU arr i j
 {-# INLINE aSwapU64 #-}
 
--- | `aSwapU` on a buffer of this kind: the exchange is done in line.
-aSwapUW :: Arr -> Int -> Int -> IO Arr
-aSwapUW !arr !i !j
-  | outOfRange i arr || outOfRange j arr = return arr
+aSwapFW :: Arr -> Int -> Int -> IO Bool
+aSwapFW !arr !i !j
+  | outOfRange i arr || outOfRange j arr = return True
   | otherwise = do
       node <- readIORef (aRef arr)
       case node of
@@ -951,8 +1002,14 @@ aSwapUW !arr !i !j
           y <- unsafeRead a j
           unsafeWrite a i y
           unsafeWrite a j x
-          return arr
-        _ -> aSwapU arr i j
+          return True
+        _ -> return False
+{-# INLINE aSwapFW #-}
+
+aSwapUW :: Arr -> Int -> Int -> IO Arr
+aSwapUW !arr !i !j = do
+  ok <- aSwapFW arr i j
+  if ok then return arr else aSwapU arr i j
 {-# INLINE aSwapUW #-}
 
 -- | The read for every case the inline narrow ones do not handle (a boxed buffer, an old version, a lazy

@@ -11,7 +11,7 @@ erased :: Any = ()! [];
 
 zu :: forall a. Any -> a = \r [eta_B0] unsafeCoerce eta_B0;
 
-zap :: Any -> Any -> Any = \r [f_sbD8 x_sbD9] f_sbD8 x_sbD9;
+zap :: Any -> Any -> Any = \r [f_sbyg x_sbyh] f_sbyg x_sbyh;
 
 $trModule3 :: TrName = TrNameS! [$trModule4];
 

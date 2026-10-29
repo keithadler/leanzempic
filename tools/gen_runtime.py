@@ -457,15 +457,15 @@ def narrow_funcs():
             f"arrPushU{n} :: Any -> Any -> {h} -> Any",
             f"arrPushU{n} _ !a !v = arrIO (zo <$> aPushU{n} (zu a) v)", f"{{-# INLINE arrPushU{n} #-}}", "",
             f"arrSetU{n} :: Any -> Any -> ZNat -> {h} -> Any",
-            f"arrSetU{n} _ !a !i !v = arrIO (zo <$> aSetU{n} (zu a) (arrIx i) v)", f"{{-# INLINE arrSetU{n} #-}}", "",
+            f"arrSetU{n} _ !a !i !v = arrIO (aSetF{n} (zu a) (arrIx i) v >>= \\ok -> if ok then return a else zo <$> aSetU{n} (zu a) (arrIx i) v)", f"{{-# INLINE arrSetU{n} #-}}", "",
             f"arrUSetU{n} :: Any -> Any -> Word -> {h} -> Any -> Any",
-            f"arrUSetU{n} _ !a !i !v _ = arrIO (zo <$> aSetU{n} (zu a) (fromIntegral i) v)", f"{{-# INLINE arrUSetU{n} #-}}", ""]
+            f"arrUSetU{n} _ !a !i !v _ = arrIO (aSetF{n} (zu a) (fromIntegral i) v >>= \\ok -> if ok then return a else zo <$> aSetU{n} (zu a) (fromIntegral i) v)", f"{{-# INLINE arrUSetU{n} #-}}", ""]
     for n in ["8", "16", "32", "64", "W"]:
         out += [f"arrSwapU{n} :: Any -> Any -> ZNat -> ZNat -> Any",
-                f"arrSwapU{n} _ !a !i !j = arrIO (zo <$> aSwapU{n} (zu a) (arrIx i) (arrIx j))",
+                f"arrSwapU{n} _ !a !i !j = arrIO (aSwapF{n} (zu a) (arrIx i) (arrIx j) >>= \\ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))",
                 f"{{-# INLINE arrSwapU{n} #-}}", "",
                 f"arrSwapPU{n} :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any",
-                f"arrSwapPU{n} _ !a !i !j _ _ = arrIO (zo <$> aSwapU{n} (zu a) (arrIx i) (arrIx j))",
+                f"arrSwapPU{n} _ !a !i !j _ _ = arrIO (aSwapF{n} (zu a) (arrIx i) (arrIx j) >>= \\ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))",
                 f"{{-# INLINE arrSwapPU{n} #-}}", ""]
     return out
 
