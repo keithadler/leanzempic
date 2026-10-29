@@ -48,6 +48,10 @@ First complete version.
   pipelines (all 106 garden programs agree with it on). One program got slower (list merge sort).
 * Every generated module carries `-fno-float-in`, avoiding a GHC 9.14.1 panic in the Float Inwards pass.
 
+### Ergonomics
+* `#zempic` warns when the compiled code has Lean's own list loops and `zempic.fuse` is off.
+* `tools/zghc` defaults to `-A256m -O1g` (override with `ZEMPIC_RTS`).
+
 ### Tooling
 * CI runs a 36-program subset of the garden at `-O1` (the full 106 take about 15 CPU-minutes and
   exceeded the runner). `GARDEN_OPT` and `GARDEN_SET` select the level and the set.

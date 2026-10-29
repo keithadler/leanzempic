@@ -43,7 +43,10 @@ syntax (name := zempicCmd) "#zempic " ident+ (" to " str)? (&" mode " ident)? : 
       logInfo m!"leanzempic: wrote the stub {p} and {fp.withExtension "zc"} for the Core plugin"
     | none => logInfo m!"{stub}\n{zc}"
     return
-  let (files, core) ← liftCoreM <| emitFiles modName roots mode
+  let (files, core, fusible) ← liftCoreM <| emitFiles modName roots mode
+  if fusible then
+    logWarning m!"leanzempic: this code uses Lean's own list loops (map, filter, foldl, ...). Put `set_option zempic.fuse true` before the definitions and GHC can fuse them, typically 2x to 5x faster on list pipelines (README, \"List fusion\")."
+
   match path? with
   | some p =>
     let fp := System.FilePath.mk p

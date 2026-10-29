@@ -916,6 +916,9 @@ structure Output where
   haskell : String
   /-- The Core-notation dump. -/
   core : String
+  /-- The code contains Lean's own list loops (`map`, `filter`, `foldl`, ...) and none of the fusion
+  combinators: `zempic.fuse` was off, and turning it on would let GHC fuse them. -/
+  fusible : Bool := false
 
 /-- The Haskell `data` declaration for Lean inductive `t`. A generic inductive becomes a
 polymorphic Haskell type with strict fields (`data ZT_MProd a0 a1 = ZC_MProd_mk !a0 !a1`), so every
@@ -984,9 +987,13 @@ def emitModule (modName : String) (roots : Array Name) (natMod : String := "Zemp
       s!"module {modName} where", "",
       "import Zempic.Runtime", s!"import {natMod}", "import Zempic.List", "import Zempic.UInt", "import Zempic.Prims",
       "import Data.Word (Word8, Word16, Word32, Word64)", "import Data.Kind (Type)", "", ""])
+    let names := (← get).seen.toList.map (·.toString)
+    let listy := ["List.map", "List.filter", "List.foldl", "List.foldr", "List.zip", "List.flatMap"]
+    let fusible := names.any (fun n => listy.any fun l => n.startsWith l) && !names.any (·.startsWith "Zempic.Fuse")
     return { haskell := header ++ "\n".intercalate (datas ++ hs).toList
              core := "-- leanzempic Core-notation dump (for reading)\n\n" ++
-               "\n".intercalate core.toList }
+               "\n".intercalate core.toList
+             fusible }
   let own := zempic.own.get (← getOptions)
   let destr ← if own then Own.analyze roots else pure {}
   act.run' { fast, destr, unrollMax := zempic.unroll.get (← getOptions) }
@@ -1105,20 +1112,20 @@ def autoWrapper (modName : String) (roots : Array Name) : CoreM String := do
 
 /-- Files (relative path, contents) and the Core dump for `mode` = `auto`, `word` or `exact`. -/
 def emitFiles (modName : String) (roots : Array Name) (mode : String) :
-    CoreM (Array (String × String) × String) := do
+    CoreM (Array (String × String) × String × Bool) := do
   let rel := fun (m : String) => (m.replace "." "/") ++ ".hs"
   match mode with
   | "word" =>
     let o ← emitModule modName roots "Zempic.Nat.Word" true
-    return (#[(rel modName, o.haskell)], o.core)
+    return (#[(rel modName, o.haskell)], o.core, o.fusible)
   | "exact" =>
     let o ← emitModule modName roots "Zempic.Nat.Exact" false
-    return (#[(rel modName, o.haskell)], o.core)
+    return (#[(rel modName, o.haskell)], o.core, o.fusible)
   | _ =>
     let fast ← emitModule (modName ++ ".Fast") roots "Zempic.Nat.Word" true
     let exact ← emitModule (modName ++ ".Exact") roots "Zempic.Nat.Exact" false
     let wrap ← autoWrapper modName roots
     return (#[(rel modName, wrap), (rel (modName ++ ".Fast"), fast.haskell),
-              (rel (modName ++ ".Exact"), exact.haskell)], exact.core)
+              (rel (modName ++ ".Exact"), exact.haskell)], exact.core, fast.fusible)
 
 end Zempic

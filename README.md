@@ -116,7 +116,7 @@ main = print (z_fact 25 :: Natural)   -- 15511210043330985984000000, exact
 tools/zghc -ibuild Main.hs -o main && ./main
 ```
 
-`tools/zghc` is GHC with the right flags (`-O2`, `-iruntime`, a larger allocation area) and with Lean's
+`tools/zghc` is GHC with the right flags (`-O2`, `-iruntime`, `-A256m -O1g`, which raises peak memory by about the allocation area; set `ZEMPIC_RTS="-A64m"` to use less) and with Lean's
 toolchain taken off `PATH`, which avoids the clang trap below. Plain `ghc -O2 -iruntime -ibuild`
 works too if Lean's `bin` is not on your `PATH`. To use the runtime as a package instead of
 `-iruntime`, build `runtime/zempic-runtime.cabal` and pass `-package zempic-runtime`.
@@ -340,6 +340,8 @@ prints them). Measured on the garden with identical answers: a list pipeline ove
 faster (0.15 s to 0.03 s), a tuple-state fold 3x (0.26 s to 0.08 s), `Int` list work 2x, `Option` and
 sum-type folds 2x to 3x. It is not free everywhere: a list merge sort got slower (0.09 s to 0.12 s).
 All 106 garden programs give the same answers with it on (`GARDEN_FUSE=1 python3 garden/run.py`).
+`#zempic` prints a warning when the code contains Lean's own list loops and the pass is off, so the
+speedup is not missed.
 
 Covered combinators: `map`, `filter`, `foldl`, `foldr`, `range`, `length`, `sum` (on `Nat`),
 `take`, `append` (`++`), `zip`, `any`, `all`. Not covered: `reverse`, `filterMap`, `join`, `zipWith`,
