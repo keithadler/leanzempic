@@ -135,6 +135,12 @@ arrIdx :: ZNat -> Int
 arrIdx i = fromIntegral (min i 4611686018427387903)
 {-# INLINE arrIdx #-}
 
+-- An index for the bounds-checked accessors, which compare it unsigned: any 64-bit pattern is out of range
+-- if it is not below the length, so a Word index needs no clamp.
+arrIx :: ZNat -> Int
+arrIx i = arrIdx i
+{-# INLINE arrIx #-}
+
 arrIO :: IO a -> a
 arrIO = unsafeDupablePerformIO
 {-# INLINE arrIO #-}
@@ -330,6 +336,160 @@ arrOfList _ xs = arrIO (zo <$> aFromList xs)
 arrToList :: Any -> Any -> [Any]
 arrToList _ a = arrIO (aToList (zu a))
 {-# NOINLINE arrToList #-}
+
+-- Narrow-typed element operations: a UInt8/16/32/64 (or Char) element is read and written with no box
+-- when the compiler sees its type (see Zempic.Arr).
+idxErr8 :: Word8
+idxErr8 = error "leanzempic: array index out of range"
+{-# NOINLINE idxErr8 #-}
+
+arrGetD8 :: Any -> Word8 -> Any -> ZNat -> Word8
+arrGetD8 _ d !a !i = aGetPS8 (zu a) (arrIx i) d
+{-# INLINE arrGetD8 #-}
+
+arrGetI8 :: Any -> Any -> ZNat -> Any -> Word8
+arrGetI8 _ !a !i _ = aGetP8 (zu a) (arrIx i) idxErr8
+{-# INLINE arrGetI8 #-}
+
+arrUGet8 :: Any -> Any -> Word -> Any -> Word8
+arrUGet8 _ !a !i _ = aGetP8 (zu a) (fromIntegral i) idxErr8
+{-# INLINE arrUGet8 #-}
+
+arrPushU8 :: Any -> Any -> Word8 -> Any
+arrPushU8 _ !a !v = arrIO (zo <$> aPushU8 (zu a) v)
+{-# INLINE arrPushU8 #-}
+
+arrSetU8 :: Any -> Any -> ZNat -> Word8 -> Any
+arrSetU8 _ !a !i !v = arrIO (aSetF8 (zu a) (arrIx i) v >>= \ok -> if ok then return a else zo <$> aSetU8 (zu a) (arrIx i) v)
+{-# INLINE arrSetU8 #-}
+
+arrUSetU8 :: Any -> Any -> Word -> Word8 -> Any -> Any
+arrUSetU8 _ !a !i !v _ = arrIO (aSetF8 (zu a) (fromIntegral i) v >>= \ok -> if ok then return a else zo <$> aSetU8 (zu a) (fromIntegral i) v)
+{-# INLINE arrUSetU8 #-}
+
+idxErr16 :: Word16
+idxErr16 = error "leanzempic: array index out of range"
+{-# NOINLINE idxErr16 #-}
+
+arrGetD16 :: Any -> Word16 -> Any -> ZNat -> Word16
+arrGetD16 _ d !a !i = aGetPS16 (zu a) (arrIx i) d
+{-# INLINE arrGetD16 #-}
+
+arrGetI16 :: Any -> Any -> ZNat -> Any -> Word16
+arrGetI16 _ !a !i _ = aGetP16 (zu a) (arrIx i) idxErr16
+{-# INLINE arrGetI16 #-}
+
+arrUGet16 :: Any -> Any -> Word -> Any -> Word16
+arrUGet16 _ !a !i _ = aGetP16 (zu a) (fromIntegral i) idxErr16
+{-# INLINE arrUGet16 #-}
+
+arrPushU16 :: Any -> Any -> Word16 -> Any
+arrPushU16 _ !a !v = arrIO (zo <$> aPushU16 (zu a) v)
+{-# INLINE arrPushU16 #-}
+
+arrSetU16 :: Any -> Any -> ZNat -> Word16 -> Any
+arrSetU16 _ !a !i !v = arrIO (aSetF16 (zu a) (arrIx i) v >>= \ok -> if ok then return a else zo <$> aSetU16 (zu a) (arrIx i) v)
+{-# INLINE arrSetU16 #-}
+
+arrUSetU16 :: Any -> Any -> Word -> Word16 -> Any -> Any
+arrUSetU16 _ !a !i !v _ = arrIO (aSetF16 (zu a) (fromIntegral i) v >>= \ok -> if ok then return a else zo <$> aSetU16 (zu a) (fromIntegral i) v)
+{-# INLINE arrUSetU16 #-}
+
+idxErr32 :: Word32
+idxErr32 = error "leanzempic: array index out of range"
+{-# NOINLINE idxErr32 #-}
+
+arrGetD32 :: Any -> Word32 -> Any -> ZNat -> Word32
+arrGetD32 _ d !a !i = aGetPS32 (zu a) (arrIx i) d
+{-# INLINE arrGetD32 #-}
+
+arrGetI32 :: Any -> Any -> ZNat -> Any -> Word32
+arrGetI32 _ !a !i _ = aGetP32 (zu a) (arrIx i) idxErr32
+{-# INLINE arrGetI32 #-}
+
+arrUGet32 :: Any -> Any -> Word -> Any -> Word32
+arrUGet32 _ !a !i _ = aGetP32 (zu a) (fromIntegral i) idxErr32
+{-# INLINE arrUGet32 #-}
+
+arrPushU32 :: Any -> Any -> Word32 -> Any
+arrPushU32 _ !a !v = arrIO (zo <$> aPushU32 (zu a) v)
+{-# INLINE arrPushU32 #-}
+
+arrSetU32 :: Any -> Any -> ZNat -> Word32 -> Any
+arrSetU32 _ !a !i !v = arrIO (aSetF32 (zu a) (arrIx i) v >>= \ok -> if ok then return a else zo <$> aSetU32 (zu a) (arrIx i) v)
+{-# INLINE arrSetU32 #-}
+
+arrUSetU32 :: Any -> Any -> Word -> Word32 -> Any -> Any
+arrUSetU32 _ !a !i !v _ = arrIO (aSetF32 (zu a) (fromIntegral i) v >>= \ok -> if ok then return a else zo <$> aSetU32 (zu a) (fromIntegral i) v)
+{-# INLINE arrUSetU32 #-}
+
+idxErr64 :: Word64
+idxErr64 = error "leanzempic: array index out of range"
+{-# NOINLINE idxErr64 #-}
+
+arrGetD64 :: Any -> Word64 -> Any -> ZNat -> Word64
+arrGetD64 _ d !a !i = aGetPS64 (zu a) (arrIx i) d
+{-# INLINE arrGetD64 #-}
+
+arrGetI64 :: Any -> Any -> ZNat -> Any -> Word64
+arrGetI64 _ !a !i _ = aGetP64 (zu a) (arrIx i) idxErr64
+{-# INLINE arrGetI64 #-}
+
+arrUGet64 :: Any -> Any -> Word -> Any -> Word64
+arrUGet64 _ !a !i _ = aGetP64 (zu a) (fromIntegral i) idxErr64
+{-# INLINE arrUGet64 #-}
+
+arrPushU64 :: Any -> Any -> Word64 -> Any
+arrPushU64 _ !a !v = arrIO (zo <$> aPushU64 (zu a) v)
+{-# INLINE arrPushU64 #-}
+
+arrSetU64 :: Any -> Any -> ZNat -> Word64 -> Any
+arrSetU64 _ !a !i !v = arrIO (aSetF64 (zu a) (arrIx i) v >>= \ok -> if ok then return a else zo <$> aSetU64 (zu a) (arrIx i) v)
+{-# INLINE arrSetU64 #-}
+
+arrUSetU64 :: Any -> Any -> Word -> Word64 -> Any -> Any
+arrUSetU64 _ !a !i !v _ = arrIO (aSetF64 (zu a) (fromIntegral i) v >>= \ok -> if ok then return a else zo <$> aSetU64 (zu a) (fromIntegral i) v)
+{-# INLINE arrUSetU64 #-}
+
+arrSwapU8 :: Any -> Any -> ZNat -> ZNat -> Any
+arrSwapU8 _ !a !i !j = arrIO (aSwapF8 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
+{-# INLINE arrSwapU8 #-}
+
+arrSwapPU8 :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
+arrSwapPU8 _ !a !i !j _ _ = arrIO (aSwapF8 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
+{-# INLINE arrSwapPU8 #-}
+
+arrSwapU16 :: Any -> Any -> ZNat -> ZNat -> Any
+arrSwapU16 _ !a !i !j = arrIO (aSwapF16 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
+{-# INLINE arrSwapU16 #-}
+
+arrSwapPU16 :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
+arrSwapPU16 _ !a !i !j _ _ = arrIO (aSwapF16 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
+{-# INLINE arrSwapPU16 #-}
+
+arrSwapU32 :: Any -> Any -> ZNat -> ZNat -> Any
+arrSwapU32 _ !a !i !j = arrIO (aSwapF32 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
+{-# INLINE arrSwapU32 #-}
+
+arrSwapPU32 :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
+arrSwapPU32 _ !a !i !j _ _ = arrIO (aSwapF32 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
+{-# INLINE arrSwapPU32 #-}
+
+arrSwapU64 :: Any -> Any -> ZNat -> ZNat -> Any
+arrSwapU64 _ !a !i !j = arrIO (aSwapF64 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
+{-# INLINE arrSwapU64 #-}
+
+arrSwapPU64 :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
+arrSwapPU64 _ !a !i !j _ _ = arrIO (aSwapF64 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
+{-# INLINE arrSwapPU64 #-}
+
+arrSwapUW :: Any -> Any -> ZNat -> ZNat -> Any
+arrSwapUW _ !a !i !j = arrIO (aSwapFW (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
+{-# INLINE arrSwapUW #-}
+
+arrSwapPUW :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
+arrSwapPUW _ !a !i !j _ _ = arrIO (aSwapFW (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
+{-# INLINE arrSwapPUW #-}
 
 -- Lean's String as a shared UTF-8 buffer (see Zempic.Str): amortized O(1) push and append.
 strIO :: IO a -> a

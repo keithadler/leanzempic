@@ -1,0 +1,21 @@
+
+==================== Final STG: ====================
+
+$trModule2 :: Addr# = "Zempic.Runtime"#;
+
+$trModule4 :: Addr# = "main"#;
+
+zo :: forall a. a -> Any = \r [eta_B0] unsafeCoerce eta_B0;
+
+erased :: Any = ()! [];
+
+zu :: forall a. Any -> a = \r [eta_B0] unsafeCoerce eta_B0;
+
+zap :: Any -> Any -> Any = \r [f_sbyg x_sbyh] f_sbyg x_sbyh;
+
+$trModule3 :: TrName = TrNameS! [$trModule4];
+
+$trModule1 :: TrName = TrNameS! [$trModule2];
+
+$trModule :: Module = Module! [$trModule3 $trModule1];
+

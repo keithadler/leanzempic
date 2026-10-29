@@ -1,0 +1,94 @@
+
+==================== Final STG: ====================
+
+toW4 :: Addr# =
+    "/Users/keith/Downloads/lz-perf2/runtime/Zempic/Auto.hs"#;
+
+toW8 :: Addr# = "throw"#;
+
+$trModule2 :: Addr# = "Zempic.Auto"#;
+
+$trModule4 :: Addr# = "main"#;
+
+$trModule3 :: TrName = TrNameS! [$trModule4];
+
+$trModule1 :: TrName = TrNameS! [$trModule2];
+
+$trModule :: Module = Module! [$trModule3 $trModule1];
+
+lvl_rpQh
+  :: forall b.
+     SomeException
+     -> State# RealWorld -> (# State# RealWorld, Either ZOverflow b #) =
+    \r [e1_spQj void_48_E]
+        case e1_spQj of wild_spQl {
+        SomeException $dException1_spQm _ e3_spQo ->
+        case $p1Exception $dException1_spQm of lvl_sat_spQp {
+        __DEFAULT ->
+        case sameTypeRep lvl_sat_spQp $fExceptionZOverflow3 of wild1_spQq {
+          False -> raiseIO# [wild_spQl void#];
+          True ->
+              let {
+                lvl_sat_spQw
+                  :: SomeException
+                     -> State# RealWorld
+                     -> (# State# RealWorld, Either ZOverflow b_apNk #) =
+                    \r [eta_B0 void_X1] catch2 wild_spQl eta_B0 void#; } in
+              let {
+                lvl_sat_spQv
+                  :: State# RealWorld
+                     -> (# State# RealWorld, Either ZOverflow b_apNk #) =
+                    \r [void_XF]
+                        let { lvl_sat_spQu :: Either ZOverflow b_apNk = Left! [e3_spQo];
+                        } in  MkSolo# [lvl_sat_spQu];
+              } in  catch# [lvl_sat_spQv lvl_sat_spQw void#];
+        };
+        };
+        };
+
+tryFast :: forall a b. (a -> b) -> a -> b -> b =
+    \r [conv_spQx fast_spQy exact_spQz]
+        let {
+          tryFast_sat_spQG
+            :: State# RealWorld
+               -> (# State# RealWorld, Either ZOverflow b_apNk #) =
+              \r [void_48_E]
+                  case conv_spQx fast_spQy of tryFast_sat_spQB {
+                  __DEFAULT ->
+                  let {
+                    tryFast_sat_spQF :: Either ZOverflow b_apNk =
+                        Right! [tryFast_sat_spQB];
+                  } in  MkSolo# [tryFast_sat_spQF];
+                  };
+        } in 
+          case catch# [tryFast_sat_spQG lvl_rpQh realWorld#] of ds1_spQH {
+          MkSolo# ipv1_spQJ ->
+          case ipv1_spQJ of wild_spQK {
+            Left ds_spQL ->
+                case ds_spQL of wild1_spQM { ZOverflow -> exact_spQz; };
+            Right v_spQN -> v_spQN;
+          };
+          };
+
+toW7 :: [Char] = \u [] unpackCString# toW8;
+
+toW6 :: [Char] = \u [] unpackCString# $trModule4;
+
+toW5 :: [Char] = \u [] unpackCString# $trModule2;
+
+toW3 :: [Char] = \u [] unpackCString# toW4;
+
+toW2 :: SrcLoc = SrcLoc! [toW6 toW5 toW3 22# 43# 22# 48#];
+
+toW1 :: CallStack = PushCallStack! [toW7 toW2 EmptyCallStack];
+
+lvl1_rpQi :: Word =
+    \u [] throw toW1 $fExceptionZOverflow ZOverflow;
+
+toW :: Natural -> Word =
+    \r [n_spQO]
+        case n_spQO of x1_spQP {
+          NS x2_spQQ -> W# [x2_spQQ];
+          NB _ -> lvl1_rpQi;
+        };
+

@@ -1,0 +1,95 @@
+
+==================== Final STG: ====================
+
+$trModule2 :: Addr# = "Zempic.List"#;
+
+$trModule4 :: Addr# = "main"#;
+
+zNil :: Any -> [Any] = \r [ds_sd26] [] [];
+
+zCons :: Any -> Any -> [Any] -> [Any] =
+    \r [ds_sd27 h_sd28 t_sd29] : [h_sd28 t_sd29];
+
+zMap :: (Any -> Any) -> [Any] -> [Any] =
+    \r [eta_B0 eta_B1] map eta_B0 eta_B1;
+
+zFilter :: (Any -> Any) -> [Any] -> [Any] =
+    \r [p_sd2a eta_sd2b]
+        let { zFilter_sat_sd2f :: Any -> Bool = \r [x_sd2c] p_sd2a x_sd2c;
+        } in  filter zFilter_sat_sd2f eta_sd2b;
+
+zAppend :: [Any] -> [Any] -> [Any] =
+    \r [eta_B0 eta_B1] ++ eta_B0 eta_B1;
+
+Rec {
+go_rd25 :: [Any] -> [Any] -> [Any] =
+    \r [ds_sd2g ds1_sd2h]
+        case ds_sd2g of wild_sd2i {
+          [] -> [] [];
+          : ipv_sd2j ipv1_sd2k ->
+              case ds1_sd2h of wild1_sd2l {
+                [] -> [] [];
+                : ipv2_sd2m ipv3_sd2n ->
+                    let {
+                      go_sat_sd2r :: [Any] = \u [] go_rd25 ipv1_sd2k ipv3_sd2n; } in
+                    let { go_sat_sd2q :: Any = (,)! [ipv_sd2j ipv2_sd2m];
+                    } in  : [go_sat_sd2q go_sat_sd2r];
+              };
+        };
+end Rec }
+
+zZip :: [Any] -> [Any] -> [Any] =
+    \r [eta_B0 eta_B1] go_rd25 eta_B0 eta_B1;
+
+zPair :: Any -> Any -> Any -> Any -> (Any, Any) =
+    \r [ds_sd2s ds1_sd2t a_sd2u b_sd2v] (,) [a_sd2u b_sd2v];
+
+$trModule3 :: TrName = TrNameS! [$trModule4];
+
+$trModule1 :: TrName = TrNameS! [$trModule2];
+
+$trModule :: Module = Module! [$trModule3 $trModule1];
+
+zAll :: (Any -> Any) -> [Any] -> Bool =
+    \r [p_sd2w eta_sd2x]
+        let-no-escape {
+          Rec {
+          go1_sd2y :: [Any] -> Bool =
+              \j [ds_sd2z]
+                  case ds_sd2z<TagProper> of wild_sd2A {
+                    [] -> True [];
+                    : y_sd2B ys_sd2C ->
+                        case p_sd2w y_sd2B of wild2_sd2F {
+                          False -> False [];
+                          True -> case ys_sd2C of ys_td2U { __DEFAULT -> go1_sd2y ys_td2U; };
+                        };
+                  };
+          end Rec }
+        } in 
+          case eta_sd2x of eta_td2W { __DEFAULT -> go1_sd2y eta_td2W; };
+
+zAny :: (Any -> Any) -> [Any] -> Bool =
+    \r [p_sd2G eta_sd2H]
+        let-no-escape {
+          Rec {
+          go1_sd2I :: [Any] -> Bool =
+              \j [ds_sd2J]
+                  case ds_sd2J<TagProper> of wild_sd2K {
+                    [] -> False [];
+                    : y_sd2L ys_sd2M ->
+                        case p_sd2G y_sd2L of wild2_sd2P {
+                          False ->
+                              case ys_sd2M of ys_td2Y { __DEFAULT -> go1_sd2I ys_td2Y; };
+                          True -> True [];
+                        };
+                  };
+          end Rec }
+        } in 
+          case eta_sd2H of eta_td30 { __DEFAULT -> go1_sd2I eta_td30; };
+
+zFoldr :: (Any -> Any -> Any) -> Any -> [Any] -> Any =
+    \r [eta_B0 eta_B1 eta_B2] foldr eta_B0 eta_B1 eta_B2;
+
+zFoldl :: (Any -> Any -> Any) -> Any -> [Any] -> Any =
+    \r [eta_B0 eta_B1 eta_B2] foldl' eta_B0 eta_B1 eta_B2;
+

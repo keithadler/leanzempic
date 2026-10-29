@@ -44,6 +44,12 @@ arrIdx :: ZNat -> Int
 arrIdx i = fromIntegral (min i 4611686018427387903)
 {-# INLINE arrIdx #-}
 
+-- An index for the bounds-checked accessors, which compare it unsigned: any 64-bit pattern is out of range
+-- if it is not below the length, so a Word index needs no clamp.
+arrIx :: ZNat -> Int
+arrIx i = @@ARRIX@@
+{-# INLINE arrIx #-}
+
 arrIO :: IO a -> a
 arrIO = unsafeDupablePerformIO
 {-# INLINE arrIO #-}
@@ -433,10 +439,40 @@ baSet a i b = strIO (zo <$> sSetByte (zu a) (arrIdx i) b)
 {-# NOINLINE baSet #-}
 """.split("\n")
 
+
+# Narrow-typed element operations (UInt8/16/32/64 and Char), chosen from the static element type.
+def narrow_funcs():
+    out = ["-- Narrow-typed element operations: a UInt8/16/32/64 (or Char) element is read and written with no box",
+           "-- when the compiler sees its type (see Zempic.Arr)."]
+    for n, h in [("8", "Word8"), ("16", "Word16"), ("32", "Word32"), ("64", "Word64")]:
+        out += [
+            f"idxErr{n} :: {h}", f"idxErr{n} = error \"leanzempic: array index out of range\"",
+            f"{{-# NOINLINE idxErr{n} #-}}", "",
+            f"arrGetD{n} :: Any -> {h} -> Any -> ZNat -> {h}",
+            f"arrGetD{n} _ d !a !i = aGetPS{n} (zu a) (arrIx i) d", f"{{-# INLINE arrGetD{n} #-}}", "",
+            f"arrGetI{n} :: Any -> Any -> ZNat -> Any -> {h}",
+            f"arrGetI{n} _ !a !i _ = aGetP{n} (zu a) (arrIx i) idxErr{n}", f"{{-# INLINE arrGetI{n} #-}}", "",
+            f"arrUGet{n} :: Any -> Any -> Word -> Any -> {h}",
+            f"arrUGet{n} _ !a !i _ = aGetP{n} (zu a) (fromIntegral i) idxErr{n}", f"{{-# INLINE arrUGet{n} #-}}", "",
+            f"arrPushU{n} :: Any -> Any -> {h} -> Any",
+            f"arrPushU{n} _ !a !v = arrIO (zo <$> aPushU{n} (zu a) v)", f"{{-# INLINE arrPushU{n} #-}}", "",
+            f"arrSetU{n} :: Any -> Any -> ZNat -> {h} -> Any",
+            f"arrSetU{n} _ !a !i !v = arrIO (aSetF{n} (zu a) (arrIx i) v >>= \\ok -> if ok then return a else zo <$> aSetU{n} (zu a) (arrIx i) v)", f"{{-# INLINE arrSetU{n} #-}}", "",
+            f"arrUSetU{n} :: Any -> Any -> Word -> {h} -> Any -> Any",
+            f"arrUSetU{n} _ !a !i !v _ = arrIO (aSetF{n} (zu a) (fromIntegral i) v >>= \\ok -> if ok then return a else zo <$> aSetU{n} (zu a) (fromIntegral i) v)", f"{{-# INLINE arrUSetU{n} #-}}", ""]
+    for n in ["8", "16", "32", "64", "W"]:
+        out += [f"arrSwapU{n} :: Any -> Any -> ZNat -> ZNat -> Any",
+                f"arrSwapU{n} _ !a !i !j = arrIO (aSwapF{n} (zu a) (arrIx i) (arrIx j) >>= \\ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))",
+                f"{{-# INLINE arrSwapU{n} #-}}", "",
+                f"arrSwapPU{n} :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any",
+                f"arrSwapPU{n} _ !a !i !j _ _ = arrIO (aSwapF{n} (zu a) (arrIx i) (arrIx j) >>= \\ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))",
+                f"{{-# INLINE arrSwapPU{n} #-}}", ""]
+    return out
+
 ARRAY_NAMES = ["arrIdx", "arrShare", "arrMkEmpty", "arrReplicate", "arrSize", "arrUSize", "arrPush", "arrGetD",
                "arrGetI", "arrUGet", "arrSet", "arrUSet", "arrSwap", "arrPop"]
 
-def nat_region():
+def nat_region(exact):
     out = ["-- BEGIN GENERATED (tools/gen_runtime.py)",
            "-- Conversions between Nat and the fixed-width integers."]
     for L, s, h, _ in TYPES:
@@ -446,7 +482,8 @@ def nat_region():
     for L, s, h, _ in TYPES:
         out += [f"{s}OfNatLT :: ZNat -> Any -> {h}", f"{s}OfNatLT n _ = fromIntegral n",
                 f"{{-# INLINE {s}OfNatLT #-}}"]
-    out += ARRAY_FUNCS
+    out += [l.replace('@@ARRIX@@', 'arrIdx i' if exact else 'fromIntegral i') for l in ARRAY_FUNCS]
+    out += narrow_funcs()
     out += STRING_FUNCS
     out += EXTRA_FUNCS
     out += ["charOfNat :: ZNat -> Word32",
@@ -459,7 +496,7 @@ def nat_region():
 def patch(path):
     p = ROOT / path
     s = p.read_text()
-    region = nat_region()
+    region = nat_region(path.endswith('Exact.hs'))
     if "-- BEGIN GENERATED" in s:
         s = re.sub(r"-- BEGIN GENERATED.*?-- END GENERATED", lambda m: region, s, flags=re.S)
     else:

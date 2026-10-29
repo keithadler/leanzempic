@@ -295,7 +295,7 @@ Details worth knowing:
 | `Thunk α` | a lazy box | |
 | a structure with one relevant field (`String.Pos`) | the field itself | Lean's own representation; declaring it as a constructor would be a type lie |
 | `String` | shared UTF-8 buffer ([`Zempic.Str`](runtime/Zempic/Str.hs)), held as `Any` | byte sizes and ordering match Lean |
-| `Array α` | Baker persistent array ([`Zempic.Arr`](runtime/Zempic/Arr.hs)), held as `Any` | elements are `Any` |
+| `Array α` | Baker persistent array ([`Zempic.Arr`](runtime/Zempic/Arr.hs)), held as `Any` | elements are `Any`, except `UInt8/16/32/64`, `Char`, `USize`, `Bool` and word-mode `Nat`, which sit in unboxed buffers and are read and written without a box |
 | `List α` | Haskell `[]`, elements `Any` | needed for fusion |
 | `α × β` | Haskell tuple `(Any, Any)` | |
 | user `structure` / `inductive` | generated `data ZT_...` with **strict, typed fields** | |

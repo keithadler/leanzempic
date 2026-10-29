@@ -299,6 +299,101 @@ def entry (n : Nat) : Nat :=
     + h.getD 1 0 + a.getD 1 0 + k.size + k.getD (n + 2) 0 + sw.foldl (fun acc x => acc * 7 + x) 0
     + a.size + big % 1000003 + (if big > 0 then 1 else 0)
 ''')
+add("array_narrow_paths", '''
+-- UInt8/16/32/64 and Char element arrays: push, get!, getD, set!, swap and fold, in place and on a kept snapshot.
+def mix32 (x : UInt32) : UInt32 := x * 1664525 + 1013904223
+def mix64 (x : UInt64) : UInt64 := x * 6364136223846793005 + 1442695040888963407
+
+def fill32 (n : Nat) : Array UInt32 := Id.run do
+  let mut a : Array UInt32 := Array.mkEmpty 3
+  let mut s : UInt32 := 7
+  for _ in [0:n] do
+    a := a.push s
+    s := mix32 s
+  return a
+
+def fill64 (n : Nat) : Array UInt64 := Id.run do
+  let mut a : Array UInt64 := Array.mkEmpty 5
+  let mut s : UInt64 := 11
+  for _ in [0:n] do
+    a := a.push s
+    s := mix64 s
+  return a
+
+def fill16 (n : Nat) : Array UInt16 := Id.run do
+  let mut a : Array UInt16 := Array.mkEmpty 6
+  for i in [0:n] do a := a.push (i * 40503).toUInt16
+  return a
+
+def fill8 (n : Nat) : Array UInt8 := Id.run do
+  let mut a : Array UInt8 := Array.mkEmpty 7
+  for i in [0:n] do a := a.push (i * 37 + 5).toUInt8
+  return a
+
+def fillC (n : Nat) : Array Char := Id.run do
+  let mut a : Array Char := Array.mkEmpty 9
+  for i in [0:n] do a := a.push (Char.ofNat (97 + i % 26))
+  return a
+
+-- an insertion sort by swaps, then a reversal, reading with get! and writing with swapIfInBounds
+def isort32 (a0 : Array UInt32) : Array UInt32 := Id.run do
+  let mut a := a0
+  for i in [1:a.size] do
+    let mut j := i
+    while j > 0 && a[j]! < a[j - 1]! do
+      a := a.swapIfInBounds j (j - 1)
+      j := j - 1
+  return a
+
+-- in-place writes with set! (the array is owned), including a write past the end that must do nothing
+def bump (n : Nat) : Nat := Id.run do
+  let mut a := fill32 n
+  let mut b := fill64 n
+  let mut c := fill16 n
+  let mut d := fill8 n
+  for i in [0:n + 3] do
+    a := a.set! i (a[i]! * 3 + i.toUInt32)
+    b := b.set! i (b[i]! * 5 + i.toUInt64)
+    c := c.set! i (c[i]! * 7 + i.toUInt16)
+    d := d.set! i (d[i]! * 9 + i.toUInt8)
+    a := a.swapIfInBounds i (n + 1 - i)
+    b := b.swapIfInBounds (i / 2) (n + 5 - i)
+    c := c.swapIfInBounds i (i * 2 % (n + 2))
+    d := d.swapIfInBounds (n + 6 - i) i
+  return a.foldl (fun acc x => (acc + x.toNat) % 1000003) 0 + b.foldl (fun acc x => (acc + x.toNat) % 1000003) 0
+    + c.foldl (fun acc x => (acc + x.toNat) % 1000003) 0 + d.foldl (fun acc x => (acc + x.toNat) % 1000003) 0
+
+def entry (n : Nat) : Nat :=
+  let n := n % 300 + 2
+  let bumped := bump n
+  let a := fill32 n
+  let snap := a
+  let s := isort32 a
+  let b := fill64 n
+  let b2 := b.set! 1 12345678901234567 |>.set! (n - 1) 0
+  let c := fill16 n
+  let c2 := c.map (fun x => x + 60000)
+  let d := fill8 n
+  let d2 := (d.swapIfInBounds 0 (n - 1)).set! 2 250
+  let e := fillC n
+  let e2 := e.swapIfInBounds 1 2
+  let sorted := (List.range (s.size - 1)).all fun i => s[i]! <= s[i + 1]!
+  let loopSum := Id.run do
+    let mut t : Nat := 0
+    for x in s do t := (t * 3 + x.toNat) % 1000003
+    for x in b2 do t := (t * 5 + x.toNat) % 1000003
+    for x in d2 do t := (t * 7 + x.toNat) % 1000003
+    for x in c2 do t := (t * 11 + x.toNat) % 1000003
+    return t
+  s.foldl (fun acc x => (acc * 31 + x.toNat) % 1000003) 0
+    + snap.foldl (fun acc x => (acc * 17 + x.toNat) % 1000003) 0
+    + b2.foldl (fun acc x => (acc * 13 + x.toNat) % 1000003) 0 + b.foldl (fun acc x => (acc + x.toNat) % 1000003) 0
+    + c2.foldl (fun acc x => (acc * 7 + x.toNat) % 1000003) 0 + c.foldl (fun acc x => (acc + x.toNat) % 1000003) 0
+    + d2.foldl (fun acc x => (acc * 5 + x.toNat) % 1000003) 0 + d.foldl (fun acc x => (acc + x.toNat) % 1000003) 0
+    + e2.foldl (fun acc x => (acc * 3 + x.toNat) % 1000003) 0 + e.foldl (fun acc x => (acc + x.toNat) % 1000003) 0
+    + bumped + loopSum + (if sorted then 1 else 0) + (a.getD (n + 5) 99).toNat + (b.getD (n + 5) 98).toNat + (c.getD (n + 5) 97).toNat
+    + (d.getD (n + 5) 96).toNat + (e.getD (n + 5) 'z').toNat + (s.pop.pop.size)
+''')
 add("array_list_conv", '''
 def entry (n : Nat) : Nat :=
   let l := (List.range (n + 1)).toArray.toList

@@ -77,6 +77,31 @@ The ownership claim above is about aliasing. A separate, narrower claim covers t
   function. The garden, the aliasing tests and the property tests (including stale and lazily shared
   versions) pass with it.
 
+### Narrow integer elements
+
+`UInt8`, `UInt16`, `UInt32`, `UInt64` (and `Char`, a `UInt32`) elements get the same treatment as `Word` ones:
+`arrGetD32`, `arrGetI32`, `arrUGet32`, `arrPushU32`, `arrSetU32`, `arrUSetU32` and the 8, 16 and 64 bit
+versions, and `arrSwapU{8,16,32,64,W}` for swaps.
+
+* The emitter picks a narrow primitive only from the Haskell type it sees: the type of a read, or of the value
+  written. It never does inside `Array.mapMUnsafe` (the view as `NonScalar` hides the element type), where the
+  generic, deoptimizing write is used as before. A swap carries no element, so its variant is chosen from the
+  array's element type; it is a speed choice only, because every swap variant falls back to the generic
+  `aSwapU` unless the live buffer is of exactly its kind.
+* Each in-line fast path matches a live buffer of its own kind. Everything else (a boxed buffer, an old
+  version, a lazy handle, a buffer that is not the sole owner) goes to a `NOINLINE` function that uses the
+  generic boxed operations, so ownership and persistence are decided in the same place as before.
+* Bounds are one unsigned comparison of the index against the length, so a negative or huge `Int` is out of
+  range. A `Word` index is passed as it is (`arrIx`); in exact mode, where `Nat` is a `Natural`, it is clamped
+  first, because a `Natural` of 2^64 would otherwise wrap to 0. The property tests read at -1, `minBound`,
+  `maxBound`, 2^63, 2^64 and 2^70, in both modes.
+* The default of a read (`idxErr32` etc., the shared error value of `a[i]` with a proof) is never forced
+  unless the index is out of range; the slow path takes it boxed and lazily. A first version forced it on the
+  slow path and failed the new garden program; the property tests now read in range with a default that
+  throws.
+* `growRaw`/`growBoxed` copy a buffer with `copyMutableByteArray#`/`copyMutableArray#` and clear the tail. A
+  deliberate bug in the copy length crashes the property tests.
+
 ## Assumptions the claim depends on
 
 * **Single thread of use.** Arrays are mutable buffers behind `unsafeDupablePerformIO`; two threads

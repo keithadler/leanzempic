@@ -1,0 +1,1133 @@
+
+==================== Final STG: ====================
+
+$tcZThunk2 :: Addr# = "ZThunk"#;
+
+$trModule2 :: Addr# = "Zempic.Prims"#;
+
+$trModule4 :: Addr# = "main"#;
+
+lvl_rchs :: Addr# = "Negative exponent"#;
+
+ZThunk :: Any %1 -> ZThunk = \r [eta_B0] ZThunk [eta_B0];
+
+lvl1_rcht :: [Char] = \u [] unpackCString# lvl_rchs;
+
+lvl2_rchu :: Integer = \u [] errorWithoutStackTrace lvl1_rcht;
+
+intEDiv1 :: Integer = IS! [1#];
+
+thunkMk :: Any -> Any -> Any =
+    \r [ds_schx f_schy]
+        let { thunkMk_sat_schD :: Any = \u [] f_schy erased;
+        } in  ZThunk [thunkMk_sat_schD];
+
+thunkPure :: Any -> Any -> Any =
+    \r [ds_schE a_schF] ZThunk [a_schF];
+
+thunkGet :: Any -> Any -> Any =
+    \r [ds_schI t_schJ]
+        case t_schJ of wild1_schM { ZThunk v_schN -> v_schN; };
+
+$trModule3 :: TrName = TrNameS! [$trModule4];
+
+$trModule1 :: TrName = TrNameS! [$trModule2];
+
+$trModule :: Module = Module! [$trModule3 $trModule1];
+
+$tcZThunk1 :: TrName = TrNameS! [$tcZThunk2];
+
+$tcZThunk :: TyCon =
+    TyCon! [11601700526165359853#Word64
+            11329297825321748038#Word64
+            $trModule
+            $tcZThunk1
+            0#
+            krep$*];
+
+intEq :: Integer -> Integer -> Bool =
+    \r [eta_B0 eta_B1] integerEq eta_B0 eta_B1;
+
+intIsNeg :: Integer -> Bool =
+    \r [v_schO]
+        case v_schO of x1_schP {
+          IS x_schQ ->
+              case <# [x_schQ 0#] of x2_schR {
+                __DEFAULT -> False [];
+                1# -> True [];
+              };
+          IP _ -> False [];
+          IN _ -> True [];
+        };
+
+intLe :: Integer -> Integer -> Bool =
+    \r [eta_B0 eta_B1] integerLe eta_B0 eta_B1;
+
+intLt :: Integer -> Integer -> Bool =
+    \r [eta_B0 eta_B1] integerLt eta_B0 eta_B1;
+
+floatTanh :: Double -> Double = \r [eta_B0] tanhDouble eta_B0;
+
+floatCosh :: Double -> Double = \r [eta_B0] coshDouble eta_B0;
+
+floatSinh :: Double -> Double = \r [eta_B0] sinhDouble eta_B0;
+
+floatAcos :: Double -> Double = \r [eta_B0] acosDouble eta_B0;
+
+floatAsin :: Double -> Double = \r [eta_B0] asinDouble eta_B0;
+
+floatAtan :: Double -> Double = \r [eta_B0] atanDouble eta_B0;
+
+floatExp2 :: Double -> Double =
+    \r [ds1_schU]
+        case ds1_schU of wild1_schV {
+        D# y_schW ->
+        case **## [2.0## y_schW] of floatExp2_sat_schX {
+        __DEFAULT -> D# [floatExp2_sat_schX];
+        };
+        };
+
+floatLog1 :: DoubleBox Double# =
+    \u []
+        case logDouble# [10.0##] of v_schY {
+        __DEFAULT -> MkDoubleBox [v_schY];
+        };
+
+floatLog10 :: Double -> Double =
+    \r [y_schZ]
+        case y_schZ of wild_sci0 {
+        D# x1_sci1 ->
+        case logDouble# [x1_sci1] of ds_sci2 {
+        __DEFAULT ->
+        case floatLog1 of v_sci3 {
+        MkDoubleBox v1_sci4 ->
+        case /## [ds_sci2 v1_sci4] of ds2_sci5 {
+        __DEFAULT -> D# [ds2_sci5];
+        };
+        };
+        };
+        };
+
+floatLog3 :: DoubleBox Double# =
+    \u []
+        case logDouble# [2.0##] of v_sci6 {
+        __DEFAULT -> MkDoubleBox [v_sci6];
+        };
+
+floatLog2 :: Double -> Double =
+    \r [y_sci7]
+        case y_sci7 of wild_sci8 {
+        D# x1_sci9 ->
+        case logDouble# [x1_sci9] of ds_scia {
+        __DEFAULT ->
+        case floatLog3 of v_scib {
+        MkDoubleBox v1_scic ->
+        case /## [ds_scia v1_scic] of ds2_scid {
+        __DEFAULT -> D# [ds2_scid];
+        };
+        };
+        };
+        };
+
+floatLog :: Double -> Double = \r [eta_B0] logDouble eta_B0;
+
+floatExp :: Double -> Double = \r [eta_B0] expDouble eta_B0;
+
+floatTan :: Double -> Double = \r [eta_B0] tanDouble eta_B0;
+
+floatCos :: Double -> Double = \r [eta_B0] cosDouble eta_B0;
+
+floatSin :: Double -> Double = \r [eta_B0] sinDouble eta_B0;
+
+floatSqrt :: Double -> Double = \r [eta_B0] sqrtDouble eta_B0;
+
+floatPow :: Double -> Double -> Double =
+    \r [eta_B0 eta_B1] powerDouble eta_B0 eta_B1;
+
+floatEq :: Double -> Double -> Bool =
+    \r [eta_B0 eta_B1] eqDouble eta_B0 eta_B1;
+
+floatAbs :: Double -> Double = \r [eta_B0] fabsDouble eta_B0;
+
+floatNeg :: Double -> Double = \r [eta_B0] negateDouble eta_B0;
+
+floatMul :: Double -> Double -> Double =
+    \r [eta_B0 eta_B1] timesDouble eta_B0 eta_B1;
+
+floatSub :: Double -> Double -> Double =
+    \r [eta_B0 eta_B1] minusDouble eta_B0 eta_B1;
+
+floatAdd :: Double -> Double -> Double =
+    \r [eta_B0 eta_B1] plusDouble eta_B0 eta_B1;
+
+floatLe :: Double -> Double -> Bool =
+    \r [eta_B0 eta_B1] $fOrdDouble_$c<= eta_B0 eta_B1;
+
+floatLt :: Double -> Double -> Bool =
+    \r [eta_B0 eta_B1] $fOrdDouble_$c< eta_B0 eta_B1;
+
+floatIsFinite :: Double -> Bool =
+    \r [x_scie]
+        case x_scie of ds_scif {
+        D# ds1_scig ->
+        case
+            __ffi_static_ccall_unsafe ghc-internal:isDoubleNaN :: [ds1_scig
+                                                                   realWorld#]
+        of
+        wild_scii
+        {
+        MkSolo# ds3_scik ->
+        case ds3_scik<TagProper> of wild1_scil {
+          __DEFAULT -> False [];
+          0# ->
+              case
+                  __ffi_static_ccall_unsafe ghc-internal:isDoubleInfinite :: [ds1_scig
+                                                                              realWorld#]
+              of
+              wild2_scin
+              {
+              MkSolo# ds5_scip ->
+              case ds5_scip<TagProper> of wild3_sciq {
+                __DEFAULT -> False [];
+                0# -> True [];
+              };
+              };
+        };
+        };
+        };
+
+floatIsInf :: Double -> Bool =
+    \r [eta_B0] $fRealFloatDouble_$cisInfinite eta_B0;
+
+floatIsNaN :: Double -> Bool =
+    \r [eta_B0] $fRealFloatDouble_$cisNaN eta_B0;
+
+floatAtan2 :: Double -> Double -> Double =
+    \r [eta_B0 eta_B1] $fRealFloatDouble_$catan2 eta_B0 eta_B1;
+
+intNeg :: Integer -> Integer = \r [eta_B0] integerNegate eta_B0;
+
+intEMod :: Integer -> Integer -> Integer =
+    \r [x_scir y_scis]
+        let-no-escape {
+          $j1_scit :: Integer =
+              \j []
+                  case x_scir of ds2_sciu {
+                  __DEFAULT ->
+                  case y_scis of x1_sciv {
+                    IS x2_sciw ->
+                        case x2_sciw<TagProper> of wild_scix {
+                          __DEFAULT ->
+                              case integerRem ds2_sciu x1_sciv of x3_sciy {
+                                IS x4_sciz ->
+                                    case <# [x4_sciz 0#] of x5_sciA {
+                                      __DEFAULT -> x3_sciy<TagProper>;
+                                      1# ->
+                                          case integerAbs x1_sciv of intEMod_sat_sciB {
+                                          __DEFAULT -> integerAdd x3_sciy intEMod_sat_sciB;
+                                          };
+                                    };
+                                IP _ -> x3_sciy<TagProper>;
+                                IN _ ->
+                                    case integerAbs x1_sciv of intEMod_sat_sciE {
+                                    __DEFAULT -> integerAdd x3_sciy intEMod_sat_sciE;
+                                    };
+                              };
+                          0# -> divZeroError;
+                        };
+                    IP _ ->
+                        case integerRem ds2_sciu x1_sciv of x3_sciH {
+                          IS x4_sciI ->
+                              case <# [x4_sciI 0#] of x5_sciJ {
+                                __DEFAULT -> x3_sciH<TagProper>;
+                                1# ->
+                                    case integerAbs x1_sciv of intEMod_sat_sciK {
+                                    __DEFAULT -> integerAdd x3_sciH intEMod_sat_sciK;
+                                    };
+                              };
+                          IP _ -> x3_sciH<TagProper>;
+                          IN _ ->
+                              case integerAbs x1_sciv of intEMod_sat_sciN {
+                              __DEFAULT -> integerAdd x3_sciH intEMod_sat_sciN;
+                              };
+                        };
+                    IN _ ->
+                        case integerRem ds2_sciu x1_sciv of x3_sciP {
+                          IS x4_sciQ ->
+                              case <# [x4_sciQ 0#] of x5_sciR {
+                                __DEFAULT -> x3_sciP<TagProper>;
+                                1# ->
+                                    case integerAbs x1_sciv of intEMod_sat_sciS {
+                                    __DEFAULT -> integerAdd x3_sciP intEMod_sat_sciS;
+                                    };
+                              };
+                          IP _ -> x3_sciP<TagProper>;
+                          IN _ ->
+                              case integerAbs x1_sciv of intEMod_sat_sciV {
+                              __DEFAULT -> integerAdd x3_sciP intEMod_sat_sciV;
+                              };
+                        };
+                  };
+                  };
+        } in 
+          case y_scis of x1_sciW {
+            IS x2_sciX ->
+                case x2_sciX<TagProper> of wild_sciY {
+                  __DEFAULT -> $j1_scit;
+                  0# -> x_scir;
+                };
+            IP _ -> $j1_scit;
+            IN _ -> $j1_scit;
+          };
+
+floatToUnsigned1 :: Integer = IS! [0#];
+
+intEDiv :: Integer -> Integer -> Integer =
+    \r [x_scj1 y_scj2]
+        let-no-escape {
+          $j1_scj3 :: Integer =
+              \j []
+                  case x_scj1 of ds2_scj4 {
+                  __DEFAULT ->
+                  let-no-escape {
+                    $j2_scj5 :: Integer -> Integer -> Integer =
+                        \j [q_scj6 r_scj7]
+                            let-no-escape {
+                              $j3_scj8 :: Integer =
+                                  \j []
+                                      case y_scj2 of wild_scj9 {
+                                        IS x1_scja ->
+                                            case ># [x1_scja 0#] of x2_scjb {
+                                              __DEFAULT -> integerAdd q_scj6 intEDiv1;
+                                              1# -> integerSub q_scj6 intEDiv1;
+                                            };
+                                        IP _ -> integerSub q_scj6 intEDiv1;
+                                        IN _ -> integerAdd q_scj6 intEDiv1;
+                                      };
+                            } in 
+                              case r_scj7<TagProper> of x1_scje {
+                                IS x2_scjf ->
+                                    case <# [x2_scjf 0#] of x3_scjg {
+                                      __DEFAULT -> q_scj6<TagProper>;
+                                      1# -> $j3_scj8;
+                                    };
+                                IP _ -> q_scj6<TagProper>;
+                                IN _ -> $j3_scj8;
+                              };
+                  } in 
+                    case y_scj2 of x1_scjj {
+                      IS x2_scjk ->
+                          case x2_scjk<TagProper> of wild_scjl {
+                            __DEFAULT ->
+                                case integerQuotRem# ds2_scj4 x1_scjj of ds3_scjm {
+                                (#,#) ipv_scjn ipv1_scjo ->
+                                case ipv_scjn of ipv_tcoc {
+                                __DEFAULT ->
+                                case ipv1_scjo of ipv1_tcoe {
+                                __DEFAULT -> $j2_scj5 ipv_tcoc ipv1_tcoe;
+                                };
+                                };
+                                };
+                            0# -> divZeroError;
+                          };
+                      IP _ ->
+                          case integerQuotRem# ds2_scj4 x1_scjj of ds3_scjr {
+                          (#,#) ipv_scjs ipv1_scjt ->
+                          case ipv_scjs of ipv_tcog {
+                          __DEFAULT ->
+                          case ipv1_scjt of ipv1_tcoi {
+                          __DEFAULT -> $j2_scj5 ipv_tcog ipv1_tcoi;
+                          };
+                          };
+                          };
+                      IN _ ->
+                          case integerQuotRem# ds2_scj4 x1_scjj of ds3_scjv {
+                          (#,#) ipv_scjw ipv1_scjx ->
+                          case ipv_scjw of ipv_tcok {
+                          __DEFAULT ->
+                          case ipv1_scjx of ipv1_tcom {
+                          __DEFAULT -> $j2_scj5 ipv_tcok ipv1_tcom;
+                          };
+                          };
+                          };
+                    };
+                  };
+        } in 
+          case y_scj2 of x1_scjy {
+            IS x2_scjz ->
+                case x2_scjz<TagProper> of wild_scjA {
+                  __DEFAULT -> $j1_scj3;
+                  0# -> floatToUnsigned1<TagProper>;
+                };
+            IP _ -> $j1_scj3;
+            IN _ -> $j1_scj3;
+          };
+
+intMul :: Integer -> Integer -> Integer =
+    \r [eta_B0 eta_B1] integerMul eta_B0 eta_B1;
+
+intSub :: Integer -> Integer -> Integer =
+    \r [eta_B0 eta_B1] integerSub eta_B0 eta_B1;
+
+intAdd :: Integer -> Integer -> Integer =
+    \r [eta_B0 eta_B1] integerAdd eta_B0 eta_B1;
+
+$wfloatToUnsigned :: Integer -> Double# -> Integer =
+    \r [mx_scjD ww_scjE]
+        case
+            __ffi_static_ccall_unsafe ghc-internal:isDoubleNaN :: [ww_scjE
+                                                                   realWorld#]
+        of
+        wild_scjG
+        {
+        MkSolo# ds3_scjI ->
+        case ds3_scjI<TagProper> of wild1_scjJ {
+          __DEFAULT -> floatToUnsigned1<TagProper>;
+          0# ->
+              case <=## [ww_scjE 0.0##] of lwild_scjK {
+                __DEFAULT ->
+                    case integerToDouble# mx_scjD of ds_scjL {
+                    __DEFAULT ->
+                    case >=## [ww_scjE ds_scjL] of lwild1_scjM {
+                      __DEFAULT ->
+                          case decodeDouble_Int64# [ww_scjE] of ds1_scjN {
+                          (#,#) ipv_scjO ipv1_scjP ->
+                          case <# [ipv1_scjP 0#] of lwild2_scjQ {
+                            __DEFAULT ->
+                                case $wintegerFromInt64# ipv_scjO of ww1_scjR {
+                                __DEFAULT ->
+                                case int2Word# [ipv1_scjP] of $wfloatToUnsigned_sat_scjT {
+                                __DEFAULT ->
+                                let { $wfloatToUnsigned_sat_scjS :: Integer = IS! [ww1_scjR];
+                                } in 
+                                  integerShiftL#
+                                      $wfloatToUnsigned_sat_scjS $wfloatToUnsigned_sat_scjT;
+                                };
+                                };
+                            1# ->
+                                case negateInt# [ipv1_scjP] of s_scjU {
+                                __DEFAULT ->
+                                case ># [s_scjU 52#] of lwild3_scjV {
+                                  __DEFAULT ->
+                                      case $wintegerFromInt64# ipv_scjO of ww1_scjW {
+                                      __DEFAULT ->
+                                      case <# [ww1_scjW 0#] of x4_scjX {
+                                        __DEFAULT ->
+                                            case
+                                                uncheckedIShiftRA# [ww1_scjW s_scjU]
+                                            of
+                                            $wfloatToUnsigned_sat_scjY
+                                            {
+                                            __DEFAULT -> IS [$wfloatToUnsigned_sat_scjY];
+                                            };
+                                        1# ->
+                                            let {
+                                              $wfloatToUnsigned_sat_scjZ :: Integer =
+                                                  IS! [ww1_scjW];
+                                            } in 
+                                              case
+                                                  integerNegate $wfloatToUnsigned_sat_scjZ
+                                              of
+                                              $wfloatToUnsigned_sat_sck0
+                                              {
+                                              __DEFAULT ->
+                                              case
+                                                  integerToInt# $wfloatToUnsigned_sat_sck0
+                                              of
+                                              n_sck1
+                                              {
+                                              __DEFAULT ->
+                                              case
+                                                  uncheckedIShiftRA# [n_sck1 s_scjU]
+                                              of
+                                              $wfloatToUnsigned_sat_sck2
+                                              {
+                                              __DEFAULT ->
+                                              case
+                                                  negateInt# [$wfloatToUnsigned_sat_sck2]
+                                              of
+                                              $wfloatToUnsigned_sat_sck3
+                                              {
+                                              __DEFAULT -> IS [$wfloatToUnsigned_sat_sck3];
+                                              };
+                                              };
+                                              };
+                                              };
+                                      };
+                                      };
+                                  1# -> floatToUnsigned1<TagProper>;
+                                };
+                                };
+                          };
+                          };
+                      1# -> mx_scjD;
+                    };
+                    };
+                1# -> floatToUnsigned1<TagProper>;
+              };
+        };
+        };
+
+floatToUnsigned :: Integer -> Double -> Integer =
+    \r [mx_sck4 x_sck5]
+        case x_sck5 of wild_sck6 {
+        D# ww_sck7 -> $wfloatToUnsigned mx_sck4 ww_sck7;
+        };
+
+floatRound1 :: DoubleBox Double# =
+    \u []
+        case negateDouble# [0.0##] of floatRound1_sat_sck8 {
+        __DEFAULT -> MkDoubleBox [floatRound1_sat_sck8];
+        };
+
+$wfloatRound :: Double# -> Double# =
+    \r [ww_sck9]
+        case
+            __ffi_static_ccall_unsafe ghc-internal:isDoubleNaN :: [ww_sck9
+                                                                   realWorld#]
+        of
+        wild_sckb
+        {
+        MkSolo# ds3_sckd ->
+        case ds3_sckd<TagProper> of wild1_scke {
+          __DEFAULT -> ww_sck9<TagProper>;
+          0# ->
+              case
+                  __ffi_static_ccall_unsafe ghc-internal:isDoubleInfinite :: [ww_sck9
+                                                                              realWorld#]
+              of
+              wild2_sckg
+              {
+              MkSolo# ds5_scki ->
+              case ds5_scki<TagProper> of wild3_sckj {
+                __DEFAULT -> ww_sck9<TagProper>;
+                0# ->
+                    case >=## [ww_sck9 0.0##] of lwild_sckk {
+                      __DEFAULT ->
+                          case negateDouble# [ww_sck9] of $wfloatRound_sat_sckl {
+                          __DEFAULT ->
+                          case +## [$wfloatRound_sat_sckl 0.5##] of $wfloatRound_sat_sckm {
+                          __DEFAULT ->
+                          case decodeDouble_Int64# [$wfloatRound_sat_sckm] of ds6_sckn {
+                          (#,#) ipv_scko ipv1_sckp ->
+                          case <# [ipv1_sckp 0#] of lwild1_sckq {
+                            __DEFAULT ->
+                                case $wintegerFromInt64# ipv_scko of ww1_sckr {
+                                __DEFAULT ->
+                                case int2Word# [ipv1_sckp] of $wfloatRound_sat_sckt {
+                                __DEFAULT ->
+                                let { $wfloatRound_sat_scks :: Integer = IS! [ww1_sckr];
+                                } in 
+                                  case
+                                      integerShiftL# $wfloatRound_sat_scks $wfloatRound_sat_sckt
+                                  of
+                                  $wfloatRound_sat_scku
+                                  {
+                                  __DEFAULT ->
+                                  case integerToDouble# $wfloatRound_sat_scku of ds_sckv {
+                                  __DEFAULT -> negateDouble# [ds_sckv];
+                                  };
+                                  };
+                                };
+                                };
+                            1# ->
+                                case negateInt# [ipv1_sckp] of s_sckw {
+                                __DEFAULT ->
+                                case ># [s_sckw 52#] of lwild2_sckx {
+                                  __DEFAULT ->
+                                      case int64ToInt# [ipv_scko] of $wfloatRound_sat_scky {
+                                      __DEFAULT ->
+                                      case
+                                          uncheckedIShiftRA# [$wfloatRound_sat_scky s_sckw]
+                                      of
+                                      $wfloatRound_sat_sckz
+                                      {
+                                      __DEFAULT ->
+                                      case
+                                          int2Double# [$wfloatRound_sat_sckz]
+                                      of
+                                      $wfloatRound_sat_sckA
+                                      {
+                                      __DEFAULT -> negateDouble# [$wfloatRound_sat_sckA];
+                                      };
+                                      };
+                                      };
+                                  1# ->
+                                      case $wintegerFromInt64# ipv_scko of ww1_sckB {
+                                      __DEFAULT ->
+                                      case <# [ww1_sckB 0#] of x3_sckC {
+                                        __DEFAULT ->
+                                            case floatRound1 of v_sckD {
+                                            MkDoubleBox v1_sckE -> v1_sckE<TagProper>;
+                                            };
+                                        1# -> 1.0##;
+                                      };
+                                      };
+                                };
+                                };
+                          };
+                          };
+                          };
+                          };
+                      1# ->
+                          case +## [ww_sck9 0.5##] of $wfloatRound_sat_sckF {
+                          __DEFAULT ->
+                          case decodeDouble_Int64# [$wfloatRound_sat_sckF] of ds6_sckG {
+                          (#,#) ipv_sckH ipv1_sckI ->
+                          case <# [ipv1_sckI 0#] of lwild1_sckJ {
+                            __DEFAULT ->
+                                case $wintegerFromInt64# ipv_sckH of ww1_sckK {
+                                __DEFAULT ->
+                                case int2Word# [ipv1_sckI] of $wfloatRound_sat_sckM {
+                                __DEFAULT ->
+                                let { $wfloatRound_sat_sckL :: Integer = IS! [ww1_sckK];
+                                } in 
+                                  case
+                                      integerShiftL# $wfloatRound_sat_sckL $wfloatRound_sat_sckM
+                                  of
+                                  $wfloatRound_sat_sckN
+                                  {
+                                  __DEFAULT -> integerToDouble# $wfloatRound_sat_sckN;
+                                  };
+                                };
+                                };
+                            1# ->
+                                case negateInt# [ipv1_sckI] of s_sckO {
+                                __DEFAULT ->
+                                case ># [s_sckO 52#] of lwild2_sckP {
+                                  __DEFAULT ->
+                                      case int64ToInt# [ipv_sckH] of $wfloatRound_sat_sckQ {
+                                      __DEFAULT ->
+                                      case
+                                          uncheckedIShiftRA# [$wfloatRound_sat_sckQ s_sckO]
+                                      of
+                                      $wfloatRound_sat_sckR
+                                      {
+                                      __DEFAULT -> int2Double# [$wfloatRound_sat_sckR];
+                                      };
+                                      };
+                                  1# ->
+                                      case $wintegerFromInt64# ipv_sckH of ww1_sckS {
+                                      __DEFAULT ->
+                                      case <# [ww1_sckS 0#] of x3_sckT {
+                                        __DEFAULT -> 0.0##;
+                                        1# -> -1.0##;
+                                      };
+                                      };
+                                };
+                                };
+                          };
+                          };
+                          };
+                    };
+              };
+              };
+        };
+        };
+
+floatRound :: Double -> Double =
+    \r [x_sckU]
+        case x_sckU of wild_sckV {
+        D# ww_sckW ->
+        case $wfloatRound ww_sckW of ww1_sckX {
+        __DEFAULT -> D# [ww1_sckX];
+        };
+        };
+
+$wfloatCeil :: Double# -> Double# =
+    \r [ww_sckY]
+        case
+            __ffi_static_ccall_unsafe ghc-internal:isDoubleNaN :: [ww_sckY
+                                                                   realWorld#]
+        of
+        wild_scl0
+        {
+        MkSolo# ds3_scl2 ->
+        case ds3_scl2<TagProper> of wild1_scl3 {
+          __DEFAULT -> ww_sckY<TagProper>;
+          0# ->
+              case
+                  __ffi_static_ccall_unsafe ghc-internal:isDoubleInfinite :: [ww_sckY
+                                                                              realWorld#]
+              of
+              wild2_scl5
+              {
+              MkSolo# ds5_scl7 ->
+              case ds5_scl7<TagProper> of wild3_scl8 {
+                __DEFAULT -> ww_sckY<TagProper>;
+                0# ->
+                    case negateDouble# [ww_sckY] of $wfloatCeil_sat_scl9 {
+                    __DEFAULT ->
+                    case decodeDouble_Int64# [$wfloatCeil_sat_scl9] of ds6_scla {
+                    (#,#) ipv_sclb ipv1_sclc ->
+                    case <# [ipv1_sclc 0#] of lwild_scld {
+                      __DEFAULT ->
+                          case $wintegerFromInt64# ipv_sclb of ww1_scle {
+                          __DEFAULT ->
+                          case int2Word# [ipv1_sclc] of $wfloatCeil_sat_sclg {
+                          __DEFAULT ->
+                          let { $wfloatCeil_sat_sclf :: Integer = IS! [ww1_scle];
+                          } in 
+                            case
+                                integerShiftL# $wfloatCeil_sat_sclf $wfloatCeil_sat_sclg
+                            of
+                            $wfloatCeil_sat_sclh
+                            {
+                            __DEFAULT ->
+                            case integerNegate $wfloatCeil_sat_sclh of $wfloatCeil_sat_scli {
+                            __DEFAULT -> integerToDouble# $wfloatCeil_sat_scli;
+                            };
+                            };
+                          };
+                          };
+                      1# ->
+                          case negateInt# [ipv1_sclc] of s_sclj {
+                          __DEFAULT ->
+                          case ># [s_sclj 52#] of lwild1_sclk {
+                            __DEFAULT ->
+                                case int64ToInt# [ipv_sclb] of $wfloatCeil_sat_scll {
+                                __DEFAULT ->
+                                case
+                                    uncheckedIShiftRA# [$wfloatCeil_sat_scll s_sclj]
+                                of
+                                $wfloatCeil_sat_sclm
+                                {
+                                __DEFAULT ->
+                                let { $wfloatCeil_sat_scln :: Integer = IS! [$wfloatCeil_sat_sclm];
+                                } in 
+                                  case integerNegate $wfloatCeil_sat_scln of $wfloatCeil_sat_sclo {
+                                  __DEFAULT -> integerToDouble# $wfloatCeil_sat_sclo;
+                                  };
+                                };
+                                };
+                            1# ->
+                                case $wintegerFromInt64# ipv_sclb of ww1_sclp {
+                                __DEFAULT ->
+                                case <# [ww1_sclp 0#] of x3_sclq {
+                                  __DEFAULT -> 0.0##;
+                                  1# -> 1.0##;
+                                };
+                                };
+                          };
+                          };
+                    };
+                    };
+                    };
+              };
+              };
+        };
+        };
+
+floatCeil :: Double -> Double =
+    \r [x_sclr]
+        case x_sclr of wild_scls {
+        D# ww_sclt ->
+        case $wfloatCeil ww_sclt of ww1_sclu {
+        __DEFAULT -> D# [ww1_sclu];
+        };
+        };
+
+$wfloatFloor :: Double# -> Double# =
+    \r [ww_sclv]
+        case
+            __ffi_static_ccall_unsafe ghc-internal:isDoubleNaN :: [ww_sclv
+                                                                   realWorld#]
+        of
+        wild_sclx
+        {
+        MkSolo# ds3_sclz ->
+        case ds3_sclz<TagProper> of wild1_sclA {
+          __DEFAULT -> ww_sclv<TagProper>;
+          0# ->
+              case
+                  __ffi_static_ccall_unsafe ghc-internal:isDoubleInfinite :: [ww_sclv
+                                                                              realWorld#]
+              of
+              wild2_sclC
+              {
+              MkSolo# ds5_sclE ->
+              case ds5_sclE<TagProper> of wild3_sclF {
+                __DEFAULT -> ww_sclv<TagProper>;
+                0# ->
+                    case decodeDouble_Int64# [ww_sclv] of ds6_sclG {
+                    (#,#) ipv_sclH ipv1_sclI ->
+                    case <# [ipv1_sclI 0#] of lwild_sclJ {
+                      __DEFAULT ->
+                          case $wintegerFromInt64# ipv_sclH of ww1_sclK {
+                          __DEFAULT ->
+                          case int2Word# [ipv1_sclI] of $wfloatFloor_sat_sclM {
+                          __DEFAULT ->
+                          let { $wfloatFloor_sat_sclL :: Integer = IS! [ww1_sclK];
+                          } in 
+                            case
+                                integerShiftL# $wfloatFloor_sat_sclL $wfloatFloor_sat_sclM
+                            of
+                            $wfloatFloor_sat_sclN
+                            {
+                            __DEFAULT -> integerToDouble# $wfloatFloor_sat_sclN;
+                            };
+                          };
+                          };
+                      1# ->
+                          case negateInt# [ipv1_sclI] of s_sclO {
+                          __DEFAULT ->
+                          case ># [s_sclO 52#] of lwild1_sclP {
+                            __DEFAULT ->
+                                case int64ToInt# [ipv_sclH] of $wfloatFloor_sat_sclQ {
+                                __DEFAULT ->
+                                case
+                                    uncheckedIShiftRA# [$wfloatFloor_sat_sclQ s_sclO]
+                                of
+                                $wfloatFloor_sat_sclR
+                                {
+                                __DEFAULT -> int2Double# [$wfloatFloor_sat_sclR];
+                                };
+                                };
+                            1# ->
+                                case $wintegerFromInt64# ipv_sclH of ww1_sclS {
+                                __DEFAULT ->
+                                case <# [ww1_sclS 0#] of x3_sclT {
+                                  __DEFAULT -> 0.0##;
+                                  1# -> -1.0##;
+                                };
+                                };
+                          };
+                          };
+                    };
+                    };
+              };
+              };
+        };
+        };
+
+floatFloor :: Double -> Double =
+    \r [x_sclU]
+        case x_sclU of wild_sclV {
+        D# ww_sclW ->
+        case $wfloatFloor ww_sclW of ww1_sclX {
+        __DEFAULT -> D# [ww1_sclX];
+        };
+        };
+
+intFMod :: Integer -> Integer -> Integer =
+    \r [x_sclY y_sclZ]
+        let-no-escape {
+          $j1_scm0 :: Integer =
+              \j []
+                  case x_sclY of ds2_scm1 {
+                  __DEFAULT ->
+                  case y_sclZ of x1_scm2 {
+                    IS x2_scm3 ->
+                        case x2_scm3<TagProper> of wild_scm4 {
+                          __DEFAULT -> integerMod ds2_scm1 x1_scm2;
+                          0# -> divZeroError;
+                        };
+                    IP _ -> integerMod ds2_scm1 x1_scm2;
+                    IN _ -> integerMod ds2_scm1 x1_scm2;
+                  };
+                  };
+        } in 
+          case y_sclZ of x1_scm7 {
+            IS x2_scm8 ->
+                case x2_scm8<TagProper> of wild_scm9 {
+                  __DEFAULT -> $j1_scm0;
+                  0# -> x_sclY;
+                };
+            IP _ -> $j1_scm0;
+            IN _ -> $j1_scm0;
+          };
+
+intFDiv :: Integer -> Integer -> Integer =
+    \r [x_scmc y_scmd]
+        let-no-escape {
+          $j1_scme :: Integer =
+              \j []
+                  case x_scmc of ds2_scmf {
+                  __DEFAULT ->
+                  case y_scmd of x1_scmg {
+                    IS x2_scmh ->
+                        case x2_scmh<TagProper> of wild_scmi {
+                          __DEFAULT -> integerDiv ds2_scmf x1_scmg;
+                          0# -> divZeroError;
+                        };
+                    IP _ -> integerDiv ds2_scmf x1_scmg;
+                    IN _ -> integerDiv ds2_scmf x1_scmg;
+                  };
+                  };
+        } in 
+          case y_scmd of x1_scml {
+            IS x2_scmm ->
+                case x2_scmm<TagProper> of wild_scmn {
+                  __DEFAULT -> $j1_scme;
+                  0# -> floatToUnsigned1<TagProper>;
+                };
+            IP _ -> $j1_scme;
+            IN _ -> $j1_scme;
+          };
+
+intTMod :: Integer -> Integer -> Integer =
+    \r [x_scmq y_scmr]
+        let-no-escape {
+          $j1_scms :: Integer =
+              \j []
+                  case x_scmq of ds2_scmt {
+                  __DEFAULT ->
+                  case y_scmr of x1_scmu {
+                    IS x2_scmv ->
+                        case x2_scmv<TagProper> of wild_scmw {
+                          __DEFAULT -> integerRem ds2_scmt x1_scmu;
+                          0# -> divZeroError;
+                        };
+                    IP _ -> integerRem ds2_scmt x1_scmu;
+                    IN _ -> integerRem ds2_scmt x1_scmu;
+                  };
+                  };
+        } in 
+          case y_scmr of x1_scmz {
+            IS x2_scmA ->
+                case x2_scmA<TagProper> of wild_scmB {
+                  __DEFAULT -> $j1_scms;
+                  0# -> x_scmq;
+                };
+            IP _ -> $j1_scms;
+            IN _ -> $j1_scms;
+          };
+
+intTDiv :: Integer -> Integer -> Integer =
+    \r [x_scmE y_scmF]
+        let-no-escape {
+          $j1_scmG :: Integer =
+              \j []
+                  case x_scmE of ds2_scmH {
+                  __DEFAULT ->
+                  case y_scmF of x1_scmI {
+                    IS x2_scmJ ->
+                        case x2_scmJ<TagProper> of wild_scmK {
+                          __DEFAULT -> integerQuot ds2_scmH x1_scmI;
+                          0# -> divZeroError;
+                        };
+                    IP _ -> integerQuot ds2_scmH x1_scmI;
+                    IN _ -> integerQuot ds2_scmH x1_scmI;
+                  };
+                  };
+        } in 
+          case y_scmF of x1_scmN {
+            IS x2_scmO ->
+                case x2_scmO<TagProper> of wild_scmP {
+                  __DEFAULT -> $j1_scmG;
+                  0# -> floatToUnsigned1<TagProper>;
+                };
+            IP _ -> $j1_scmG;
+            IN _ -> $j1_scmG;
+          };
+
+lvl3_rchv :: Integer = IS! [10#];
+
+$j_rchw :: Integer -> Integer -> Double# =
+    \r [ww_scmS ww1_scmT]
+        case ww1_scmT<TagProper> of wild_scmU {
+        __DEFAULT ->
+        case ww_scmS<TagProper> of wild1_scmV {
+        __DEFAULT -> $wrationalToDouble wild1_scmV wild_scmU;
+        };
+        };
+
+$wfloatOfSci :: Integer -> Bool -> Integer -> Double# =
+    \r [m_scmW neg_scmX e_scmY]
+        case neg_scmX<TagProper> of wild_scmZ {
+          False ->
+              let-no-escape {
+                $j1_scn0 :: Double# =
+                    \j []
+                        let-no-escape {
+                          $j2_scn1 :: Integer -> Double# =
+                              \j [arg_scn2]
+                                  case integerMul m_scmW arg_scn2 of $wfloatOfSci_sat_scn3 {
+                                  __DEFAULT ->
+                                  case
+                                      integerMul $wfloatOfSci_sat_scn3 intEDiv1
+                                  of
+                                  $wfloatOfSci_sat_scn4
+                                  {
+                                  __DEFAULT ->
+                                  case $w$sreduce $wfloatOfSci_sat_scn4 intEDiv1 of wild1_scn5 {
+                                  (#,#) ww_scn6 ww1_scn7 ->
+                                  case ww1_scn7 of wild2_scn8 {
+                                  __DEFAULT ->
+                                  case ww_scn6 of wild3_scn9 {
+                                  __DEFAULT -> $wrationalToDouble wild3_scn9 wild2_scn8;
+                                  };
+                                  };
+                                  };
+                                  };
+                                  };
+                        } in 
+                          case e_scmY<TagProper> of wild1_scna {
+                            IS x_scnb ->
+                                case x_scnb<TagProper> of wild2_scnc {
+                                  __DEFAULT ->
+                                      case
+                                          ^_$s$spowImpl2 wild2_scnc lvl3_rchv
+                                      of
+                                      $wfloatOfSci_sat_scnd
+                                      {
+                                      __DEFAULT -> $j2_scn1 $wfloatOfSci_sat_scnd;
+                                      };
+                                  0# -> $j2_scn1 intEDiv1;
+                                };
+                            IP x_scne ->
+                                case ^_$s$spowImpl1 x_scne lvl3_rchv of $wfloatOfSci_sat_scnf {
+                                __DEFAULT -> $j2_scn1 $wfloatOfSci_sat_scnf;
+                                };
+                            IN x_scng ->
+                                case ^_$s$spowImpl x_scng lvl3_rchv of $wfloatOfSci_sat_scnh {
+                                __DEFAULT -> $j2_scn1 $wfloatOfSci_sat_scnh;
+                                };
+                          };
+              } in 
+                case e_scmY<TagProper> of x1_scni {
+                  IS x_scnj ->
+                      case <# [x_scnj 0#] of x2_scnk {
+                        __DEFAULT -> $j1_scn0<TagProper>;
+                        1# -> lvl2_rchu;
+                      };
+                  IP _ -> $j1_scn0<TagProper>;
+                  IN _ -> lvl2_rchu;
+                };
+          True ->
+              let-no-escape {
+                $j1_scnp :: Double# =
+                    \j []
+                        case e_scmY<TagProper> of wild1_scnq {
+                          IS x_scnr ->
+                              case x_scnr<TagProper> of wild2_scns {
+                                __DEFAULT ->
+                                    case
+                                        ^_$s$spowImpl2 wild2_scns lvl3_rchv
+                                    of
+                                    $wfloatOfSci_sat_scnt
+                                    {
+                                    __DEFAULT ->
+                                    case $w$s% m_scmW $wfloatOfSci_sat_scnt of wild3_scnu {
+                                    (#,#) ww_scnv ww1_scnw ->
+                                    case ww_scnv of ww_tcoo {
+                                    __DEFAULT ->
+                                    case ww1_scnw of ww1_tcoq {
+                                    __DEFAULT -> $j_rchw ww_tcoo ww1_tcoq;
+                                    };
+                                    };
+                                    };
+                                    };
+                                0# ->
+                                    case integerMul m_scmW intEDiv1 of $wfloatOfSci_sat_scnx {
+                                    __DEFAULT ->
+                                    case $w$sreduce $wfloatOfSci_sat_scnx intEDiv1 of wild3_scny {
+                                    (#,#) ww_scnz ww1_scnA ->
+                                    case ww_scnz of ww_tcos {
+                                    __DEFAULT ->
+                                    case ww1_scnA of ww1_tcou {
+                                    __DEFAULT -> $j_rchw ww_tcos ww1_tcou;
+                                    };
+                                    };
+                                    };
+                                    };
+                              };
+                          IP x_scnB ->
+                              case ^_$s$spowImpl1 x_scnB lvl3_rchv of $wfloatOfSci_sat_scnC {
+                              __DEFAULT ->
+                              case $w$s% m_scmW $wfloatOfSci_sat_scnC of wild2_scnD {
+                              (#,#) ww_scnE ww1_scnF ->
+                              case ww_scnE of ww_tcow {
+                              __DEFAULT ->
+                              case ww1_scnF of ww1_tcoy {
+                              __DEFAULT -> $j_rchw ww_tcow ww1_tcoy;
+                              };
+                              };
+                              };
+                              };
+                          IN x_scnG ->
+                              case ^_$s$spowImpl x_scnG lvl3_rchv of $wfloatOfSci_sat_scnH {
+                              __DEFAULT ->
+                              case $w$s% m_scmW $wfloatOfSci_sat_scnH of wild2_scnI {
+                              (#,#) ww_scnJ ww1_scnK ->
+                              case ww_scnJ of ww_tcoA {
+                              __DEFAULT ->
+                              case ww1_scnK of ww1_tcoC {
+                              __DEFAULT -> $j_rchw ww_tcoA ww1_tcoC;
+                              };
+                              };
+                              };
+                              };
+                        };
+              } in 
+                case e_scmY<TagProper> of x1_scnL {
+                  IS x_scnM ->
+                      case <# [x_scnM 0#] of x2_scnN {
+                        __DEFAULT -> $j1_scnp<TagProper>;
+                        1# -> lvl2_rchu;
+                      };
+                  IP _ -> $j1_scnp<TagProper>;
+                  IN _ -> lvl2_rchu;
+                };
+        };
+
+floatOfSci :: Integer -> Bool -> Integer -> Double =
+    \r [m_scnS neg_scnT e_scnU]
+        case
+            case m_scnS of m_tcoE {
+            __DEFAULT ->
+            case neg_scnT of neg_tcoG {
+            __DEFAULT ->
+            case e_scnU of e_tcoI {
+            __DEFAULT -> $wfloatOfSci m_tcoE neg_tcoG e_tcoI;
+            };
+            };
+            }
+        of
+        ww_scnV
+        {
+        __DEFAULT -> D# [ww_scnV];
+        };
+
+floatDiv :: Double -> Double -> Double =
+    \r [eta_B0 eta_B1] divideDouble eta_B0 eta_B1;
+
+mixHash :: Word64 -> Word64 -> Word64 =
+    \r [h_scnW k0_scnX]
+        case h_scnW of wild_scnY {
+        W64# x#_scnZ ->
+        case k0_scnX of wild1_sco0 {
+        W64# x#1_sco1 ->
+        case
+            timesWord64# [x#1_sco1 14313749767032793493#Word64]
+        of
+        x#2_sco2
+        {
+        __DEFAULT ->
+        case uncheckedShiftRL64# [x#2_sco2 47#] of mixHash_sat_sco3 {
+        __DEFAULT ->
+        case xor64# [x#2_sco2 mixHash_sat_sco3] of mixHash_sat_sco4 {
+        __DEFAULT ->
+        case
+            xor64# [mixHash_sat_sco4 14313749767032793493#Word64]
+        of
+        mixHash_sat_sco5
+        {
+        __DEFAULT ->
+        case xor64# [x#_scnZ mixHash_sat_sco5] of mixHash_sat_sco6 {
+        __DEFAULT ->
+        case
+            timesWord64# [mixHash_sat_sco6 14313749767032793493#Word64]
+        of
+        mixHash_sat_sco7
+        {
+        __DEFAULT -> W64# [mixHash_sat_sco7];
+        };
+        };
+        };
+        };
+        };
+        };
+        };
+        };
+
