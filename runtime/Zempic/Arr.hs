@@ -7,6 +7,7 @@
 -- here is either the live buffer or a short undo record pointing at a newer version. Using the
 -- newest version, as a loop does, costs O(1) with no copying; reading an old version "reroots"
 -- the buffer back to it, which is slower but always correct.
+{-# LANGUAGE BangPatterns #-}
 module Zempic.Arr
   ( Arr, aEmpty, aReplicate, aLength, aGet, aSet, aPush, aPop, aSwap, aToList, aFromList
   , aSetU, aPushU, aPopU, aSwapU
@@ -24,6 +25,7 @@ data Op
   = OSet !Int Any  -- ^ same length, element @i@ was this value
   | OPop           -- ^ one element shorter
   | OPush Any      -- ^ one element longer, ending in this value
+  | OSwap !Int !Int -- ^ same length, elements @i@ and @j@ were exchanged (its own inverse)
 
 data Node = Direct !(IOArray Int Any) | Diff !Op !Arr
 
@@ -68,6 +70,12 @@ reroot arr = do
         OPush v -> do
           unsafeWrite buf (aLen arr - 1) v
           writeIORef (aRef next) (Diff OPop arr)
+        OSwap i j -> do
+          x <- unsafeRead buf i
+          y <- unsafeRead buf j
+          unsafeWrite buf i y
+          unsafeWrite buf j x
+          writeIORef (aRef next) (Diff (OSwap i j) arr)
       writeIORef (aRef arr) (Direct buf)
       return buf
 
@@ -101,7 +109,9 @@ aPush arr v = do
       then return buf
       else do
         b <- newBuf (max 4 (2 * cap)) filler
-        forM_ [0 .. n - 1] $ \k -> unsafeRead buf k >>= unsafeWrite b k
+        let copy !k | k >= n = return ()
+                    | otherwise = unsafeRead buf k >>= unsafeWrite b k >> copy (k + 1)
+        copy 0
         return b
   unsafeWrite buf' n v
   ref <- newIORef (Direct buf')
@@ -124,10 +134,15 @@ aSwap :: Arr -> Int -> Int -> IO Arr
 aSwap arr i j
   | i < 0 || j < 0 || i >= aLen arr || j >= aLen arr = return arr
   | otherwise = do
-      x <- aGet arr i filler
-      y <- aGet arr j filler
-      arr1 <- aSet arr i y
-      aSet arr1 j x
+      buf <- reroot arr
+      x <- unsafeRead buf i
+      y <- unsafeRead buf j
+      unsafeWrite buf i y
+      unsafeWrite buf j x
+      ref <- newIORef (Direct buf)
+      let arr' = Arr (aLen arr) ref
+      writeIORef (aRef arr) (Diff (OSwap i j) arr')
+      return arr'
 
 aToList :: Arr -> IO [Any]
 aToList arr = do
@@ -169,7 +184,9 @@ aPushU arr v = do
         then unsafeWrite buf n v
         else do
           b <- newBuf (max 4 (2 * cap)) filler
-          forM_ [0 .. n - 1] $ \k -> unsafeRead buf k >>= unsafeWrite b k
+          let copy !k | k >= n = return ()
+                      | otherwise = unsafeRead buf k >>= unsafeWrite b k >> copy (k + 1)
+          copy 0
           unsafeWrite b n v
           writeIORef (aRef arr) (Direct b)
       return (Arr (n + 1) (aRef arr))

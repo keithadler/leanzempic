@@ -28,6 +28,29 @@ First complete version.
 * An AES-256 benchmark from a proved development (`bench/aes`, checked against OpenSSL).
 * A GHC Core plugin spike (`plugin/`), which showed no speedup and is not part of the product.
 
+### Added since the first draft
+* `Int` (as `Integer`), `Float` (as `Double`), `ByteArray`, `Thunk`, `Array.set`, `mixHash`, `Nat.log2`,
+  `Nat.pred`, `ofNatLT`, and the string position API (`get`, `next`, `prev`, `atEnd`, `extract`,
+  `set`, `pushn`, `posOf`, `offsetOfPos`, `hash`), which makes `foldl`, `map`, `splitOn`, `trim`,
+  `replace` and `String.Slice` compile from Lean's own definitions.
+* `garden/`: 106 small programs, one per language feature, checked against native Lean
+  (`garden/run.py`, part of `tests/run.sh`), and `garden/perf.py` for timing them.
+
+### Faster
+* A swap on a persistent array is one version with one undo record (was two chained sets): an
+  insertion sort on a shared array went from 0.535 s to 0.170 s.
+* Strings read a character with one strict read and `appendWith` is inlined: `string_build` 0.116 s to
+  0.080 s, `string_chars` 0.454 s to 0.345 s.
+* Documented `-with-rtsopts='-A256m -O1g'`: 25 to 40% on list and array programs.
+
+### Fixed
+* A structure with one relevant field (`String.Pos`) was declared as a boxed constructor while the
+  compiled code builds it as the bare field. GHC's worker/wrapper trusted the declared type and the
+  program crashed at `-O1` and above (not at `-O0`).
+* A primitive called with more arguments than its arity was missing parentheses around the
+  saturated call.
+* A type parameter used by no field is given kind `Type`, so `T Any` typechecks.
+
 ### Changed
 * A self-recursive call whose `Nat` argument is a literal up to `zempic.unroll` (default 16) is
   specialized per count and unrolled, with branches on known numbers dropped; bodies over 60
@@ -38,5 +61,5 @@ First complete version.
   mutable variables get in-place array updates.
 
 ### Known limitations
-See the README: no `IO`, `Float`, `Int`, `ByteArray` or string-position API; arrays are slower than
+See the README: no `IO` or `FloatArray`; arrays are slower than
 Lean's at large sizes; the ownership analysis is tested, not proved; Lean 4.29.x only; not thread safe.

@@ -351,3 +351,69 @@ Remaining gap, 1.8x. I did not profile this further; the likely causes, unmeasur
 of words rebuilt for every block, and `Word.map sbox` / `mapCols mixColumn` going through closures.
 The honest summary is that a proved, byte-oriented, table-driven cipher is a workload where
 the C backend wins, and where this project's strengths (Nat loops, fusion) do not apply.
+
+
+## The garden, profiled (2026-10-28)
+
+`garden/perf.py` builds each garden program with Lean's C backend and with leanzempic, checks the
+answers match, and times both (best of 3, one at a time, 20-second cap). Programs whose native time
+is a few milliseconds even at a large `n` do not actually scale with `n` (their ratio is Haskell
+process start-up, about 15 ms with `-A128m`) and are not reported. Of the rest:
+
+| Program | n | Lean C | leanzempic | Ratio |
+|---|---|---|---|---|
+| float arithmetic loop | 5e6 | 0.44 s | 0.05 s | 0.10 |
+| `Int` arithmetic fold | 3e6 | 1.11 s | 0.26 s | 0.23 |
+| binary tree map and sum | 2e5 | 2.38 s | 1.07 s | 0.45 |
+| record update loop | 5e6 | 0.10 s | 0.10 s | 0.96 |
+| `while` loop | 3e7 | 0.17 s | 0.15 s | 0.86 |
+| `Option` chain, `StateM` loop | 5e6, 3e6 | 0.12, 0.04 s | 0.10, 0.03 s | 0.8 |
+| list merge sort | 3e5 | 0.08 s | 0.10 s | 1.15 |
+| `Array.qsort` | 3e5 | 0.26 s | 0.39 s | 1.5 |
+| string building (`toString`, append) | 1e6 | 0.045 s | 0.08 s | 1.8 |
+| `HashSet` inserts | 2e6 | 0.10 s | 0.19 s | 1.9 |
+| tuple-state fold | 5e6 | 0.10 s | 0.28 s | 2.7 |
+| list of `UInt8` hashed (FNV) | 3e6 | 0.05 s | 0.16 s | 3.0 |
+| `HashMap` inserts | 3e6 | 0.07 s | 0.22 s | 3.0 |
+| string iteration (`foldl` over chars) | 1e6 | 0.10 s | 0.35 s | 3.6 |
+| `String.splitOn` | 1e6 | 0.20 s | 0.66 s | 3.3 |
+| list functions (zip, filterMap, foldr, ...) | 1e6 | 0.06 s | 0.26 s | 4.4 |
+| array map/filter/zip/fold | 2e6 | 0.05 s | 0.26 s | 5.7 |
+| array index loop (`uget`, `a[i]'h`) | 1.5e7 | 0.14 s | 0.9 s | 6 to 7 |
+| `insertionSort` on a shared array | 3e3 | 0.008 s | 0.17 s | 21 |
+
+**The pattern.** Arithmetic, records, `Int`, `Float` and trees are level or faster. Everything that
+holds many boxed elements (lists, arrays, hash maps, strings built from pieces) is 2x to 7x slower,
+and the one case where an array is both shared and mutated in a loop is 20x.
+
+**Why, from the profiles.**
+
+* **Garbage collection is about half the time of the slow list and array programs.** GHC's copying
+  collector moves every live boxed element; Lean frees a cons cell the moment its count reaches zero
+  and reuses it. Measured on `array_funcs`, `tuples`, `uint64_hash` and `list_funcs`, the
+  mutator and the collector each take roughly half the run. A bigger allocation area helps the
+  collector directly: `-A256m -O1g` (or `-H1g`) gave 0.27 to 0.22 s, 0.15 to 0.10 s, 0.26 to 0.17 s
+  and 0.35 to 0.29 s respectively, with no change to the generated code. `--nonmoving-gc`, `-c`,
+  `-G3` and `-F4` did nothing. Smaller areas (`-A32m`, `-A64m`) were worse.
+* **A shared array that a loop mutates is the worst case.** Lean copies the array once on the first
+  write and then updates it in place. The ownership analysis cannot prove an array passed in by a
+  caller that keeps using it is unshared, so the whole loop runs on the persistent array, which
+  allocates a new version (about 100 bytes) per operation. `insertionSort` called on an array that
+  is used afterwards is the example (4.5M swaps). Copying such an array once on entry would match
+  Lean, but it would change the analysis the in-place updates rest on, and it does not help when
+  the array is carried in a loop-state cell. It is the main item on the roadmap, not done.
+* **Fusion does not help here.** With `zempic.fuse true`, `uint64_hash`, `list_funcs`, `tuples`,
+  `closures` and `list_mergesort` changed by less than the noise: Lean's own `List.map` and
+  friends have already been specialized to loops by the time the pass runs.
+
+**What was optimized in this round** (each measured on the program named):
+
+| Change | Before | After |
+|---|---|---|
+| a swap is one array version with one undo record, not two chained sets | `insertionSort` 0.535 s | 0.170 s |
+| growing a persistent array copies with a strict loop, not a list | `array_funcs` 0.351 s | 0.26 s |
+| one strict read per character instead of three; `appendWith` inlined | `string_chars` 0.454 s, `string_build` 0.116 s | 0.345 s, 0.080 s |
+| `-A256m -O1g` instead of `-A128m` (RTS option, not code) | list and array programs | 25 to 40% faster |
+
+Tried and dropped: inlining the array read primitives (no change), a tighter `mulLoop` (no change),
+an unboxed S-box table (7%, below the noise of the rest), `zempic.fuse` (no change).

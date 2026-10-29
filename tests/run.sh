@@ -138,3 +138,10 @@ if command -v openssl >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; the
   done
   echo "ok aes (AES-256 from lean-aes: Lean C, Haskell and OpenSSL agree)"
 fi
+
+# The garden: 100+ small programs, one per language feature, native Lean against leanzempic + GHC.
+if command -v python3 >/dev/null 2>&1; then
+  python3 garden/run.py >/tmp/garden.out 2>&1
+  tail -1 /tmp/garden.out | grep -q "^{'OK': [0-9]*}$" || { grep -v "^OK" /tmp/garden.out | head -20; echo "FAIL garden"; exit 1; }
+  echo "ok garden ($(tail -1 /tmp/garden.out))"
+fi

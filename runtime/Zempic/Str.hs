@@ -88,6 +88,7 @@ sToText (Str (Buf fp _) n _) = TE.decodeUtf8 (BI.fromForeignPtr (castForeign fp 
   where castForeign f off = BI.plusForeignPtr f off
 
 -- | Add @k@ bytes (@kc@ characters) written by @writer@ to the end of a version.
+{-# INLINE appendWith #-}
 appendWith :: Str -> Int -> Int -> (Ptr Word8 -> IO ()) -> IO Str
 appendWith (Str buf@(Buf fp cap) n c) k kc writer = do
   u <- unsafeWithForeignPtr fp $ \p -> peek (castPtr p :: Ptr Int)
@@ -162,30 +163,46 @@ sByteAt (Str (Buf fp _) _ _) i = unsafeDupablePerformIO $
   unsafeWithForeignPtr fp $ \p -> peekByteOff p (hdr + i)
 {-# INLINE sByteAt #-}
 
--- | Width in bytes of the character whose first byte is at @i@ (1 when @i@ is past the end, as
--- Lean's @next@ treats the default character).
-sCharWidthAt :: Str -> Int -> Int
-sCharWidthAt s@(Str _ n _) i
-  | i < 0 || i >= n = 1
+-- | Width in bytes of the character whose first byte is @b@.
+widthOf :: Word8 -> Int
+widthOf b
   | b < 0x80 = 1
   | b .&. 0xE0 == 0xC0 = 2
   | b .&. 0xF0 == 0xE0 = 3
   | b .&. 0xF8 == 0xF0 = 4
   | otherwise = 1
-  where b = sByteAt s i
+{-# INLINE widthOf #-}
 
--- | The character starting at byte @i@, or Lean's default character @A@ outside the string.
+-- | Width in bytes of the character whose first byte is at @i@ (1 when @i@ is past the end, as
+-- Lean's @next@ treats the default character).
+sCharWidthAt :: Str -> Int -> Int
+sCharWidthAt (Str (Buf fp _) n _) i
+  | i < 0 || i >= n = 1
+  | otherwise = unsafeDupablePerformIO $ unsafeWithForeignPtr fp $ \p -> do
+      b <- peekByteOff p (hdr + i) :: IO Word8
+      return $! widthOf b
+{-# INLINE sCharWidthAt #-}
+
+-- | The character starting at byte @i@, or Lean's default character @A@ outside the string. One
+-- read for ASCII; the continuation bytes are read only when there are any.
 sCharAt :: Str -> Int -> Word32
-sCharAt s@(Str _ n _) i
+sCharAt (Str (Buf fp _) n _) i
   | i < 0 || i >= n = 65
-  | otherwise = case sCharWidthAt s i of
-      1 -> fromIntegral b0
-      2 -> (fromIntegral (b0 .&. 0x1F) * 64) .|. cont 1
-      3 -> (fromIntegral (b0 .&. 0x0F) * 4096) .|. (cont 1 * 64) .|. cont 2
-      _ -> (fromIntegral (b0 .&. 0x07) * 262144) .|. (cont 1 * 4096) .|. (cont 2 * 64) .|. cont 3
-  where
-    b0 = sByteAt s i
-    cont k = if i + k < n then fromIntegral (sByteAt s (i + k) .&. 0x3F) else 0 :: Word32
+  | otherwise = unsafeDupablePerformIO $ unsafeWithForeignPtr fp $ \p -> do
+      b0 <- peekByteOff p (hdr + i) :: IO Word8
+      if b0 < 0x80 then return $! fromIntegral b0 else do
+        let cont :: Int -> IO Word32
+            cont k = if i + k < n then (\b -> fromIntegral (b .&. 0x3F)) <$> (peekByteOff p (hdr + i + k) :: IO Word8)
+                     else return 0
+        case widthOf b0 of
+          2 -> do c1 <- cont 1
+                  return $! (fromIntegral (b0 .&. 0x1F) * 64) .|. c1
+          3 -> do c1 <- cont 1; c2 <- cont 2
+                  return $! (fromIntegral (b0 .&. 0x0F) * 4096) .|. (c1 * 64) .|. c2
+          4 -> do c1 <- cont 1; c2 <- cont 2; c3 <- cont 3
+                  return $! (fromIntegral (b0 .&. 0x07) * 262144) .|. (c1 * 4096) .|. (c2 * 64) .|. c3
+          _ -> return $! fromIntegral b0
+{-# INLINE sCharAt #-}
 
 -- | The start of the character before byte @i@ (0 at the start), as Lean's @prev@.
 sPrev :: Str -> Int -> Int

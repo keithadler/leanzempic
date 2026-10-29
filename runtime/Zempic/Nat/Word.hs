@@ -289,15 +289,19 @@ strLit lit = strIO (zo <$> sFromText (T.pack lit))
 -- Strings by byte position (a Pos is a byte offset).
 strGet :: Any -> ZNat -> Word32
 strGet s p = sCharAt (zu s :: Str) (arrIdx p)
+{-# INLINE strGet #-}
 
 strNext :: Any -> ZNat -> ZNat
 strNext s p = natAdd p (fromIntegral (sCharWidthAt (zu s :: Str) (arrIdx p)))
+{-# INLINE strNext #-}
 
 strPrev :: Any -> ZNat -> ZNat
 strPrev s p = fromIntegral (sPrev (zu s :: Str) (arrIdx p))
+{-# INLINE strPrev #-}
 
 strAtEnd :: Any -> ZNat -> Bool
 strAtEnd s p = toInteger p >= toInteger (sBytes (zu s :: Str))
+{-# INLINE strAtEnd #-}
 
 strExtract :: Any -> ZNat -> ZNat -> Any
 strExtract s b e = strIO (zo <$> sExtract (zu s) (arrIdx b) (arrIdx e))
@@ -309,12 +313,15 @@ strPushn s c n = strIO (zo <$> sPushn (zu s) c (arrIdx n))
 
 strDecodeChar :: Any -> ZNat -> Any -> Word32
 strDecodeChar s p _ = strGet s p
+{-# INLINE strDecodeChar #-}
 
 strPosNext :: Any -> ZNat -> Any -> ZNat
 strPosNext s p _ = strNext s p
+{-# INLINE strPosNext #-}
 
 strGetByte :: Any -> ZNat -> Any -> Word8
 strGetByte s i _ = sByteAt (zu s :: Str) (arrIdx i)
+{-# INLINE strGetByte #-}
 
 strPosOf :: Any -> Word32 -> ZNat
 strPosOf s c = go 0
@@ -360,6 +367,7 @@ natPred x = if x == 0 then 0 else x - 1
 
 strIsEmpty :: Any -> Bool
 strIsEmpty s = sBytes (zu s :: Str) == 0
+{-# INLINE strIsEmpty #-}
 
 -- Int (an Integer), converting to and from Nat.
 intOfNat :: ZNat -> Integer

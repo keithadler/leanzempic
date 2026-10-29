@@ -282,6 +282,11 @@ Details worth knowing:
 | `UInt8`, `UInt16`, `UInt32`, `UInt64` | `Word8`, `Word16`, `Word32`, `Word64` | wrapping, shifts masked to the width, `x / 0 = 0`, `x % 0 = x`, as in Lean |
 | `USize` | `Word` | 64-bit only |
 | `Char` | `Word32` | `Char.ofNat` applies Lean's scalar-value rule |
+| `Int` | `Integer` | `/` and `%` are Euclidean as in Lean; `Int.tdiv`, `fdiv` and friends too; `cases` on `ofNat`/`negSucc` works |
+| `Float` | `Double` | `Float.ofScientific` is correctly rounded, `toUInt*` saturates and sends NaN to 0 |
+| `ByteArray` | the string buffer, bytes only | `push`, `get!`, `set!`, `size` |
+| `Thunk α` | a lazy box | |
+| a structure with one relevant field (`String.Pos`) | the field itself | Lean's own representation; declaring it as a constructor would be a type lie |
 | `String` | shared UTF-8 buffer ([`Zempic.Str`](runtime/Zempic/Str.hs)), held as `Any` | byte sizes and ordering match Lean |
 | `Array α` | Baker persistent array ([`Zempic.Arr`](runtime/Zempic/Arr.hs)), held as `Any` | elements are `Any` |
 | `List α` | Haskell `[]`, elements `Any` | needed for fusion |
@@ -419,9 +424,12 @@ That one rule is the whole safety argument, and it is what the string tests atta
 [Testing](#testing)). The length in characters is stored with each version, so `String.length` is
 O(1). `toString` on a `Nat` writes digits directly into a fresh buffer.
 
-Supported: `length`, `utf8ByteSize`, `append`, `push`, `==`, `<`, `<=`, `toList`, `ofList`, string
-literals, `Nat.repr`. Not supported: the position and slice API (`String.get`, `String.Pos`,
-`s.foldl`, `splitOn`, ...).
+Supported: `length`, `utf8ByteSize`, `append`, `push`, `pushn`, `==`, `<`, `<=`, `toList`, `ofList`,
+string literals, `Nat.repr`, `hash` (Lean's MurmurHash64A, so hash maps iterate in the same order),
+and the byte-position API: `get`, `next`, `prev`, `atEnd`, `extract`, `set`, `posOf`,
+`offsetOfPos`, `decodeChar`. A `String.Pos` is a byte offset held as a `Nat`. Everything Lean builds
+on those (`foldl`, `map`, `splitOn`, `trim`, `replace`, `toUpper`, `startsWith`, `String.Slice`,
+`toNat?`, ...) compiles from Lean's own definitions and is exercised by the garden.
 
 ## Structures, enums, trees and generic data
 
@@ -478,13 +486,15 @@ Supported (each has tests that compare with native Lean):
 
 Not supported (reported as an error, never dropped):
 
-* `IO`, `ST`, references, tasks, `Thunk`
-* `Float`, `Int`, `ByteArray`, `FloatArray`
-* the `String.Pos` / `String.Slice` API
+* `IO`, `ST`, references, tasks
+* `FloatArray`, bitwise `Int` operations, `Float.toString`
 * any constant that is `@[extern]` and not in the primitive table
 
-Not tested: mutually recursive functions, and typeclass-heavy code that Lean does not specialize
-away. They may work; nothing here checks them.
+Mutual recursion, type classes (with default methods), monad transformers (`StateT`, `ExceptT`,
+`ReaderT`), `Std.HashMap` and `HashSet`, derived `BEq`/`Hashable`/`Ord`, dependent types such as an
+indexed `Vec`, `partial def`, subarrays and `Thunk` are exercised by the [garden](#the-garden).
+`Thunk` is evaluated when it is created in a strict `let`, but its value is kept lazy inside the
+box, so an unused thunk is not forced.
 
 ## Benchmarks
 
@@ -545,6 +555,18 @@ Reading these honestly:
 * Compile time was not optimized or compared with Lean's. GHC `-O2` on generated modules is
   slower than Lean's own backend.
 
+### The garden at scale
+
+`garden/perf.py` times 40 or so of the garden programs against compiled native Lean (details and
+profiles in [`BENCH.md`](BENCH.md)). Short version: arithmetic, `Int`, `Float`, records and trees are
+level or faster (down to 0.1x for a `Float` loop); lists, arrays, hash maps and strings built from
+pieces are 2x to 7x slower; an array that a caller shares and a loop mutates is about 20x slower
+(Lean copies it once; this backend runs the loop on the persistent array).
+
+**Run Haskell output with a large allocation area.** Garbage collection is about half the run time of
+the slow programs, and `-with-rtsopts='-A256m -O1g'` (or `-H1g`) makes them 25 to 40% faster with no
+change to the code. Smaller areas are slower, and `--nonmoving-gc`, `-c` and `-F4` do nothing.
+
 ### A proved development: AES-256
 
 To check the numbers against something other than microbenchmarks, `bench/aes/` builds the AES-256
@@ -587,17 +609,16 @@ An honest checklist, because "production" depends on what you need.
 | No release | nothing is tagged or published; the repository is private |
 | One Lean, one GHC | Lean 4.29.x and GHC 9.14.1 only. Windows is untested |
 | Pure functions only | no `IO`, so you compile functions and call them from Haskell; a Lean `main` cannot be compiled |
-| Missing types | `Float`, `Int`, `ByteArray`, and the `String` position and slice API |
+| Missing | `IO`, `FloatArray`, `Float.toString`; any `@[extern]` constant that is not in the primitive table is reported, never dropped |
 | In-place arrays are tested, not proved | the ownership analysis is the one component whose correctness rests on testing rather than on construction ([`SOUNDNESS.md`](SOUNDNESS.md)); `set_option zempic.own false` removes the risk at a speed cost |
 | Not thread safe | arrays and strings use mutable buffers |
 | Arrays and strings are slower than Lean's at scale | see [Benchmarks](#benchmarks) |
-| No performance tracking | benchmarks are run by hand; CI does not watch for regressions |
-| Security contact | `SECURITY.md` has no contact address yet |
+| No performance tracking in CI | `garden/perf.py` and `bench/aes/run.sh` are run by hand; CI checks answers, not speed |
 
 **What it is good for today:** compute kernels and pure algorithms (numeric loops, record-carrying
 loops, list pipelines, fixed-width arithmetic, hashing) that you call from Haskell, where you can
-check the answers against Lean's. **What it is not yet for:** a program that does I/O, uses
-`Float`, or that you cannot compare against Lean.
+check the answers against Lean's. **What it is not yet for:** a program that does I/O or that you
+cannot compare against Lean.
 
 ## Testing
 
@@ -620,6 +641,24 @@ compile generated Haskell and compare it, value by value, with native Lean at se
 | `core plugin` | injected Core passes `-dcore-lint` and gives the same answers (needs Cabal) |
 | `proptests` | random operation sequences on arrays, strings, fixed-width integers and the `Word`/`Natural` fast path, each step compared with a pure model |
 | `fuzz` | a short differential-fuzzing run: random Lean programs must give the same answers under Lean and leanzempic |
+
+### The garden
+
+`garden/` is a collection of 100+ small, independent Lean programs, one per language feature or
+library area (integer and float arithmetic, strings and positions, lists, arrays, hash maps,
+monads and transformers, type classes, indexed types, loops with `break` and `return`, ...). Each
+defines `entry : Nat → Nat`. `python3 garden/run.py [name ...]` runs every program under native Lean,
+compiles it through leanzempic and GHC, and compares the outputs for several inputs. A status other
+than `OK` names the stage that failed: `NATIVE` (the program itself does not run), `EMIT` (leanzempic
+cannot compile it, with the missing primitive), `GHC` (the generated Haskell does not typecheck),
+`RUNERR` (the Haskell crashed) or `DIFF` (different answers). `tests/run.sh` runs the garden.
+
+The garden is how the features above were found: the first run compiled 27 of 48 programs, and every
+failure was a missing primitive or a bug. Two were real bugs, not gaps: a single-field structure
+(`String.Pos`) declared as a boxed constructor while the compiled code builds it as a bare number,
+which crashed only under `-O1` and above; and a primitive called with more arguments than its arity.
+`python3 garden/perf.py` times each program against compiled native Lean at a large input (one at a
+time, 20-second cap per run).
 
 ### Differential fuzzing
 
@@ -784,7 +823,7 @@ Every Lean module is kept at: no `sorry`, every definition documented, no line o
 | `'inttypes.h' file not found` from GHC | Lean's bundled `clang` is first on `PATH`. Use `tools/zghc`, or keep Lean's `bin` off `PATH`. |
 | `Could not find module 'Zempic.Nat.Word'` | Pass `-iruntime` (and `-ibuild`) to GHC, or use `tools/zghc`, or `-package zempic-runtime`. |
 | `leanzempic: unsupported in this version: extern X` | `X` has no entry in the primitive table. See [Adding a primitive](#adding-a-primitive). |
-| `builtin type Int` (or `Float`, ...) | That type has no representation yet. |
+| `builtin type X` | That builtin type has no representation yet (`Int`, `Float`, `ByteArray`, `Thunk` do). |
 | Two outputs identical but empty | A build failed. Run the build command and read its errors. |
 | `Stack overflow detected` from the **Lean** binary | Lean's own `List.sum` / `List.zip` overflow around 1e6 elements. The Haskell side is fine. |
 | `Could not find module 'Zempic.Plugin'` | The plugin must be loaded from a Cabal package database; see `plugin/README.md`. |
@@ -823,8 +862,6 @@ Ideas in rough order of value, none promised:
 * more fusion combinators (`reverse`, `filterMap`, `zipWith`, array and `for` loops)
 * unboxed list elements and pair components (they are `Any` today)
 * typed values across the auto-mode wrapper, so structure-typed roots can use it
-* `Float`, `Int`, `ByteArray`
-* the `String.Pos` / `String.Slice` API
 * `IO`, so a Lean `main` can be compiled
 * narrowing the array gap further (boxed elements, a wider analysis)
 * support for other Lean versions
