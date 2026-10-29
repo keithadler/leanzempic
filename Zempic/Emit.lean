@@ -248,6 +248,8 @@ structure St where
   fast : Bool := false
   /-- Let bindings whose array operation the ownership analysis proved may update in place. -/
   destr : Std.HashSet (Name × FVarId) := {}
+  /-- Call arguments to wrap in a lazy copy (`Own.Sums.shares`). -/
+  shares : Std.HashSet (Name × FVarId × Nat) := {}
   /-- The function being printed (variable ids repeat across functions). -/
   cur : Name := Name.anonymous
   /-- Variables known to be this `Nat` literal in the function being printed. -/
@@ -648,12 +650,19 @@ def noteKnown (d : LetDecl .pure) : EmitM Unit := do
     if let some v := b? then modify fun s => { s with knownB := s.knownB.insert d.fvarId v }
   | _ => pure ()
 
+/-- An argument the ownership analysis passes as a lazy copy of a shared array. -/
+def shareArg (letId : FVarId) (j : Nat) (a : String × String) : EmitM (String × String) := do
+  let s ← get
+  if s.shares.contains (s.cur, letId, j) then
+    return (s!"(arrShare {coerce a.1 a.2 "Any"})", "Any")
+  return a
+
 /-- A call to a self-recursive function with a small literal for some `Nat` argument becomes a
 call to a copy of it with that argument fixed (queued for printing). Its recursive calls are then
 calls with smaller literals, so a loop that counts down from a constant unrolls completely and
 GHC sees straight-line code, as the C compiler does. Returns the copy's name, the types of the
 arguments it still takes, its result type and those arguments. -/
-def tryUnroll (c : Name) (args : Array (Arg .pure)) :
+def tryUnroll (c : Name) (letId : FVarId) (args : Array (Arg .pure)) :
     EmitM (Option (String × List String × String × Array (String × String))) := do
   let s ← get
   if s.unrollMax == 0 then return none
@@ -680,10 +689,12 @@ def tryUnroll (c : Name) (args : Array (Arg .pure)) :
   let tys ← d.params.toList.mapM (hsTyM ·.type)
   let mut ptys : List String := []
   let mut free : Array (String × String) := #[]
+  let mut j := 0
   for a in args, k in ks, t in tys do
     if k.isNone then
       ptys := ptys ++ [t]
-      free := free.push (← atomT a)
+      free := free.push (← shareArg letId j (← atomT a))
+    j := j + 1
   return some (name, ptys, ← declRetM d, free)
 
 /-- The unboxed buffer kind for arrays of this element type (see `Zempic.Arr`): 1 `Word8`, 2 `Word16`,
@@ -733,9 +744,13 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
       return (s!"(case ({x} :: {full}) of \{ {pat} -> p{i} })", ftys.getD i "Any")
     | none => unsupported s!"projection on {t}"; return ("erased", "Any")
   | .const c _ argsRaw => do
-    if let some (hs, ptys, ret, free) ← tryUnroll c argsRaw then
+    if let some (hs, ptys, ret, free) ← tryUnroll c letId argsRaw then
       return apply hs ptys ret free false
-    let args ← argsRaw.mapM atomT
+    let mut args : Array (String × String) := #[]
+    let mut j := 0
+    for a in argsRaw do
+      args := args.push (← shareArg letId j (← atomT a))
+      j := j + 1
     match ← resolve c letTy with
     | .prim hs ptys ret =>
       let elem? : Option Expr := match letTy.getAppFn, letTy.getAppArgs with
@@ -1036,7 +1051,7 @@ def emitModule (modName : String) (roots : Array Name) (natMod : String := "Zemp
       throwError "leanzempic: unsupported in this version:\n  {"\n  ".intercalate bad.toList}"
     -- In-place updates assume GHC never shares two calls that make an array, so forbid the
     -- transformations that would (common subexpression elimination, floating to top level).
-    let ownFlags := if (← get).destr.isEmpty then []
+    let ownFlags := if (← get).destr.isEmpty && (← get).shares.isEmpty then []
       else ["{-# OPTIONS_GHC -fno-cse -fno-full-laziness #-}"]
     let header := "\n".intercalate ([
       "{-# LANGUAGE BangPatterns, ScopedTypeVariables, KindSignatures #-}",
@@ -1056,8 +1071,8 @@ def emitModule (modName : String) (roots : Array Name) (natMod : String := "Zemp
                "\n".intercalate core.toList
              fusible }
   let own := zempic.own.get (← getOptions)
-  let destr ← if own then Own.analyze roots else pure {}
-  act.run' { fast, destr, unrollMax := zempic.unroll.get (← getOptions),
+  let (destr, shares) ← if own then Own.analyze roots else pure ({}, {})
+  act.run' { fast, destr, shares, unrollMax := zempic.unroll.get (← getOptions),
              typedArrays := zempic.typedArrays.get (← getOptions) }
 
 /-! ## Core-plugin input (spike): LCNF as an s-expression

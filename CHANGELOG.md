@@ -14,6 +14,13 @@ First complete version.
   array in a loop (insertion sort of a shared array: 18x slower than Lean's C backend, now about 10x).
   The version a copy was taken from is marked so the in-place variants fall back to the persistent path.
 
+### Added (arrays)
+* Lazy copies for shared arrays. When a shared array is passed to a function that updates its parameter
+  (directly or through other calls), the compiler hands over a lazy copy (`arrShare`): it reads through to
+  the original and copies the buffer on its first write, which is what Lean's reference counts do. The
+  callee then updates in place. A function that never writes costs nothing. Insertion sort of a shared
+  array: 18x slower than Lean's C backend before, now about 8x.
+
 ### Added
 * The Haskell backend: `#zempic f g to "x.hs"` prints Lean's mono-phase LCNF as Haskell shaped like
   GHC Core, with a Core-notation dump.

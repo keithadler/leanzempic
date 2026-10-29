@@ -48,6 +48,11 @@ arrIO :: IO a -> a
 arrIO = unsafeDupablePerformIO
 {-# INLINE arrIO #-}
 
+-- A handle that copies the array on its first write (see Zempic.Arr.aShare).
+arrShare :: Any -> Any
+arrShare a = arrIO (zo <$> aShare (zu a))
+{-# NOINLINE arrShare #-}
+
 arrMkEmpty :: Any -> ZNat -> Any
 arrMkEmpty _ c = arrIO (zo <$> aEmpty (arrIdx c))
 {-# NOINLINE arrMkEmpty #-}
@@ -377,7 +382,7 @@ baSet a i b = strIO (zo <$> sSetByte (zu a) (arrIdx i) b)
 {-# NOINLINE baSet #-}
 """.split("\n")
 
-ARRAY_NAMES = ["arrIdx", "arrMkEmpty", "arrReplicate", "arrSize", "arrUSize", "arrPush", "arrGetD",
+ARRAY_NAMES = ["arrIdx", "arrShare", "arrMkEmpty", "arrReplicate", "arrSize", "arrUSize", "arrPush", "arrGetD",
                "arrGetI", "arrUGet", "arrSet", "arrUSet", "arrSwap", "arrPop"]
 
 def nat_region():

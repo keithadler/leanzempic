@@ -18,7 +18,7 @@
 module Zempic.Arr
   ( Arr, aEmpty, aEmptyK, aReplicate, aReplicateK, aLength, aGet, aSet, aPush, aPop, aSwap
   , aToList, aFromList, aFromListK
-  , aSetU, aPushU, aPopU, aSwapU, aDeopt
+  , aSetU, aPushU, aPopU, aSwapU, aDeopt, aShare
   ) where
 
 import Data.Array.Base (MArray, getNumElements, unsafeRead, unsafeWrite)
@@ -50,7 +50,12 @@ data Op
 -- write starts a fresh copy instead, so a long-lived old version never pins an unbounded chain. The
 -- version a copy was taken from is marked with count -1: it still reads correctly, but the in-place
 -- variants must not trust it as the sole owner.
-data Node = Direct !Buf !Int | Diff !Op !Arr
+--
+-- A @Lazy@ version is a handle that has not copied anything yet: it reads through to the version it
+-- was made from, and copies the buffer the first time it is written. It is how a shared array is
+-- handed to code that will mutate it (`aShare`): Lean does the same copy-on-first-write with its
+-- reference counts, and a function that never writes costs nothing.
+data Node = Direct !Buf !Int | Diff !Op !Arr | Lazy !Arr
 
 -- | One version of an array: its length never changes, its contents live behind the reference.
 data Arr = Arr { aLen :: !Int, aRef :: !(IORef Node) }
@@ -177,6 +182,17 @@ rerootN arr = do
   node <- readIORef (aRef arr)
   case node of
     Direct _ _ -> return node
+    Lazy src -> do
+      -- Copy now. A chain of lazy handles is cut to its end first, so there is one copy, not several.
+      end <- lazyEnd src
+      nn <- rerootN end
+      case nn of
+        Direct buf _ -> do
+          b' <- bufClone buf (aLen end)
+          let d = Direct b' 0
+          writeIORef (aRef arr) d
+          return d
+        _ -> error "rerootN"
     Diff op next -> do
       nn <- rerootN next
       case nn of
@@ -210,6 +226,20 @@ reroot arr = do
     Direct buf _ -> return buf
     Diff _ _ -> error "reroot"
 
+-- | The version a chain of lazy handles ends at.
+lazyEnd :: Arr -> IO Arr
+lazyEnd a = do
+  node <- readIORef (aRef a)
+  case node of
+    Lazy s -> lazyEnd s
+    _ -> return a
+
+-- | A handle that will copy the array when it is first written, and reads through until then.
+aShare :: Arr -> IO Arr
+aShare src = do
+  end <- lazyEnd src
+  Arr (aLen end) <$> newIORef (Lazy end)
+
 -- | How many undo records a buffer may carry before the next write copies it.
 chainLimit :: Int -> Int
 chainLimit n = max 64 n
@@ -225,8 +255,13 @@ aGet :: Arr -> Int -> Any -> IO Any
 aGet arr i d
   | i < 0 || i >= aLen arr = return d
   | otherwise = do
-      buf <- reroot arr
-      bufRead buf i
+      node <- readIORef (aRef arr)
+      case node of
+        Direct buf _ -> bufRead buf i
+        Lazy src -> aGet src i d
+        _ -> do
+          buf <- reroot arr
+          bufRead buf i
 
 -- | Out-of-bounds sets leave the array unchanged, as in Lean.
 aSet :: Arr -> Int -> Any -> IO Arr
@@ -317,8 +352,12 @@ aSwap arr i j
 
 aToList :: Arr -> IO [Any]
 aToList arr = do
-  buf <- reroot arr
-  mapM (bufRead buf) [0 .. aLen arr - 1]
+  node <- readIORef (aRef arr)
+  case node of
+    Lazy src -> aToList src
+    _ -> do
+      buf <- reroot arr
+      mapM (bufRead buf) [0 .. aLen arr - 1]
 
 aFromListK :: Int -> [Any] -> IO Arr
 aFromListK kind xs = do
@@ -340,18 +379,26 @@ aFromList = aFromListK 0
 -- safety net, if the array turns out not to be the live version they fall back to the persistent
 -- operation, which is always correct.
 
+-- | The node of an array about to be updated in place: a lazy handle is copied first.
+ownNode :: Arr -> IO Node
+ownNode arr = do
+  node <- readIORef (aRef arr)
+  case node of
+    Lazy _ -> rerootN arr
+    _ -> return node
+
 aSetU :: Arr -> Int -> Any -> IO Arr
 aSetU arr i v
   | i < 0 || i >= aLen arr = return arr
   | otherwise = do
-      node <- readIORef (aRef arr)
+      node <- ownNode arr
       case node of
         Direct buf c | c >= 0 -> bufWrite buf i v >> return arr
         _ -> aSet arr i v
 
 aPushU :: Arr -> Any -> IO Arr
 aPushU arr v = do
-  node <- readIORef (aRef arr)
+  node <- ownNode arr
   case node of
     Diff _ _ -> aPush arr v
     Direct _ c | c < 0 -> aPush arr v
@@ -370,7 +417,7 @@ aPopU :: Arr -> IO Arr
 aPopU arr
   | aLen arr == 0 = return arr
   | otherwise = do
-      node <- readIORef (aRef arr)
+      node <- ownNode arr
       case node of
         Direct _ c | c >= 0 -> return (Arr (aLen arr - 1) (aRef arr))
         _ -> aPop arr
@@ -379,7 +426,7 @@ aSwapU :: Arr -> Int -> Int -> IO Arr
 aSwapU arr i j
   | i < 0 || j < 0 || i >= aLen arr || j >= aLen arr = return arr
   | otherwise = do
-      node <- readIORef (aRef arr)
+      node <- ownNode arr
       case node of
         Direct buf c | c >= 0 -> do
           x <- bufRead buf i

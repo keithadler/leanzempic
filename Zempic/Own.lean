@@ -147,6 +147,12 @@ structure Sums where
   changed : Bool := false
   /-- Let bindings whose array operation may update in place. -/
   destr : Std.HashSet Key := {}
+  /-- Call arguments to wrap in a lazy copy: (function, the call's `let`, argument position). -/
+  shares : Std.HashSet (Name × FVarId × Nat) := {}
+  /-- Parameters that some array update can reach (see `mutatedParams`). -/
+  mutP : Std.HashMap Name (Array Bool) := {}
+  /-- Functions whose parameters nothing is known about. -/
+  esc : Std.HashSet Name := {}
 
 /-- The analysis monad: the summaries, over `CoreM`. -/
 abbrev OwnM := StateRefT Sums CoreM
@@ -295,7 +301,18 @@ partial def step (f : Name) (d : LetDecl .pure) (env : Env) (later : FVS) : OwnM
         | some ps =>
           if ps.size == args.size then
             for a in args, j in [0:args.size] do
-              noteParam c j (handOver env args later a)
+              let ho := handOver env args later a
+              -- A shared array handed to a parameter that gets updated: pass a lazy copy instead, which
+              -- is private to the callee (so the callee may update it in place) and copies only if it
+              -- is written. This is what Lean's reference counts do at run time.
+              let sums ← get
+              let wanted := match a with
+                | .fvar _ => ho.isTop && !sums.esc.contains c && (sums.mutP.getD c #[]).getD j false
+                | _ => false
+              if wanted then
+                noteParam c j .own
+                modify fun s => { s with shares := s.shares.insert (f, d.fvarId, j) }
+              else noteParam c j ho
             let env' := eraseArgs env args
             match (← get).rets.getD c none with
             | some r => return some (if r.isTop then env' else env'.insert d.fvarId r)
@@ -350,8 +367,59 @@ partial def partialCalls (decls : Std.HashMap Name (Decl .pure)) (c : Code .pure
       | .default k => partialCalls decls k a) acc
   | _ => acc
 
+/-- Parameters of each function that an array update can reach: the parameter itself is the array of a
+destructive operation, or is passed to a parameter of a function that is such. Only direct uses are
+followed, so this can miss a parameter (no copy is then made) but never names a non-array. -/
+partial def mutScan (pidx : Std.HashMap FVarId Nat) (mp : Std.HashMap Name (Array Bool))
+    (c : Code .pure) (acc : Std.HashSet Nat) : Std.HashSet Nat :=
+  match c with
+  | .let d k =>
+    let acc := match d.value with
+      | .const g _ args =>
+        if destructiveOps.contains g then
+          match (args[1]? : Option (Arg .pure)) with
+          | some (Arg.fvar x) => match pidx[x]? with | some i => acc.insert i | none => acc
+          | _ => acc
+        else match mp[g]? with
+          | some flags =>
+            if flags.size == args.size then
+              (args.toList.zip flags.toList).foldl (fun a (arg, fl) =>
+                match arg with
+                | .fvar x => if fl then (match pidx[x]? with | some i => a.insert i | none => a) else a
+                | _ => a) acc
+            else acc
+          | none => acc
+      | _ => acc
+    mutScan pidx mp k acc
+  | .fun d k => mutScan pidx mp k (mutScan pidx mp d.value acc)
+  | .jp d k => mutScan pidx mp k (mutScan pidx mp d.value acc)
+  | .cases cs => cs.alts.foldl (fun a al => match al with
+      | .alt _ _ k => mutScan pidx mp k a
+      | .default k => mutScan pidx mp k a) acc
+  | _ => acc
+
+/-- The fixpoint of `mutScan` over all functions. -/
+def mutatedParams (decls : Std.HashMap Name (Decl .pure)) : Std.HashMap Name (Array Bool) := Id.run do
+  let mut mp : Std.HashMap Name (Array Bool) :=
+    decls.fold (fun m n d => m.insert n (d.params.map fun _ => false)) {}
+  for _ in [0:20] do
+    let mut changed := false
+    for (n, d) in decls.toList do
+      if let .code body := d.value then
+        let pidx : Std.HashMap FVarId Nat :=
+          (d.params.toList.zipIdx).foldl (fun m (p, i) => m.insert p.fvarId i) {}
+        let hit := mutScan pidx mp body {}
+        let old := mp.getD n #[]
+        let new := old.mapIdx fun i b => b || hit.contains i
+        if new != old then
+          mp := mp.insert n new
+          changed := true
+    unless changed do break
+  return mp
+
 /-- Which `let`s may update an array in place, for the code reachable from `roots`? -/
-def analyze (roots : Array Name) : CoreM (Std.HashSet Key) := do
+def analyze (roots : Array Name) :
+    CoreM (Std.HashSet Key × Std.HashSet (Name × FVarId × Nat)) := do
   -- Collect the reachable compiled functions.
   let mut decls : Std.HashMap Name (Decl .pure) := {}
   let mut todo := roots.toList
@@ -368,13 +436,14 @@ def analyze (roots : Array Name) : CoreM (Std.HashSet Key) := do
   for r in roots do escaping := escaping.insert r
   for (_, d) in decls.toList do
     if let .code body := d.value then escaping := partialCalls decls body escaping
-  let start : Sums := { params := decls.fold (fun m n d =>
-      m.insert n (d.params.map fun _ => if escaping.contains n then some .top else none)) {} }
+  let startParams := decls.fold (fun m n d =>
+      m.insert n (d.params.map fun _ => if escaping.contains n then some .top else none)) {}
+  let start : Sums := { params := startParams, mutP := mutatedParams decls, esc := escaping }
   let (_, final) ← (do
     let mut fuel := 50
     while fuel > 0 do
       fuel := fuel - 1
-      modify fun s => { s with changed := false, destr := {} }
+      modify fun s => { s with changed := false, destr := {}, shares := {} }
       for (n, d) in decls.toList do
         if let .code body := d.value then
           let sums := (← get).params.getD n #[]
@@ -386,6 +455,6 @@ def analyze (roots : Array Name) : CoreM (Std.HashSet Key) := do
             walk n (jpFvs body) body env
       if !(← get).changed then break
     : OwnM Unit).run start
-  return final.destr
+  return (final.destr, final.shares)
 
 end Zempic.Own

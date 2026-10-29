@@ -165,6 +165,47 @@ arrPersistent c g kind steps = do
     got <- arrContents kind a
     expect c ("final pool member " ++ show i) got m
 
+-- | Lazy copies (`aShare`): reading goes through to the source, the first write copies, and neither the
+-- source nor another copy ever sees a write.
+arrShared :: Check -> Gen -> Int -> IO ()
+arrShared c g kind = do
+  a0 <- A.aEmptyK kind 2
+  n <- (+ 1) <$> below g 30
+  vals <- replicateM n (below g (lim kind))
+  base <- foldM (\x v -> A.aPush x (enc kind v)) a0 vals
+  let mBase = map (norm kind) vals
+  h1 <- A.aShare base
+  h2 <- A.aShare h1                                   -- a chain of lazy handles
+  g1 <- arrContents kind h1
+  expect c "a lazy copy reads like its source" g1 mBase
+  -- A persistent write to the source after sharing must not show through.
+  src2 <- A.aSet base 0 (enc kind 1)
+  g1b <- arrContents kind h1
+  expect c "a later write to the source does not reach a lazy copy" g1b mBase
+  g2 <- arrContents kind h2
+  expect c "a lazy copy of a lazy copy" g2 mBase
+  -- In-place writes on the copy copy first and leave everything else alone.
+  (h1', m1) <- foldM (\(h, m) _ -> do
+        op <- below g 4
+        k <- subtract 1 <$> below g (length m + 3)
+        v <- below g (lim kind)
+        case op of
+          0 -> do b <- A.aPushU h (enc kind v); return (b, m ++ [norm kind v])
+          1 -> do b <- A.aPopU h; return (b, if null m then m else init m)
+          2 -> do b <- A.aSetU h k (enc kind v); return (b, modelSet k (norm kind v) m)
+          _ -> do
+            j <- subtract 1 <$> below g (length m + 3)
+            b <- A.aSwapU h k j
+            return (b, modelSwap k j m)) (h1, mBase) [1 .. 12 :: Int]
+  gw <- arrContents kind h1'
+  expect c "in-place writes on a lazy copy" gw m1
+  gsrc <- arrContents kind base
+  expect c "the source is undisturbed by writes to its lazy copy" gsrc mBase
+  gh2 <- arrContents kind h2
+  expect c "a second lazy copy is undisturbed" gh2 mBase
+  gs2 <- arrContents kind src2
+  expect c "the source's own later version" gs2 (modelSet 0 (norm kind 1) mBase)
+
 -- | A placeholder written to a fresh unboxed buffer must change nothing: it is not an element of the
 -- buffer's type, so the buffer ignores it. (Lean's library writes one before writing the real value back;
 -- storing it would read a unit closure as a number.)
@@ -344,6 +385,7 @@ main = do
     forM_ [0 .. 6] $ \kind -> do
       arrPersistent check gen kind 600
       arrInPlace check gen kind 400
+      arrShared check gen kind
       when (kind /= 0) $ arrPlaceholderRaw check gen kind
     strPool check gen 500
   uintType check gen "UInt8" 8 [ (n, f, r) | ((n, r), f) <- zip (uintOps 8)

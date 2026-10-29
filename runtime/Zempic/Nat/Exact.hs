@@ -139,6 +139,11 @@ arrIO :: IO a -> a
 arrIO = unsafeDupablePerformIO
 {-# INLINE arrIO #-}
 
+-- A handle that copies the array on its first write (see Zempic.Arr.aShare).
+arrShare :: Any -> Any
+arrShare a = arrIO (zo <$> aShare (zu a))
+{-# NOINLINE arrShare #-}
+
 arrMkEmpty :: Any -> ZNat -> Any
 arrMkEmpty _ c = arrIO (zo <$> aEmpty (arrIdx c))
 {-# NOINLINE arrMkEmpty #-}

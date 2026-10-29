@@ -24,6 +24,7 @@ N = {
  "list_funcs": 1000000, "typeclass": 3000000, "hashmap_str": 1500000, "hashset": 2000000,
  "functor_tree": 200000, "array_misc": 3000, "uint_conv": 30000000, "nested_loops_break": 8000,
  "list_misc": 3000, "deriving": 3000000, "sum_type": 3000000, "prod_arrays": 300000,
+ "shared_rare_write": 20000, "shared_always_write": 10000, "shared_twice": 1000000,
  "string_sort_unique": 300000,  "int_repr": 1000000, "parser_monad": 1000000,
  "subtype_index": 15000000, "usize_loop": 15000000, "mutual_rec": 3000, "wf_recursion": 1000000,
 }

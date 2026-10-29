@@ -71,7 +71,7 @@ def one(name):
     return name, "OK", []
 
 # A subset that touches every feature area, for CI (the full garden is about 15 CPU-minutes).
-CI_SET = ["int_arith", "int_match", "float_math", "string_split", "string_chars", "string_pos", "str_ops",
+CI_SET = ["shared_rare_write", "shared_twice", "int_arith", "int_match", "float_math", "string_split", "string_chars", "string_pos", "str_ops",
           "str_map_any", "hashmap", "hashmap_str", "hashset", "array_funcs", "array_misc", "array_qsort",
           "subarray", "bytearray", "list_mergesort", "list_funcs", "state_monad", "except_monad",
           "state_except_stack", "struct_update", "typeclass", "expr_tree", "functor_tree", "vec_indexed",

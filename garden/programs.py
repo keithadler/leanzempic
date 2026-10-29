@@ -453,6 +453,28 @@ def entry (n : Nat) : Nat :=
   (a.back!) + (a.pop.size) + ((a.findIdx? (· > 3)).getD 0) + ((a.mapIdx fun i x => i + x).foldl (· + ·) 0)
     + (a.insertionSort (· < ·))[0]! + (a.foldr (· + ·) 0) + ((a.zipIdx).size) + (if a.isEmpty then 1 else 0)
 ''')
+add("shared_rare_write", '''
+def maybeSet (a : Array Nat) (i : Nat) : Array Nat := if i % 7 == 0 then a.set! i 0 else a
+def entry (n : Nat) : Nat :=
+  let a := (Array.range (n + 20)).map (· + 1)
+  let t := (List.range (n + 20)).foldl (fun acc i => acc + (maybeSet a i).size + (maybeSet a i)[i]!) 0
+  t + a[3]! + a.foldl (· + ·) 0
+''')
+add("shared_always_write", '''
+def bump (a : Array Nat) (i : Nat) : Array Nat := a.set! (i % a.size) (i + 1)
+def entry (n : Nat) : Nat :=
+  let a := (Array.range (n + 20)).map (· * 3)
+  let t := (List.range (n + 20)).foldl (fun acc i => acc + (bump a i)[i % a.size]!) 0
+  t + a.foldl (· + ·) 0
+''')
+add("shared_twice", '''
+def swapEnds (a : Array Nat) : Array Nat := if a.size < 2 then a else a.swapIfInBounds 0 (a.size - 1)
+def twice (a : Array Nat) : Nat := (swapEnds a)[0]! + (swapEnds a)[0]! + a[0]!
+def entry (n : Nat) : Nat :=
+  let a := (Array.range (n + 5)).map (· + 10)
+  let b := a.push 99
+  twice a + twice b + a.size + b.size
+''')
 add("subarray", '''
 def entry (n : Nat) : Nat := Id.run do
   let a := (Array.range (n + 8)).map (· + 1)
