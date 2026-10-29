@@ -78,6 +78,9 @@ def prims : List (Name × String × List String × String) :=
   , (`Array.mkEmpty, "arrMkEmpty", ["Any", "ZNat"], "Any")
   , (`Array.emptyWithCapacity, "arrMkEmpty", ["Any", "ZNat"], "Any")
   , (`Array.replicate, "arrReplicate", ["Any", "ZNat", "Any"], "Any")
+  , (`Array.range, "arrRange", ["ZNat"], "Any")
+  , (`Zempic.pushUget, "arrPushUget", ["Any", "Any", "Any", "Word"], "Any")
+  , (`Zempic.pushGetI, "arrPushGetI", ["Any", "Any", "Any", "ZNat"], "Any")
   , (`Array.size, "arrSize", ["Any", "Any"], "ZNat")
   , (`Array.usize, "arrUSize", ["Any", "Any"], "Word")
   , (`Array.push, "arrPush", ["Any", "Any", "Any"], "Any")
@@ -267,6 +270,8 @@ structure St where
   vcount : Std.HashMap Name Nat := {}
   /-- Unboxed array buffers are on (`zempic.typedArrays`). -/
   typedArrays : Bool := true
+  /-- Array reads whose value is later used as a `Word`: read without a box. -/
+  wordGets : Std.HashSet FVarId := {}
 
 /-- The emitter monad. -/
 abbrev EmitM := StateRefT St CoreM
@@ -712,6 +717,27 @@ def elemKind (elem : Expr) : EmitM Nat := do
   | "ZNat" => return (if (← get).fast then 5 else 0)
   | _ => return 0
 
+/-- Is `x` somewhere passed to a primitive that takes a `Word` there (a `Nat` in word mode, or a
+`USize`)? Then `x` holds a `Word` whatever type the code gives it. It finds the real element type
+of the read in Lean's in-place `Array.map`, where the view as `NonScalar` hides it. -/
+partial def usedAsWord (fast : Bool) (x : FVarId) : Code .pure → Bool
+  | .let d k =>
+    (match d.value with
+     | .const c _ args =>
+       match (prims ++ uintPrims).find? (·.1 == c) with
+       | some (_, _, ptys, _) =>
+         args.zipIdx.any fun (a, i) =>
+           (match a with | .fvar y => y == x | _ => false) &&
+             (let t := ptys.getD i "Any"; t == "Word" || (fast && t == "ZNat"))
+       | none => false
+     | _ => false) || usedAsWord fast x k
+  | .fun d k => usedAsWord fast x d.value || usedAsWord fast x k
+  | .jp d k => usedAsWord fast x d.value || usedAsWord fast x k
+  | .cases cs => cs.alts.any fun
+    | .alt _ _ k => usedAsWord fast x k
+    | .default k => usedAsWord fast x k
+  | _ => false
+
 /-- Expression and its Haskell type. -/
 def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (String × String) :=
   match v with
@@ -772,6 +798,28 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
             pure (if k == 0 then hs else s!"{hs}K {k}")
           | none => pure hs
         else pure hs
+      -- A new range of naturals gets a word buffer in word mode (and no per-element box).
+      let hs ← if hs == "arrRange" then
+          pure s!"arrRangeK {← elemKind (.const `Nat [])}"
+        else pure hs
+      -- An element known to be a `Word` (a `Nat` in word mode, or a `USize`) is read and written
+      -- without a box. The type must be the value's own, so a read inside the in-place `Array.map`
+      -- (where the view as `NonScalar` hides the real element type) stays boxed.
+      let fast := (← get).fast
+      let isW := fun (t : String) => t == "Word" || (fast && t == "ZNat")
+      let letHs ← hsTyM letTy
+      let isWordGet := (← get).wordGets.contains letId
+      let valW := fun (k : Nat) => match args[k]? with | some a => isW a.2 | none => false
+      let setW := ["arrPushU", "arrSetU", "arrUSetU", "arrUSetBU"]
+      let (hs, ptys, ret) :=
+        if ["arrGetD", "arrGetI", "arrUGet"].contains hs && !punned && isW letHs then
+          (hs ++ "W", ptys, letHs)
+        else if ["arrGetD", "arrGetI", "arrUGet"].contains hs && isWordGet then
+          (hs ++ "W", ptys, if fast then "ZNat" else "Word")
+        else if setW.contains hs && valW (if hs.startsWith "arrPush" then 2 else 3) then
+          let k := if hs.startsWith "arrPush" then 2 else 3
+          (hs ++ "W", ptys.set k (args[k]!).2, ret)
+        else (hs, ptys, ret)
       return apply hs ptys ret args false
     | .decl hs ptys ret => return apply hs ptys ret args false
     | .ctor hs ptys ret np => return apply hs ptys ret (args.extract np args.size) false
@@ -819,6 +867,30 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
       | .const `Array.uset _ #[_, .fvar a, .fvar i, _, _] =>
         if useCount d.fvarId k == 1 && onlyOverwrittenAt d.fvarId i k then { d with value := .fvar a #[] } else d
       | _ => d
+    match d.value with
+    | .const c _ _ =>
+      if [`Array.uget, `Array.getInternal, `Array.get!Internal].contains c then
+        -- Variables are unique only within a function, so the mark is set or cleared at every read.
+        let w := usedAsWord (← get).fast d.fvarId k
+        modify fun s => { s with wordGets := if w then s.wordGets.insert d.fvarId
+                                              else s.wordGets.erase d.fvarId }
+    | _ => pure ()
+    -- An element read whose only use is to be pushed (in place) on another array is moved in one
+    -- step.
+    let st ← get
+    let (d, k) := match d.value, k with
+      | .const g gu #[_, .fvar src, idx, _], .let d2 k2 =>
+        match d2.value with
+        | .const `Array.push _ #[t, .fvar arr, .fvar v] =>
+          if (g == `Array.uget || g == `Array.getInternal) && v == d.fvarId && arr != d.fvarId
+              && src != arr && useCount d.fvarId k2 == 0
+              && st.destr.contains (st.cur, d2.fvarId) then
+            let fused := if g == `Array.uget then `Zempic.pushUget else `Zempic.pushGetI
+            let newArgs : Array (Arg .pure) := #[t, .fvar arr, .fvar src, idx]
+            ({ d2 with value := .const fused gu newArgs }, k2)
+          else (d, k)
+        | _ => (d, k)
+      | _, _ => (d, k)
     let (rhs, ty) ← hsLetValue d.value d.type d.fvarId
     noteExpr d.fvarId d.type
     let x ← bindT d.fvarId d.binderName ty

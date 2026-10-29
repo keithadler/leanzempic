@@ -264,6 +264,41 @@ def entry (n : Nat) : Nat :=
   (a.foldl (· + ·) 0) + b.size + c.size + (if a.any (· > 20) then 1 else 0) + (if a.all (· < 100000) then 2 else 0)
     + (if a.contains 9 then 4 else 0) + a.reverse.size + (a.extract 1 4).size + (a ++ b).size
 ''')
+add("array_word_paths", '''
+def entry (n : Nat) : Nat :=
+  let a := Array.range (n + 1)
+  let b := a.map (fun x => x % 2 == 0)
+  let c := a.map (fun x => (x, x + 1))
+  let d := a.map (· + 5)
+  -- distinct capacities: two identical `Array.mkEmpty 4` are merged by Lean's CSE, and the buffer
+  -- kind of the first would then also serve the other element type
+  let u8 : Array UInt8 := Id.run do
+    let mut r := Array.mkEmpty 5
+    for x in [0:n + 1] do r := r.push x.toUInt8
+    return r
+  let e := u8.map (fun x => x + 250)
+  let v := u8.map (fun x => x.toNat * 1000)
+  let usz := a.map (fun x => x.toUSize * 3)
+  let f := (a ++ d).extract 1 (n / 2 + 2)
+  let g := (a.zip d).reverse
+  let h := a.set! 1 100
+  let k := a.push 7 |>.push 8
+  let sw := (a.swapIfInBounds 0 n).swapIfInBounds 1 2
+  let big := if n % 2 == 1 then 2 ^ 70 else 0
+  let r := Id.run do
+    let mut arr : Array Nat := Array.mkEmpty 6
+    for i in [0:n + 1] do arr := arr.push (i * i)
+    let snap := arr
+    for i in [0:n + 1] do arr := arr.set! i (arr[i]! + 1)
+    for i in [0:n] do arr := arr.set! (i + 1) (arr[i]! + arr[i + 1]!)
+    return (snap, arr)
+  let w := (a.filter (· % 3 == 0)).foldl (· + ·) 0
+  r.1.foldl (· + ·) 0 + r.2.foldl (fun acc x => acc * 5 + x) 0 + w + (b.filter id).size + c.foldl (fun acc (x, y) => acc + x * y) 0 + d.foldl (· + ·) 0
+    + e.foldl (fun acc x => acc + x.toNat) 0 + v.foldl (· + ·) 0 + usz.foldl (fun acc x => acc + x.toNat) 0
+    + f.size + f.foldl (· + ·) 0 + g.size + g.foldl (fun acc (x, y) => acc * 3 + x + y) 1
+    + h.getD 1 0 + a.getD 1 0 + k.size + k.getD (n + 2) 0 + sw.foldl (fun acc x => acc * 7 + x) 0
+    + a.size + big % 1000003 + (if big > 0 then 1 else 0)
+''')
 add("array_list_conv", '''
 def entry (n : Nat) : Nat :=
   let l := (List.range (n + 1)).toArray.toList

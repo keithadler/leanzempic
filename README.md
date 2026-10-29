@@ -905,7 +905,8 @@ Negative results are part of the record, and several of them changed the design:
   raw number from an unboxed buffer instead of a boxed `Any`. I built it (inlined, one reader per type)
   and measured with allocation, which is exact where run time on a loaded laptop is not: `array_funcs`
   allocated 534 MB before and 646 MB after, `array_misc` 116 MB before and 182 MB after, with no
-  run-time gain. Reverted. I did not find out why the allocation went up.
+  run-time gain. Reverted. The reason (GHC boxity of the `NOINLINE` primitives) is found and fixed in
+  [`BENCH.md`](BENCH.md): typed `Nat`/`USize` reads and writes are now in, `array_funcs` 3.9x to 2.5x.
 * **A GHC panic on cast-heavy code.** Core Lint named GHC 9.14.1's Float Inwards pass; generated
   modules now carry `-fno-float-in`.
 

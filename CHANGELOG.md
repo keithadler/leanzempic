@@ -5,6 +5,11 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* Array reads and writes of a `Nat` (word mode) or `USize` element are done with no box (`arrUGetW`,
+  `arrPushUW`, `arrUSetBUW`, ...), `Array.range` fills a word buffer in one pass, swaps and
+  append/extract element moves no longer box, and the in-place primitives take unboxed arguments.
+  `array_funcs` allocation 485 MB to 329 MB, run time 4.3x to 2.5x of Lean's C backend. New garden
+  program `array_word_paths`. Details and the failures along the way are in `BENCH.md`.
 * `Array.map`'s placeholder write is skipped when the next write overwrites it (array map/filter/fold 5.3x to 3.9x).
 * Unrolled variants use `INLINABLE`, so `string_pos` builds at `-O2`; known issue below is fixed.
 

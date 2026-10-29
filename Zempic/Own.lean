@@ -126,8 +126,8 @@ def destructiveOps : List Name :=
 
 /-- Operations that produce a new array nobody else has. -/
 def freshOps : List Name :=
-  [`Array.mkEmpty, `Array.emptyWithCapacity, `Array.replicate, `Array.mk, `List.toArray,
-   `List.toArrayImpl]
+  [`Array.mkEmpty, `Array.emptyWithCapacity, `Array.replicate, `Array.range, `Array.mk,
+   `List.toArray, `List.toArrayImpl]
 
 /-- Operations that only look at their arrays. -/
 def readOps : List Name :=

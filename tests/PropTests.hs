@@ -220,6 +220,94 @@ arrPlaceholderRaw c g kind = do
     got <- arrContents kind b
     expect c ("kind " ++ show kind ++ " placeholder at " ++ show i ++ " leaves the buffer unchanged") got vals
 
+-- | Read an array whose elements are all `Word`s (a boxed buffer holding `Word` boxes, or a word
+-- buffer) through the unboxed reader, past its end too.
+wordContents :: A.Arr -> IO [Int]
+wordContents a = mapM (\i -> fromIntegral <$> A.aGetW a i 0) [0 .. A.aLength a - 1]
+
+-- | The `Word`-typed primitives (no box per element) against a list model: on a boxed buffer and a word
+-- buffer, in place and on stale versions, reads past the end, ranges and element moves between arrays.
+arrWord :: Check -> Gen -> Int -> Int -> IO ()
+arrWord c g kind steps = do
+  let w :: Int -> Word
+      w = fromIntegral
+  a0 <- A.aEmptyK kind 2
+  (aEnd, mEnd) <- foldM
+    (\(a, m) _ -> do
+        op <- below g 5
+        k <- subtract 1 <$> below g (length m + 3)
+        v <- below g 1000
+        (b, mb) <- case op of
+          0 -> do b <- A.aPushUW a (w v); return (b, m ++ [v])
+          1 -> do b <- A.aSetUW a k (w v); return (b, modelSet k v m)
+          2 -> do b <- A.aPopU a; return (b, if null m then m else init m)
+          3 -> do
+            j <- subtract 1 <$> below g (length m + 3)
+            b <- A.aSwapU a k j
+            return (b, modelSwap k j m)
+          _ -> do
+            r <- A.aGetW a k 77
+            expect c "aGetW" (fromIntegral r) (if k >= 0 && k < length m then m !! k else 77)
+            rI <- evaluate (A.aGetWI a k 78)
+            expect c "aGetWI" (fromIntegral rI) (if k >= 0 && k < length m then m !! k else 78)
+            return (a, m)
+        got <- wordContents b
+        expect c ("word ops, kind " ++ show kind) got mb
+        return (b, mb))
+    (a0, []) [1 .. steps]
+  -- A stale version falls back to the persistent operation.
+  newer <- A.aPush aEnd (unsafeCoerce (4242 :: Word))
+  s1 <- A.aPushUW aEnd 7
+  gs1 <- wordContents s1
+  expect c "stale word push falls back" gs1 (mEnd ++ [7])
+  s2 <- A.aSetUW aEnd 0 9
+  gs2 <- wordContents s2
+  expect c "stale word set falls back" gs2 (modelSet 0 9 mEnd)
+  gn <- wordContents newer
+  expect c "the newer version is undisturbed" gn (mEnd ++ [4242])
+  g0 <- wordContents aEnd
+  expect c "the stale version is undisturbed" g0 mEnd
+
+-- | `Array.range` and the element move behind `Array.append` / `Array.extract`.
+arrRangeMove :: Check -> Gen -> IO ()
+arrRangeMove c g = do
+  n <- below g 40
+  r <- A.aRangeW n
+  gr <- wordContents r
+  expect c "range" gr [0 .. n - 1]
+  r2 <- A.aPushUW r 99
+  gr2 <- wordContents r2
+  expect c "push after range" gr2 ([0 .. n - 1] ++ [99])
+  -- Moving elements from a source into a destination of the same or another kind.
+  forM_ [(d, s) | d <- [0 .. 6], s <- [0 .. 6], d == s || (d, s) `elem` [(0, 5), (5, 0)]] $ \(dk, sk) -> do
+    let lm = min (lim dk) (lim sk)
+    vals <- replicateM (n + 1) (below g lm)
+    s0 <- A.aEmptyK sk 2
+    src <- foldM (\x v -> A.aPush x (enc' sk v)) s0 vals
+    d0 <- A.aEmptyK dk 2
+    m0 <- replicateM 3 (below g lm)
+    dst0 <- foldM (\x v -> A.aPush x (enc' dk v)) d0 m0
+    idxs <- replicateM 20 (below g (length vals))
+    (dst, md) <- foldM (\(x, m) i -> do b <- A.aPushFromU x src i; return (b, m ++ [vals !! i])) (dst0, m0) idxs
+    got <- mapM (\i -> dec' dk <$> A.aGet dst i (error "range")) [0 .. A.aLength dst - 1]
+    expect c ("move kind " ++ show sk ++ " to " ++ show dk) got md
+    gsrc <- mapM (\i -> dec' sk <$> A.aGet src i (error "range")) [0 .. A.aLength src - 1]
+    expect c "move leaves its source alone" gsrc vals
+  -- A `Word` written through a view as another element type: the buffer becomes boxed unless it holds
+  -- `Word`s already, and every element then reads back as the new value.
+  forM_ [0 .. 6] $ \kind -> do
+    vals <- replicateM (n + 1) (below g (lim kind))
+    e0 <- A.aEmptyK kind 2
+    a <- foldM (\x v -> A.aPush x (enc kind v)) e0 vals
+    new <- replicateM (n + 1) (below g 100000)
+    a' <- foldM (\x (i, v) -> A.aSetUWB x i (fromIntegral v)) a (zip [0 ..] new)
+    got <- wordContents a'
+    expect c ("retyping write over kind " ++ show kind) got new
+  where
+    -- Kind 5 and kind 0 hold `Word`s in the cross-kind moves; the other kinds use `enc`/`dec`.
+    enc' k v = if k == 0 then unsafeCoerce (fromIntegral v :: Word) else enc k v
+    dec' k a = if k == 0 then fromIntegral (unsafeCoerce a :: Word) else dec k a
+
 -- | The in-place variants on a single owner, then on a stale version (they must fall back).
 arrInPlace :: Check -> Gen -> Int -> Int -> IO ()
 arrInPlace c g kind steps = do
@@ -386,7 +474,9 @@ main = do
       arrPersistent check gen kind 600
       arrInPlace check gen kind 400
       arrShared check gen kind
+      when (kind == 0 || kind == 5) $ arrWord check gen kind 400
       when (kind /= 0) $ arrPlaceholderRaw check gen kind
+    arrRangeMove check gen
     strPool check gen 500
   uintType check gen "UInt8" 8 [ (n, f, r) | ((n, r), f) <- zip (uintOps 8)
     [U.u8Add, U.u8Sub, U.u8Mul, U.u8Div, U.u8Mod, U.u8Land, U.u8Lor, U.u8Xor, U.u8Shl, U.u8Shr] ]

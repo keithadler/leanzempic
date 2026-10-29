@@ -232,11 +232,11 @@ arrGetD _ !d !a !i = arrIO (aGet (zu a) (arrIdx i) d)
 {-# INLINE arrGetD #-}
 
 arrGetI :: Any -> Any -> ZNat -> Any -> Any
-arrGetI _ a i _ = arrIO (aGet (zu a) (arrIdx i) (error "leanzempic: array index out of range"))
+arrGetI _ !a !i _ = arrIO (aGet (zu a) (arrIdx i) (error "leanzempic: array index out of range"))
 {-# NOINLINE arrGetI #-}
 
 arrUGet :: Any -> Any -> Word -> Any -> Any
-arrUGet _ a i _ = arrIO (aGet (zu a) (fromIntegral i) (error "leanzempic: array index out of range"))
+arrUGet _ !a !i _ = arrIO (aGet (zu a) (fromIntegral i) (error "leanzempic: array index out of range"))
 {-# NOINLINE arrUGet #-}
 
 arrSet :: Any -> Any -> ZNat -> Any -> Any
@@ -252,7 +252,7 @@ arrUSet _ a i v _ = arrIO (zo <$> aSet (zu a) (fromIntegral i) v)
 {-# INLINE arrUSet #-}
 
 arrSwap :: Any -> Any -> ZNat -> ZNat -> Any
-arrSwap _ a i j = arrIO (zo <$> aSwap (zu a) (arrIdx i) (arrIdx j))
+arrSwap _ !a !i !j = arrIO (zo <$> aSwap (zu a) (arrIdx i) (arrIdx j))
 {-# NOINLINE arrSwap #-}
 
 arrPop :: Any -> Any -> Any
@@ -260,33 +260,84 @@ arrPop _ a = arrIO (zo <$> aPop (zu a))
 {-# NOINLINE arrPop #-}
 
 arrSwapP :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
-arrSwapP _ a i j _ _ = arrIO (zo <$> aSwap (zu a) (arrIdx i) (arrIdx j))
+arrSwapP _ !a !i !j _ _ = arrIO (zo <$> aSwap (zu a) (arrIdx i) (arrIdx j))
 {-# NOINLINE arrSwapP #-}
 
 -- In-place variants, used only where the compiler proved the array unshared (see Zempic.Own).
 arrSetU :: Any -> Any -> ZNat -> Any -> Any
-arrSetU _ a i v = arrIO (zo <$> aSetU (zu a) (arrIdx i) v)
+arrSetU _ !a !i v = arrIO (zo <$> aSetU (zu a) (arrIdx i) v)
 {-# NOINLINE arrSetU #-}
 
 arrUSetU :: Any -> Any -> Word -> Any -> Any -> Any
-arrUSetU _ a i v _ = arrIO (zo <$> aSetU (zu a) (fromIntegral i) v)
+arrUSetU _ !a !i v _ = arrIO (zo <$> aSetU (zu a) (fromIntegral i) v)
 {-# NOINLINE arrUSetU #-}
 
 arrPushU :: Any -> Any -> Any -> Any
-arrPushU _ a v = arrIO (zo <$> aPushU (zu a) v)
+arrPushU _ !a v = arrIO (zo <$> aPushU (zu a) v)
 {-# NOINLINE arrPushU #-}
 
 arrPopU :: Any -> Any -> Any
-arrPopU _ a = arrIO (zo <$> aPopU (zu a))
+arrPopU _ !a = arrIO (zo <$> aPopU (zu a))
 {-# NOINLINE arrPopU #-}
 
 arrSwapU :: Any -> Any -> ZNat -> ZNat -> Any
-arrSwapU _ a i j = arrIO (zo <$> aSwapU (zu a) (arrIdx i) (arrIdx j))
+arrSwapU _ !a !i !j = arrIO (zo <$> aSwapU (zu a) (arrIdx i) (arrIdx j))
 {-# NOINLINE arrSwapU #-}
 
 arrSwapPU :: Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
-arrSwapPU _ a i j _ _ = arrIO (zo <$> aSwapU (zu a) (arrIdx i) (arrIdx j))
+arrSwapPU _ !a !i !j _ _ = arrIO (zo <$> aSwapU (zu a) (arrIdx i) (arrIdx j))
 {-# NOINLINE arrSwapPU #-}
+
+-- Word-typed element operations: chosen by the compiler from the static type of the element, so a
+-- `Nat` (word mode) or `USize` array is read and written with no box (see Zempic.Arr).
+arrRangeK :: Int -> ZNat -> Any
+arrRangeK k n
+  | k == 5 = arrIO (zo <$> aRangeW (arrIdx n))
+  | otherwise = arrIO (zo <$> aFromListK 0 [zo i | i <- if n == 0 then [] else [0 .. n - 1]])
+{-# NOINLINE arrRangeK #-}
+
+-- The failed-index value is one shared thunk, not rebuilt at every read.
+idxErrW :: Word
+idxErrW = error "leanzempic: array index out of range"
+{-# NOINLINE idxErrW #-}
+
+arrGetDW :: Any -> Any -> Any -> ZNat -> Word
+arrGetDW _ !d !a !i = aGetWI (zu a) (arrIdx i) (zu d)
+{-# INLINE arrGetDW #-}
+
+arrGetIW :: Any -> Any -> ZNat -> Any -> Word
+arrGetIW _ !a !i _ = aGetWI (zu a) (arrIdx i) idxErrW
+{-# INLINE arrGetIW #-}
+
+arrUGetW :: Any -> Any -> Word -> Any -> Word
+arrUGetW _ !a !i _ = aGetWI (zu a) (fromIntegral i) idxErrW
+{-# INLINE arrUGetW #-}
+
+arrPushUW :: Any -> Any -> Word -> Any
+arrPushUW _ !a !v = arrIO (zo <$> aPushUW (zu a) v)
+{-# NOINLINE arrPushUW #-}
+
+arrSetUW :: Any -> Any -> ZNat -> Word -> Any
+arrSetUW _ !a !i !v = arrIO (zo <$> aSetUW (zu a) (arrIdx i) v)
+{-# NOINLINE arrSetUW #-}
+
+arrUSetUW :: Any -> Any -> Word -> Word -> Any -> Any
+arrUSetUW _ !a !i !v _ = arrIO (zo <$> aSetUW (zu a) (fromIntegral i) v)
+{-# NOINLINE arrUSetUW #-}
+
+arrUSetBUW :: Any -> Any -> Word -> Word -> Any -> Any
+arrUSetBUW _ !a !i !v _ = arrIO (zo <$> aSetUWB (zu a) (fromIntegral i) v)
+{-# NOINLINE arrUSetBUW #-}
+
+-- Push element @j@ of another array onto an array updated in place (the compiler fuses a read and the
+-- push of its value into this).
+arrPushUgetU :: Any -> Any -> Any -> Word -> Any
+arrPushUgetU _ !a !s !j = arrIO (zo <$> aPushFromU (zu a) (zu s) (fromIntegral j))
+{-# NOINLINE arrPushUgetU #-}
+
+arrPushGetIU :: Any -> Any -> Any -> ZNat -> Any
+arrPushGetIU _ !a !s !j = arrIO (zo <$> aPushFromU (zu a) (zu s) (arrIdx j))
+{-# NOINLINE arrPushGetIU #-}
 
 arrOfList :: Any -> [Any] -> Any
 arrOfList _ xs = arrIO (zo <$> aFromList xs)

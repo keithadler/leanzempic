@@ -14,18 +14,20 @@
 -- element, nothing for the garbage collector to scan or copy, and no box allocated per stored
 -- value. Every operation dispatches on the buffer, so a function that does not know the element
 -- type still works on either; an unboxed array just hands back a freshly boxed element.
-{-# LANGUAGE BangPatterns, FlexibleContexts, MagicHash #-}
+{-# LANGUAGE BangPatterns, FlexibleContexts, MagicHash, UnboxedTuples #-}
 module Zempic.Arr
   ( Arr, aEmpty, aEmptyK, aReplicate, aReplicateK, aLength, aGet, aSet, aPush, aPop, aSwap
   , aToList, aFromList, aFromListK
   , aSetU, aPushU, aPopU, aSwapU, aDeopt, aShare
+  , aRangeW, aDeoptW, aGetW, aGetWI, aPushFromU, aPushUW, aSetUW, aSetUWB
   ) where
 
 import Data.Array.Base (MArray, getNumElements, unsafeRead, unsafeWrite)
 import Data.Array.IO (IOArray, IOUArray, newArray)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word16, Word32, Word64, Word8)
-import GHC.Exts (Any, isTrue#, reallyUnsafePtrEquality#)
+import GHC.Exts (Any, Int (I#), Int#, RealWorld, State#, Word (W#), Word#, isTrue#, reallyUnsafePtrEquality#, runRW#)
+import GHC.IO (IO (..))
 import Unsafe.Coerce (unsafeCoerce)
 
 -- | The element storage. Kind codes: 0 boxed, 1 Word8, 2 Word16, 3 Word32, 4 Word64, 5 Word,
@@ -133,6 +135,26 @@ bufWrite b i v = case b of
   where raw act = if isUnit v then return () else act
 {-# INLINE bufWrite #-}
 
+-- | Exchange two elements in place, without boxing them.
+bufSwap :: Buf -> Int -> Int -> IO ()
+bufSwap b i j = case b of
+  BBox a -> sw a
+  B8 a -> sw a
+  B16 a -> sw a
+  B32 a -> sw a
+  B64 a -> sw a
+  BW a -> sw a
+  BBool a -> sw a
+  where
+    sw :: (MArray a e IO) => a Int e -> IO ()
+    sw a = do
+      x <- unsafeRead a i
+      y <- unsafeRead a j
+      unsafeWrite a i y
+      unsafeWrite a j x
+    {-# INLINE sw #-}
+{-# INLINE bufSwap #-}
+
 -- | A new buffer of the same kind with room for @cap@ elements and the first @n@ copied over.
 bufGrow :: Buf -> Int -> Int -> IO Buf
 bufGrow b n cap = case b of
@@ -209,10 +231,7 @@ rerootN arr = do
               bufWrite buf (aLen arr - 1) v
               writeIORef (aRef next) (Diff OPop arr)
             OSwap i j -> do
-              x <- bufRead buf i
-              y <- bufRead buf j
-              bufWrite buf i y
-              bufWrite buf j x
+              bufSwap buf i j
               writeIORef (aRef next) (Diff (OSwap i j) arr)
           let d = Direct buf c
           writeIORef (aRef arr) d
@@ -333,17 +352,11 @@ aSwap arr i j
         Direct buf c
           | c >= chainLimit (aLen arr) || c < 0 -> do
               b' <- bufClone buf (aLen arr)
-              x <- bufRead b' i
-              y <- bufRead b' j
-              bufWrite b' i y
-              bufWrite b' j x
+              bufSwap b' i j
               writeIORef (aRef arr) (Direct buf (-1))
               Arr (aLen arr) <$> newIORef (Direct b' 0)
           | otherwise -> do
-              x <- bufRead buf i
-              y <- bufRead buf j
-              bufWrite buf i y
-              bufWrite buf j x
+              bufSwap buf i j
               ref <- newIORef (Direct buf (c + 1))
               let arr' = Arr (aLen arr) ref
               writeIORef (aRef arr) (Diff (OSwap i j) arr')
@@ -428,12 +441,7 @@ aSwapU arr i j
   | otherwise = do
       node <- ownNode arr
       case node of
-        Direct buf c | c >= 0 -> do
-          x <- bufRead buf i
-          y <- bufRead buf j
-          bufWrite buf i y
-          bufWrite buf j x
-          return arr
+        Direct buf c | c >= 0 -> bufSwap buf i j >> return arr
         _ -> aSwap arr i j
 
 -- | Make this array's buffer boxed. Code that views an array as boxed values of a different type
@@ -454,3 +462,160 @@ aDeopt arr = do
                   | otherwise = bufRead buf k >>= unsafeWrite b k >> copy (k + 1)
       copy 0
       writeIORef (aRef arr) (Direct (BBox b) c)
+
+-- * Word-typed operations
+--
+-- When the compiler knows an element is a `Word` (a `Nat` in word mode, or a `USize`) it calls these
+-- instead of the `Any` versions: a `Word` buffer is read and written with no box. The compiler picks
+-- them only from the static type of the value, never for a placeholder of unknown type.
+
+-- | The array @[0, 1 .. n-1]@ in a `Word` buffer, filled in one pass.
+aRangeW :: Int -> IO Arr
+aRangeW n = do
+  buf <- bufNew 5 (max 4 n)
+  case buf of
+    BW a -> do
+      let go :: Int -> IO ()
+          go !k | k >= n = return ()
+                | otherwise = unsafeWrite a k (fromIntegral k) >> go (k + 1)
+      go 0
+    _ -> return ()
+  Arr (max 0 n) <$> newIORef (Direct buf 0)
+
+-- | Read an element as a `Word`.
+bufReadW :: Buf -> Int -> IO Word
+bufReadW b i = case b of
+  BW a -> unsafeRead a i
+  _ -> do
+    v <- bufRead b i
+    return $! (unsafeCoerce v :: Word)
+{-# INLINE bufReadW #-}
+
+-- | Write a `Word`. A buffer of another element type is not given one (the caller deoptimizes it).
+bufWriteW :: Buf -> Int -> Word -> IO ()
+bufWriteW b i@(I# i#) w@(W# w#) = case b of
+  BW a -> unsafeWrite a i w
+  _ -> bufWriteBoxed b i# w#
+{-# INLINE bufWriteW #-}
+
+-- | The write that does need the value boxed. It takes it unboxed, so that a caller never uses its
+-- argument boxed, and GHC passes it in a register everywhere else.
+bufWriteBoxed :: Buf -> Int# -> Word# -> IO ()
+bufWriteBoxed b i# w# = bufWrite b (I# i#) (unsafeCoerce (W# w#))
+{-# NOINLINE bufWriteBoxed #-}
+
+aGetW :: Arr -> Int -> Word -> IO Word
+aGetW arr i d = IO (\s -> case getWP arr i d s of (# s', r #) -> (# s', W# r #))
+{-# INLINE aGetW #-}
+
+-- | The read itself, with an unboxed result.
+getWP :: Arr -> Int -> Word -> State# RealWorld -> (# State# RealWorld, Word# #)
+getWP arr i d s
+  | i < 0 || i >= aLen arr = case d of W# d# -> (# s, d# #)
+  | otherwise = case readIORef (aRef arr) of
+      IO m -> case m s of
+        (# s1, node #) -> case node of
+          Direct buf _ -> readBuf buf s1
+          Lazy src -> getWP src i d s1
+          _ -> case reroot arr of
+            IO m2 -> case m2 s1 of (# s2, buf #) -> readBuf buf s2
+  where
+    readBuf buf st = case bufReadW buf i of IO r -> case r st of (# st', W# w #) -> (# st', w #)
+{-# NOINLINE getWP #-}
+
+-- | `aGetW` run purely, with an unboxed result: once inlined at a use site, GHC reads the `Word`
+-- straight into a register and no box is built. The read itself stays a call to a function GHC does
+-- not inline, so it is not moved across the writes around it (every call site is a strict @let@).
+aGetWI :: Arr -> Int -> Word -> Word
+aGetWI arr i d = case runRW# (getWP arr i d) of (# _, r #) -> W# r
+{-# INLINE aGetWI #-}
+
+-- | `aPushU` for a `Word` element. The rare paths that need the value boxed are separate functions,
+-- so this one takes it unboxed.
+aPushUW :: Arr -> Word -> IO Arr
+aPushUW arr !v = do
+  node <- ownNode arr
+  case node of
+    Diff _ _ -> slowPushW arr v
+    Direct _ c | c < 0 -> slowPushW arr v
+    Direct buf c -> do
+      cap <- bufCap buf
+      let n = aLen arr
+      if n < cap
+        then bufWriteW buf n v
+        else do
+          b <- bufGrow buf n (max 4 (2 * cap))
+          bufWriteW b n v
+          writeIORef (aRef arr) (Direct b c)
+      return (Arr (n + 1) (aRef arr))
+
+slowPushW :: Arr -> Word -> IO Arr
+slowPushW arr (W# v) = aPush arr (unsafeCoerce (W# v))
+{-# NOINLINE slowPushW #-}
+
+-- | `aSetU` for a `Word` element.
+aSetUW :: Arr -> Int -> Word -> IO Arr
+aSetUW arr i !v
+  | i < 0 || i >= aLen arr = return arr
+  | otherwise = do
+      node <- ownNode arr
+      case node of
+        Direct buf c | c >= 0 -> bufWriteW buf i v >> return arr
+        _ -> slowSetW arr i v
+
+slowSetW :: Arr -> Int -> Word -> IO Arr
+slowSetW arr (I# i) (W# v) = aSet arr (I# i) (unsafeCoerce (W# v))
+{-# NOINLINE slowSetW #-}
+
+-- | `aSetU` for a `Word` element written through a view as another element type (Lean's in-place
+-- `Array.map`): a `Word` or boxed buffer takes the value as it is, any other is made boxed first.
+aSetUWB :: Arr -> Int -> Word -> IO Arr
+aSetUWB arr i v = aDeoptW arr >> aSetUW arr i v
+
+-- | `aDeopt`, except that a `Word` buffer is left as it is (it holds exactly what a `Word` write stores).
+aDeoptW :: Arr -> IO ()
+aDeoptW arr = do
+  node <- readIORef (aRef arr)
+  case node of
+    Direct (BW _) _ -> return ()
+    Direct (BBox _) _ -> return ()
+    _ -> aDeopt arr
+{-# INLINE aDeoptW #-}
+
+-- * Moving an element between arrays
+
+-- | Copy element @j@ of one buffer to slot @i@ of another. Two buffers of the same kind exchange the
+-- raw element, so a `Word` or `Word8` is never boxed on the way.
+bufCopy :: Buf -> Int -> Buf -> Int -> IO ()
+bufCopy d i s j = case d of
+  BBox a | BBox b <- s -> mv a b
+  BW a | BW b <- s -> mv a b
+  B8 a | B8 b <- s -> mv a b
+  B16 a | B16 b <- s -> mv a b
+  B32 a | B32 b <- s -> mv a b
+  B64 a | B64 b <- s -> mv a b
+  BBool a | BBool b <- s -> mv a b
+  _ -> bufRead s j >>= bufWrite d i
+  where
+    mv :: (MArray a e IO) => a Int e -> a Int e -> IO ()
+    mv a b = unsafeRead b j >>= unsafeWrite a i
+    {-# INLINE mv #-}
+
+-- | `aPushU` of element @i@ of another array, moved without boxing (what `Array.append` and
+-- `Array.extract` do for each element). An index out of range is the same error as `aGet`'s.
+aPushFromU :: Arr -> Arr -> Int -> IO Arr
+aPushFromU arr src i = do
+  node <- ownNode arr
+  snode <- readIORef (aRef src)
+  case (node, snode) of
+    (Direct buf c, Direct sbuf _) | c >= 0 && i >= 0 && i < aLen src -> do
+      cap <- bufCap buf
+      let n = aLen arr
+      if n < cap
+        then bufCopy buf n sbuf i
+        else do
+          b <- bufGrow buf n (max 4 (2 * cap))
+          bufCopy b n sbuf i
+          writeIORef (aRef arr) (Direct b c)
+      return (Arr (n + 1) (aRef arr))
+    _ -> aGet src i (error "leanzempic: array index out of range") >>= aPushU arr

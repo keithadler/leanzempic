@@ -22,7 +22,7 @@ The analysis tracks, for each variable, one of `top` (nothing known), `own` (a u
 or `con` (a uniquely held constructor cell with known field ownership). Ownership is created in three
 ways only:
 
-* a **fresh array** (`mkEmpty`, `replicate`, `mk`, `toArray`) is `own`;
+* a **fresh array** (`mkEmpty`, `replicate`, `range`, `mk`, `toArray`) is `own`;
 * the **result of an in-place update** of an `own` array is `own` (the same buffer, still unique);
 * a **constructor cell** is `con` only if built from owned parts that were handed over.
 
@@ -53,6 +53,22 @@ The analysis can be wrong; these limit the damage:
   two owners.
 * Persistent operations are always correct, so any imprecision costs speed, not correctness.
 * `set_option zempic.own false` turns the analysis off entirely.
+
+## Typed element access
+
+The ownership claim above is about aliasing. A separate, narrower claim covers the `W` primitives
+(`arrUGetW`, `arrPushUW`, `arrUSetBUW`, ...), which read and write a `Word` element (`Nat` in word mode,
+`USize`) with no box:
+
+* The emitter picks a `W` primitive only when the element is a `Word` by the type of a value it can
+  see: the declared type of a read outside `Array.mapMUnsafe`, the Haskell type of the value being
+  written, or, for a read inside `Array.mapMUnsafe` (where the view as `NonScalar` hides the element
+  type), a later use of the read as an argument that a primitive takes as `Nat`/`USize`. Lean's type
+  checker makes the last two sound: such a use means the value is a `Nat` there.
+* A `Word` write into a buffer of another element type (a `UInt8` array that `Array.map` turns into
+  `Nat`s) first makes the buffer boxed, as the generic path does. `array_word_paths` checks it, and a
+  deliberate bug (skipping that step) is caught.
+* `Array.range` is a fresh array and is `own`.
 
 ## Assumptions the claim depends on
 

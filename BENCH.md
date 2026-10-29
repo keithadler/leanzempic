@@ -419,6 +419,78 @@ Tried and dropped: inlining the array read primitives (no change), a tighter `mu
 an unboxed S-box table (7%, below the noise of the rest), `zempic.fuse` (no change).
 
 
+## Array reads and writes without boxes: `array_funcs` 3.9x to 2.5x (2026-10-29)
+
+`array_funcs` (range, map, filter, zip, foldl, any/all, contains, reverse, extract, append at n = 2e6)
+was 3.9x slower than Lean's C backend after the dead-store peephole. Same machine, same load, A/B in two
+worktrees, best of 11 CPU seconds and exact allocation:
+
+| | before | after |
+|---|---|---|
+| allocated | 485.7 MB | 329.4 MB |
+| CPU, best of 11 | 0.176 s | 0.107 s |
+| `garden/perf.py` ratio vs Lean C | 3.9x (4.3x on the first run) | 2.5x |
+
+Each phase alone (allocation above the 16 MB buffer of the range itself; the process start is 13 ms of
+every run at `-A128m`):
+
+| phase | before | after |
+|---|---|---|
+| `Array.range` 2e6 | 89 MB | 0 |
+| `map (* 3)` | 64 MB | 0 |
+| `foldl`, `any`, `all`, `contains` | 64 MB | 0 |
+| `filter (% 2 == 0)` | 40 MB | 40 MB (the 24-byte `Arr` of each push, plus buffer doubling) |
+| `zip` then `map` over pairs | 153 MB | 113 MB |
+| `reverse` | 56 MB | 40 MB |
+| `a ++ b` | 98 MB | 160 MB for `a ++ a` (see below) |
+
+What changed:
+
+* `Array.range` is a primitive: one pass filling a `Word` buffer in word mode, instead of `ofFn` calling a
+  closure and boxing each index.
+* `Word`-typed reads, pushes and in-place writes. When the emitter can see the element is a `Word`
+  (a `Nat` in word mode, or a `USize`) it calls `arrUGetW`, `arrPushUW`, `arrUSetBUW` and so on, which read
+  and write a word buffer with no box. Inside Lean's in-place `Array.map` the read's type is hidden by the
+  view as `NonScalar`, so it is typed by a later use as a `Nat` argument instead.
+* Swaps exchange raw elements (no box per swap), and the read-then-push of `append`/`extract` moves the
+  element from buffer to buffer (`aPushFromU`).
+
+**The earlier "typed array reads" experiment failed for a reason I can now name.** The README records
+that allocation went up (534 MB to 646 MB) and that I did not find out why. Allocation went up again on
+my first attempt here (485 MB to 537 MB, then 570 MB), and reading the STG showed four separate causes,
+all GHC boxity, none of them in the array code itself:
+
+1. A `NOINLINE` primitive that returns a `Word` returns it boxed (no unboxed return), so every typed read
+   still built a `W#`. Fix: the read is a `NOINLINE` worker in `State#` style returning `Word#`, wrapped
+   by an `INLINE` function, so the call site gets a register.
+2. Arguments that any path uses boxed stay boxed in the worker. The slow paths (`aSet` on a stale
+   version, a write into a non-word buffer) used the `Word` or the index as a box, which made the fast path
+   take boxed `Int`s and `Word`s: 16 bytes per call, twice. Fix: bang the arguments, and put every use
+   that needs a box in a `NOINLINE` function that takes `Word#` and `Int#`.
+3. `error "index out of range"` as the default of an inlined read was rebuilt as a thunk on every
+   iteration (24 bytes). Fix: one shared top-level thunk.
+4. Strictness was missing on the generic in-place primitives too (`arrSwapPU` boxed both indices).
+
+Not kept:
+
+* An inline fast path for the common read (live version, word buffer) in `aGetWI`: allocation 329 MB to
+  361 MB, no time gain. Reverted.
+* A larger initial capacity for `mkEmpty` (clamp 1M to 16M elements): no effect on this program. Reverted.
+* Smaller `-A` (16m, 4m, 1m) is slower, 0.17 to 0.19 s against 0.11 s: with a 128 MB nursery nothing is
+  collected at all (GC time 0.000 s), so the cost left is bytes streamed through the nursery.
+
+What is left, in order: the 24-byte `Arr` each in-place push returns (its length is an immutable field), the
+boxes and pairs of `zip` (the polymorphic `Array.zip` reads `Any`), and `a ++ b`, whose in-place push
+loop starts from a lazy copy and doubles twice. `a ++ a` allocates more than before (160 MB against
+128 MB) because the move is a `NOINLINE` call per element that the old read-then-push pair did not need;
+the time is level.
+
+**A bug found on the way, not fixed here.** Two `Array.mkEmpty 4` of different element types in one function
+are merged by Lean's common-subexpression elimination into one variable, and the buffer kind follows the
+first one's type. Pushing `Nat`s into an array that began as `Array UInt8` truncates them to bytes. The
+baseline commit does the same (`garden/programs.py` `array_word_paths` first drew it out). The test avoids it
+with different capacities.
+
 ## Ideas from tenet-hs, tried (2026-10-29)
 
 tenet-hs (an independent Lean kernel in Haskell, same author) got a 2.5x memory cut and large speed-ups
