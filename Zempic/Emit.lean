@@ -777,11 +777,48 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
     | .ctor hs ptys ret np => return apply hs ptys ret (args.extract np args.size) false
     | .bad => return ("erased", "Any")
 
+/-- How many times variable `x` is used in the code (any use counts; unknown forms count as many). -/
+partial def useCount (x : FVarId) : Code .pure → Nat
+  | .let d k =>
+    (match d.value with
+     | .const _ _ args => Own.occurrences args x
+     | .fvar f args => (if f == x then 1 else 0) + Own.occurrences args x
+     | .proj _ _ f => if f == x then 1 else 0
+     | .lit _ => 0
+     | .erased => 0) + useCount x k
+  | .fun d k => useCount x d.value + useCount x k
+  | .jp d k => useCount x d.value + useCount x k
+  | .jmp _ args => Own.occurrences args x
+  | .return y => if y == x then 1 else 0
+  | .cases cs => (if cs.discr == x then 1 else 0) + cs.alts.foldl (fun a alt => a + match alt with
+      | .alt _ _ k => useCount x k
+      | .default k => useCount x k) 0
+  | .unreach _ => 0
+
+/-- Is the only use of `x` in the code an `Array.uset` of index `i` on it? Then a write of `x`'s
+slot `i` just before is dead: nothing can read it. -/
+partial def onlyOverwrittenAt (x i : FVarId) : Code .pure → Bool
+  | .let d k =>
+    (match d.value with
+     | .const `Array.uset _ #[_, .fvar a, .fvar j, _, _] => a == x && j == i
+     | _ => false) || onlyOverwrittenAt x i k
+  | .fun _ k => onlyOverwrittenAt x i k
+  | .jp _ k => onlyOverwrittenAt x i k
+  | .cases cs => cs.alts.any fun
+    | .alt _ _ k => onlyOverwrittenAt x i k
+    | .default k => onlyOverwrittenAt x i k
+  | _ => false
+
 mutual
 /-- Print LCNF code as a Haskell expression whose result has type `ret`. -/
 partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String := do
   match c with
   | .let d k =>
+    -- A placeholder write that the loop overwrites at once (`Array.map`) is skipped: the array passes through.
+    let d := match d.value with
+      | .const `Array.uset _ #[_, .fvar a, .fvar i, _, _] =>
+        if useCount d.fvarId k == 1 && onlyOverwrittenAt d.fvarId i k then { d with value := .fvar a #[] } else d
+      | _ => d
     let (rhs, ty) ← hsLetValue d.value d.type d.fvarId
     noteExpr d.fvarId d.type
     let x ← bindT d.fvarId d.binderName ty

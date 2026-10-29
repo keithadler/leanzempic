@@ -1,6 +1,6 @@
 {
  "meta": {
-  "commit": "3093618",
+  "commit": "3217c15",
   "date": "2026-10-29",
   "machine": "Apple M3",
   "dirty": false
@@ -8,171 +8,171 @@
  "rows": [
   {
    "label": "Float loop",
-   "native_s": 0.435,
-   "default_s": 0.046,
-   "tuned_s": 0.055,
-   "default": 0.106,
-   "tuned": 0.126
+   "native_s": 0.429,
+   "default_s": 0.043,
+   "tuned_s": 0.047,
+   "default": 0.1,
+   "tuned": 0.11
   },
   {
    "label": "Int arithmetic",
-   "native_s": 1.114,
-   "default_s": 0.269,
-   "tuned_s": 0.172,
-   "default": 0.241,
-   "tuned": 0.154
+   "native_s": 1.118,
+   "default_s": 0.256,
+   "tuned_s": 0.169,
+   "default": 0.229,
+   "tuned": 0.151
   },
   {
    "label": "Tree map and sum",
-   "native_s": 2.279,
-   "default_s": 1.092,
-   "tuned_s": 0.976,
-   "default": 0.479,
+   "native_s": 2.254,
+   "default_s": 1.025,
+   "tuned_s": 0.964,
+   "default": 0.455,
    "tuned": 0.428
   },
   {
    "label": "Record update loop",
-   "native_s": 0.1,
-   "default_s": 0.097,
-   "tuned_s": 0.04,
-   "default": 0.97,
-   "tuned": 0.4
+   "native_s": 0.101,
+   "default_s": 0.094,
+   "tuned_s": 0.047,
+   "default": 0.931,
+   "tuned": 0.465
   },
   {
    "label": "List merge sort",
    "native_s": 0.075,
-   "default_s": 0.1,
-   "tuned_s": 0.13,
-   "default": 1.333,
-   "tuned": 1.733
+   "default_s": 0.093,
+   "tuned_s": 0.133,
+   "default": 1.24,
+   "tuned": 1.773
   },
   {
    "label": "HashMap inserts",
    "native_s": 0.073,
-   "default_s": 0.247,
-   "tuned_s": 0.142,
-   "default": 3.384,
-   "tuned": 1.945
+   "default_s": 0.252,
+   "tuned_s": 0.145,
+   "default": 3.452,
+   "tuned": 1.986
   },
   {
    "label": "String iteration",
-   "native_s": 0.094,
-   "default_s": 0.348,
-   "tuned_s": 0.146,
-   "default": 3.702,
-   "tuned": 1.553
+   "native_s": 0.091,
+   "default_s": 0.336,
+   "tuned_s": 0.145,
+   "default": 3.692,
+   "tuned": 1.593
   },
   {
    "label": "List functions",
    "native_s": 0.059,
-   "default_s": 0.111,
-   "tuned_s": 0.092,
-   "default": 1.881,
-   "tuned": 1.559
+   "default_s": 0.106,
+   "tuned_s": 0.103,
+   "default": 1.797,
+   "tuned": 1.746
   },
   {
    "label": "Array map/filter/fold",
-   "native_s": 0.046,
-   "default_s": 0.258,
-   "tuned_s": 0.221,
-   "default": 5.609,
-   "tuned": 4.804
+   "native_s": 0.045,
+   "default_s": 0.256,
+   "tuned_s": 0.262,
+   "default": 5.689,
+   "tuned": 5.822
   },
   {
    "label": "Shared array, insertion sort",
-   "native_s": 0.01,
-   "default_s": 0.066,
-   "tuned_s": 0.069,
-   "default": 6.6,
-   "tuned": 6.9
+   "native_s": 0.011,
+   "default_s": 0.059,
+   "tuned_s": 0.073,
+   "default": 5.364,
+   "tuned": 6.636
   },
   {
    "label": "List of UInt8, hashed",
-   "native_s": 0.053,
-   "default_s": 0.157,
-   "tuned_s": 0.052,
-   "default": 2.962,
-   "tuned": 0.981
+   "native_s": 0.054,
+   "default_s": 0.156,
+   "tuned_s": 0.049,
+   "default": 2.889,
+   "tuned": 0.907
   },
   {
    "label": "Tuple-state fold",
-   "native_s": 0.099,
-   "default_s": 0.27,
-   "tuned_s": 0.095,
-   "default": 2.727,
+   "native_s": 0.1,
+   "default_s": 0.264,
+   "tuned_s": 0.096,
+   "default": 2.64,
    "tuned": 0.96
   },
   {
    "label": "Option chain",
    "native_s": 0.127,
-   "default_s": 0.1,
-   "tuned_s": 0.04,
-   "default": 0.787,
-   "tuned": 0.315
+   "default_s": 0.09,
+   "tuned_s": 0.038,
+   "default": 0.709,
+   "tuned": 0.299
   },
   {
    "label": "Nat sum loop",
-   "native_s": 0.4554567337036133,
-   "default_s": 0.19134783744812012,
-   "tuned_s": 0.19526195526123047,
-   "default": 0.42,
-   "tuned": 0.429
+   "native_s": 0.45784497261047363,
+   "default_s": 0.19890284538269043,
+   "tuned_s": 0.2050459384918213,
+   "default": 0.434,
+   "tuned": 0.448
   },
   {
    "label": "Fused list pipeline",
-   "native_s": 0.3621668815612793,
-   "default_s": 0.05775785446166992,
-   "tuned_s": 0.06027507781982422,
-   "default": 0.159,
-   "tuned": 0.166
+   "native_s": 0.3655669689178467,
+   "default_s": 0.05559873580932617,
+   "tuned_s": 0.06794309616088867,
+   "default": 0.152,
+   "tuned": 0.186
   },
   {
    "label": "Sieve (Bool array)",
-   "native_s": 0.10285711288452148,
-   "default_s": 0.13368511199951172,
-   "tuned_s": 0.14320993423461914,
-   "default": 1.3,
-   "tuned": 1.392
+   "native_s": 0.11355400085449219,
+   "default_s": 0.13678789138793945,
+   "tuned_s": 0.14405417442321777,
+   "default": 1.205,
+   "tuned": 1.269
   },
   {
    "label": "Prefix sums (Nat array)",
-   "native_s": 0.0827782154083252,
-   "default_s": 0.2935597896575928,
-   "tuned_s": 0.29388427734375,
-   "default": 3.546,
-   "tuned": 3.55
+   "native_s": 0.08288002014160156,
+   "default_s": 0.2949411869049072,
+   "tuned_s": 0.29201722145080566,
+   "default": 3.559,
+   "tuned": 3.523
   },
   {
    "label": "Array map and fold",
-   "native_s": 0.0505373477935791,
-   "default_s": 0.14517688751220703,
-   "tuned_s": 0.12926578521728516,
-   "default": 2.873,
-   "tuned": 2.558
+   "native_s": 0.051819801330566406,
+   "default_s": 0.16266274452209473,
+   "tuned_s": 0.14043474197387695,
+   "default": 3.139,
+   "tuned": 2.71
   },
   {
    "label": "Reverse by swaps",
-   "native_s": 0.04788827896118164,
-   "default_s": 0.08237886428833008,
-   "tuned_s": 0.0714879035949707,
-   "default": 1.72,
-   "tuned": 1.493
+   "native_s": 0.04894113540649414,
+   "default_s": 0.08536911010742188,
+   "tuned_s": 0.07738590240478516,
+   "default": 1.744,
+   "tuned": 1.581
   },
   {
    "label": "Push and pop stack",
-   "native_s": 0.08069419860839844,
-   "default_s": 0.08424901962280273,
-   "tuned_s": 0.10038495063781738,
-   "default": 1.044,
-   "tuned": 1.244
+   "native_s": 0.08208584785461426,
+   "default_s": 0.0883030891418457,
+   "tuned_s": 0.10243988037109375,
+   "default": 1.076,
+   "tuned": 1.248
   },
   {
    "label": "Proved AES-256",
-   "native_s": 2.53,
-   "default_s": 4.55,
-   "tuned_s": 4.55,
-   "default": 1.798,
-   "tuned": 1.798
+   "native_s": 2.49,
+   "default_s": 5.02,
+   "tuned_s": 5.02,
+   "default": 2.016,
+   "tuned": 2.016
   }
  ]
 }
