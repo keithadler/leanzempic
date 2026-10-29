@@ -109,7 +109,8 @@ aPush arr v = do
       then return buf
       else do
         b <- newBuf (max 4 (2 * cap)) filler
-        let copy !k | k >= n = return ()
+        let copy :: Int -> IO ()
+            copy !k | k >= n = return ()
                     | otherwise = unsafeRead buf k >>= unsafeWrite b k >> copy (k + 1)
         copy 0
         return b
@@ -184,7 +185,8 @@ aPushU arr v = do
         then unsafeWrite buf n v
         else do
           b <- newBuf (max 4 (2 * cap)) filler
-          let copy !k | k >= n = return ()
+          let copy :: Int -> IO ()
+              copy !k | k >= n = return ()
                       | otherwise = unsafeRead buf k >>= unsafeWrite b k >> copy (k + 1)
           copy 0
           unsafeWrite b n v
