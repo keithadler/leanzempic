@@ -57,8 +57,10 @@ def timed(cmd):
     wall = time.time() - t
     m = re.search(r"([\d.]+)\s+real\s+([\d.]+)\s+user\s+([\d.]+)\s+sys", r.stderr)
     rss = re.search(r"(\d+)\s+maximum resident set size", r.stderr)
+    ins = re.search(r"(\d+)\s+instructions retired", r.stderr)
     return (float(m.group(1)) if m else wall, float(m.group(2)) + float(m.group(3)) if m else None,
-            int(rss.group(1)) / 1048576 if rss else None, r.stdout.strip(), r.returncode)
+            int(rss.group(1)) / 1048576 if rss else None, r.stdout.strip(), r.returncode,
+            int(ins.group(1)) if ins else None)
 
 def bench(name, status):
     n = str(SIZES[name]); d = f"{OUT}/{name}"
@@ -73,7 +75,7 @@ def bench(name, status):
         outs = {r[3] for r in rs}
         row[k] = {"wall": min(r[0] for r in rs), "cpu": min(r[1] for r in rs), "mb": max(r[2] for r in rs),
                   "all_wall": [round(r[0], 3) for r in rs], "out": sorted(outs)[0][:60], "stable": len(outs) == 1,
-                  "rc": [r[4] for r in rs]}
+                  "rc": [r[4] for r in rs], "ins": min(r[5] for r in rs if r[5])}
     return row
 
 if __name__ == "__main__":

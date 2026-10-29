@@ -11,3 +11,10 @@ for p, v in r.items():
     print(f"| [{p}]({C}{p}.lean) | {v['n']} | {n['wall']:.2f} ({n['cpu']:.2f}) | {d['wall']:.2f} ({d['cpu']:.2f}), {d['wall']/n['wall']:.2f}x | "
           f"{t['wall']:.2f} ({t['cpu']:.2f}), {t['wall']/n['wall']:.2f}x | {n['mb']:.0f} / {d['mb']:.0f} / {t['mb']:.0f} | {'yes' if same else 'NO'} |")
 print("\nload averages at the start of each program's runs (1/5/15 min): " + "; ".join(f"{p} {v['load'][0]:.1f}/{v['load'][1]:.1f}/{v['load'][2]:.1f}" for p, v in r.items()))
+print("\ninstructions retired (billions), the minimization target; ratio is against native Lean:\n")
+print("| program | native | default, ratio | recommended, ratio |")
+print("|---|---|---|---|")
+for p, v in r.items():
+    n = v["native"]; d = v["default"]; t = v["recommended"]
+    if not (n.get("ins") and d.get("ins") and t.get("ins")): continue
+    print(f"| {p} | {n['ins']/1e9:.2f} | {d['ins']/1e9:.2f}, {d['ins']/n['ins']:.2f}x | {t['ins']/1e9:.2f}, {t['ins']/n['ins']:.2f}x |")
