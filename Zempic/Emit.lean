@@ -21,6 +21,12 @@ register_option zempic.unroll : Nat := {
   descr := "(leanzempic) unroll self-recursive calls whose Nat argument is a literal up to this; 0 = off"
 }
 
+/-- Give arrays of numeric and `Bool` elements an unboxed buffer when the element type is known. -/
+register_option zempic.typedArrays : Bool := {
+  defValue := true
+  descr := "(leanzempic) store arrays of UInt8/16/32/64, Bool, Char, USize and Nat as unboxed buffers"
+}
+
 /-! ## Names -/
 
 /-- Haskell name of a compiled Lean function. -/
@@ -257,6 +263,8 @@ structure St where
   vseen : Std.HashSet String := {}
   /-- How many copies each function has, to bound code growth. -/
   vcount : Std.HashMap Name Nat := {}
+  /-- Unboxed array buffers are on (`zempic.typedArrays`). -/
+  typedArrays : Bool := true
 
 /-- The emitter monad. -/
 abbrev EmitM := StateRefT St CoreM
@@ -564,6 +572,21 @@ partial def callsConst (n : Name) : Code .pure → Bool
     | .default k => callsConst n k
   | _ => false
 
+/-- How many times the code calls constant `n`. -/
+partial def countCallsTo (n : Name) : Code .pure → Nat
+  | .let d k => (match d.value with | .const c _ _ => if c == n then 1 else 0 | _ => 0) + countCallsTo n k
+  | .fun d k => countCallsTo n d.value + countCallsTo n k
+  | .jp d k => countCallsTo n d.value + countCallsTo n k
+  | .cases cs => cs.alts.foldl (fun a alt => a + match alt with
+      | .alt _ _ k => countCallsTo n k
+      | .default k => countCallsTo n k) 0
+  | _ => 0
+
+/-- Largest estimated size of an unrolled chain: GHC inlines each copy into the next, so a body with `c`
+recursive call sites unrolled `k` deep becomes about `size * c^k`. Without this bound a loop with two
+branches and a counter of 16 made GHC run out of memory compiling the result. -/
+def unrollChainBudget : Nat := 8000
+
 /-- Number of bindings in the code, and the constants it calls. -/
 partial def sizeCalls (c : Code .pure) (acc : Nat × Array Name) : Nat × Array Name :=
   match c with
@@ -643,7 +666,13 @@ def tryUnroll (c : Name) (args : Array (Arg .pure)) :
   if args.size != d.params.size || !callsConst c body then return none
   let name := variantName c ks
   unless s.vseen.contains name do
-    if (← deepSize c 3 #[]).1 > unrollBudget then return none
+    let size := (← deepSize c 3 #[]).1
+    if size > unrollBudget then return none
+    -- Depth of the chain: the largest literal fixed to a parameter (a loop counts down to zero or up
+    -- from it); then the copies GHC will inline into each other number about calls^depth.
+    let depth := ks.foldl (fun m o => max m (o.getD 0)) 0
+    let calls := countCallsTo c body
+    if size * calls ^ depth > unrollChainBudget then return none
     let cnt := s.vcount.getD c 0
     if cnt ≥ 64 then return none
     modify fun s => { s with vseen := s.vseen.insert name, vqueue := s.vqueue.push (c, ks),
@@ -656,6 +685,21 @@ def tryUnroll (c : Name) (args : Array (Arg .pure)) :
       ptys := ptys ++ [t]
       free := free.push (← atomT a)
   return some (name, ptys, ← declRetM d, free)
+
+/-- The unboxed buffer kind for arrays of this element type (see `Zempic.Arr`): 1 `Word8`, 2 `Word16`,
+3 `Word32` (also `Char`), 4 `Word64`, 5 `Word` (`USize`, and `Nat` in word mode), 6 `Bool`; 0 means the
+elements stay boxed (any other type, `Nat` in exact mode where it is a `Natural`, or the option is off). -/
+def elemKind (elem : Expr) : EmitM Nat := do
+  unless (← get).typedArrays do return 0
+  match ← hsTyM elem with
+  | "Word8" => return 1
+  | "Word16" => return 2
+  | "Word32" => return 3
+  | "Word64" => return 4
+  | "Word" => return 5
+  | "Bool" => return 6
+  | "ZNat" => return (if (← get).fast then 5 else 0)
+  | _ => return 0
 
 /-- Expression and its Haskell type. -/
 def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (String × String) :=
@@ -694,8 +738,25 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
     let args ← argsRaw.mapM atomT
     match ← resolve c letTy with
     | .prim hs ptys ret =>
+      let elem? : Option Expr := match letTy.getAppFn, letTy.getAppArgs with
+        | .const `Array _, #[elem] => some elem
+        | _, _ => none
+      -- Lean's in-place `Array.map` (`Array.mapMUnsafe`) views an `Array Nat` as `Array NonScalar` and
+      -- stores results of any type; the compiler erases `NonScalar` to `Nat`, so the type cannot show
+      -- it. It is the only library function that changes an array's element type in place (checked in
+      -- Init/Data/Array), so a write inside it makes the buffer boxed first.
+      let punned := ((← get).cur.toString.splitOn "Array.mapMUnsafe").length > 1
+      let hs := if punned && ["arrSet", "arrSetH", "arrUSet", "arrPush"].contains hs then hs ++ "B" else hs
       -- The analysis proved this array operation may update in place: use the in-place primitive.
       let hs := if (← get).destr.contains ((← get).cur, letId) then hs ++ "U" else hs
+      -- A new array of a known numeric element type gets an unboxed buffer.
+      let hs ← if hs == "arrMkEmpty" || hs == "arrReplicate" || hs == "arrOfList" then
+          match elem? with
+          | some elem =>
+            let k ← elemKind elem
+            pure (if k == 0 then hs else s!"{hs}K {k}")
+          | none => pure hs
+        else pure hs
       return apply hs ptys ret args false
     | .decl hs ptys ret => return apply hs ptys ret args false
     | .ctor hs ptys ret np => return apply hs ptys ret (args.extract np args.size) false
@@ -996,7 +1057,8 @@ def emitModule (modName : String) (roots : Array Name) (natMod : String := "Zemp
              fusible }
   let own := zempic.own.get (← getOptions)
   let destr ← if own then Own.analyze roots else pure {}
-  act.run' { fast, destr, unrollMax := zempic.unroll.get (← getOptions) }
+  act.run' { fast, destr, unrollMax := zempic.unroll.get (← getOptions),
+             typedArrays := zempic.typedArrays.get (← getOptions) }
 
 /-! ## Core-plugin input (spike): LCNF as an s-expression
 

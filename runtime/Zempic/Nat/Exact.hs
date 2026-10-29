@@ -143,6 +143,55 @@ arrMkEmpty :: Any -> ZNat -> Any
 arrMkEmpty _ c = arrIO (zo <$> aEmpty (arrIdx c))
 {-# NOINLINE arrMkEmpty #-}
 
+-- Creation with an unboxed element representation, chosen by the compiler from the element type
+-- (kind codes in Zempic.Arr): 1 Word8, 2 Word16, 3 Word32, 4 Word64, 5 Word, 6 Bool.
+arrMkEmptyK :: Int -> Any -> ZNat -> Any
+arrMkEmptyK k _ c = arrIO (zo <$> aEmptyK k (arrIdx c))
+{-# NOINLINE arrMkEmptyK #-}
+
+arrReplicateK :: Int -> Any -> ZNat -> Any -> Any
+arrReplicateK k _ n v = arrIO (zo <$> aReplicateK k (arrIdx n) v)
+{-# NOINLINE arrReplicateK #-}
+
+arrOfListK :: Int -> Any -> [Any] -> Any
+arrOfListK k _ xs = arrIO (zo <$> aFromListK k xs)
+{-# NOINLINE arrOfListK #-}
+
+-- Writes through a view of the array as boxed values of another type (Lean's in-place Array.map treats
+-- an `Array Nat` as `Array NonScalar` and stores the results, whatever their type): make the buffer
+-- boxed first, so a value of the wrong type never lands in an unboxed buffer.
+arrSetB :: Any -> Any -> ZNat -> Any -> Any
+arrSetB _ !a !i !v = arrIO (aDeopt (zu a) >> (zo <$> aSet (zu a) (arrIdx i) v))
+{-# NOINLINE arrSetB #-}
+
+arrSetBU :: Any -> Any -> ZNat -> Any -> Any
+arrSetBU _ a i v = arrIO (aDeopt (zu a) >> (zo <$> aSetU (zu a) (arrIdx i) v))
+{-# NOINLINE arrSetBU #-}
+
+arrSetHB :: Any -> Any -> ZNat -> Any -> Any -> Any
+arrSetHB _ !a !i !v _ = arrIO (aDeopt (zu a) >> (zo <$> aSet (zu a) (arrIdx i) v))
+{-# NOINLINE arrSetHB #-}
+
+arrSetHBU :: Any -> Any -> ZNat -> Any -> Any -> Any
+arrSetHBU _ a i v _ = arrIO (aDeopt (zu a) >> (zo <$> aSetU (zu a) (arrIdx i) v))
+{-# NOINLINE arrSetHBU #-}
+
+arrUSetB :: Any -> Any -> Word -> Any -> Any -> Any
+arrUSetB _ a i v _ = arrIO (aDeopt (zu a) >> (zo <$> aSet (zu a) (fromIntegral i) v))
+{-# NOINLINE arrUSetB #-}
+
+arrUSetBU :: Any -> Any -> Word -> Any -> Any -> Any
+arrUSetBU _ a i v _ = arrIO (aDeopt (zu a) >> (zo <$> aSetU (zu a) (fromIntegral i) v))
+{-# NOINLINE arrUSetBU #-}
+
+arrPushB :: Any -> Any -> Any -> Any
+arrPushB _ !a !v = arrIO (aDeopt (zu a) >> (zo <$> aPush (zu a) v))
+{-# NOINLINE arrPushB #-}
+
+arrPushBU :: Any -> Any -> Any -> Any
+arrPushBU _ a v = arrIO (aDeopt (zu a) >> (zo <$> aPushU (zu a) v))
+{-# NOINLINE arrPushBU #-}
+
 arrReplicate :: Any -> ZNat -> Any -> Any
 arrReplicate _ n v = arrIO (zo <$> aReplicate (arrIdx n) v)
 {-# NOINLINE arrReplicate #-}

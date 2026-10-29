@@ -7,7 +7,8 @@ cd "$(dirname "$0")/.."
 eq() { [ -n "$1" ] && [ "$1" = "$2" ]; }
 lake build Examples bench fusion autofusion combinators combinators-plain structs ints arrays arrays2 strings generics aliasing stralias >/dev/null
 mkdir -p build/o
-ghc_() { (cd "$1" && ghc -O2 -i../runtime -i../build -outputdir ../build/o -o ../build/$2 $3 >/dev/null); }
+# The memory cap makes a compile-time blowup (unrolling once made GHC use 40 GB) fail fast, not swap.
+ghc_() { (cd "$1" && ghc -O2 -i../runtime -i../build -outputdir ../build/o -o ../build/$2 $3 +RTS -M6g -RTS >/dev/null); }
 
 ghc_ tests t Main.hs
 expected="2432902008176640000
@@ -17,6 +18,9 @@ expected="2432902008176640000
 out=$(build/t)
 eq "$out" "$expected" && echo "ok examples (incl. exact fallback: 25! is $(echo "$out" | tail -1))" || { echo "FAIL examples"; echo "$out"; exit 1; }
 
+# The benchmark with nested counting loops: the first unrolling bound let this one blow up GHC.
+ghc_ bench Main Main.hs
+eq "$(build/Main 0)" "$(.lake/build/bin/bench 0)" && echo "ok bench (sum loop; compiles under a memory cap)" || { echo "FAIL bench"; exit 1; }
 ghc_ bench FusionMain FusionMain.hs
 ghc_ bench AutoMain AutoMain.hs
 want=$(.lake/build/bin/fusion lean 100000)

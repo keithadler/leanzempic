@@ -735,3 +735,52 @@ def entry (n : Nat) : Nat :=
   let s := "Hello, World " ++ toString n
   (s.replace "o" "00").length
 ''')
+
+# ---- typed-array hazards: library code that writes placeholders or changes element types in place
+add("arr_modify", '''
+def entry (n : Nat) : Nat :=
+  let a := Array.replicate (n % 7 + 4) (7 : Nat)
+  let b := (a.modify 1 (· + 5)).modify 0 (· * 3)
+  let c := b.modify 2 (· + 100)
+  b[0]! + b[1]! + c[2]! + c.foldl (· + ·) 0
+''')
+add("arr_map_types", '''
+def entry (n : Nat) : Nat :=
+  let a := Array.replicate (n % 6 + 3) (3 : Nat)
+  let bools := a.map (fun x => decide (x > 2))
+  let strs := a.map toString
+  let nats := a.map (· + 1)
+  (bools.foldl (fun s b => s + (if b then 1 else 0)) 0) + (strs.foldl (fun s t => s + t.length) 0) + nats.foldl (· + ·) 0
+''')
+add("arr_swapat", '''
+def entry (n : Nat) : Nat :=
+  let a := Array.replicate (n % 5 + 4) (2 : Nat)
+  let a := a.set! 1 9
+  let (old, b) := a.swapAt! 1 40
+  old + b[1]! + b.foldl (· + ·) 0 + a.foldl (· + ·) 0
+''')
+add("arr_u8_modify", '''
+def entry (n : Nat) : Nat :=
+  let a := Array.replicate (n % 5 + 4) (200 : UInt8)
+  let b := (a.modify 2 (· + 100)).modify 0 (· * 2)
+  let c := b.map (· + 1)
+  let d := c.map (fun x => x.toNat * 1000)
+  b.foldl (fun s x => s + x.toNat) 0 + d.foldl (· + ·) 0
+''')
+add("arr_bool_flip", '''
+def entry (n : Nat) : Nat := Id.run do
+  let m := n % 20 + 5
+  let mut a := Array.replicate m false
+  for i in [0:m] do
+    if i % 3 == 0 then a := a.set! i true
+  a := a.modify 1 (fun b => !b)
+  let flips := a.map (fun b => !b)
+  return (a.foldl (fun s b => s + (if b then 1 else 0)) 0) * 10 + flips.foldl (fun s b => s + (if b then 1 else 0)) 0
+''')
+add("arr_nested_types", '''
+def entry (n : Nat) : Nat :=
+  let a := Array.replicate (n % 4 + 3) (5 : Nat)
+  let pairs := a.map (fun x => (x, x + 1))
+  let opts := a.map (fun x => if x > 4 then some x else none)
+  pairs.foldl (fun s (p, q) => s + p * q) 0 + opts.foldl (fun s o => s + o.getD 100) 0
+''')

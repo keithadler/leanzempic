@@ -61,11 +61,38 @@ expect c what got want = unless (got == want) $ failWith c (what ++ ": got " ++ 
 
 -- * Arrays against a list model
 
-toAny :: Int -> Any
-toAny = unsafeCoerce
+-- | The element kinds of an array (see Zempic.Arr): 0 boxed Int, 1 Word8, 2 Word16, 3 Word32,
+-- 4 Word64, 5 Word, 6 Bool. A test value is an Int small enough for every kind.
+lim :: Int -> Int
+lim 1 = 256
+lim 6 = 2
+lim _ = 1000
 
-fromAny :: Any -> Int
-fromAny = unsafeCoerce
+enc :: Int -> Int -> Any
+enc 1 v = unsafeCoerce (fromIntegral v :: Word8)
+enc 2 v = unsafeCoerce (fromIntegral v :: Word16)
+enc 3 v = unsafeCoerce (fromIntegral v :: Word32)
+enc 4 v = unsafeCoerce (fromIntegral v :: Word64)
+enc 5 v = unsafeCoerce (fromIntegral v :: Word)
+enc 6 v = unsafeCoerce (v /= 0)
+enc _ v = unsafeCoerce v
+
+dec :: Int -> Any -> Int
+dec 1 a = fromIntegral (unsafeCoerce a :: Word8)
+dec 2 a = fromIntegral (unsafeCoerce a :: Word16)
+dec 3 a = fromIntegral (unsafeCoerce a :: Word32)
+dec 4 a = fromIntegral (unsafeCoerce a :: Word64)
+dec 5 a = fromIntegral (unsafeCoerce a :: Word)
+dec 6 a = if (unsafeCoerce a :: Bool) then 1 else 0
+dec _ a = unsafeCoerce a
+
+-- | What a value becomes after one round trip through the kind's representation.
+norm :: Int -> Int -> Int
+norm k v = dec k (enc k v)
+
+-- | Lean's library stores this in a slot to drop a reference before writing the element back.
+placeholder :: Any
+placeholder = unsafeCoerce ()
 
 modelSet :: Int -> Int -> [Int] -> [Int]
 modelSet k v m
@@ -78,85 +105,112 @@ modelSwap i j m
   | otherwise = modelSet j (m !! i) (modelSet i (m !! j) m)
   where n = length m
 
-arrContents :: A.Arr -> IO [Int]
-arrContents a = map fromAny <$> A.aToList a
+arrContents :: Int -> A.Arr -> IO [Int]
+arrContents kind a = map (dec kind) <$> A.aToList a
 
 -- | Persistent operations on a pool of versions; any version may be read or extended at any time.
-arrPersistent :: Check -> Gen -> Int -> IO ()
-arrPersistent c g steps = do
-  a0 <- A.aEmpty 4
+arrPersistent :: Check -> Gen -> Int -> Int -> IO ()
+arrPersistent c g kind steps = do
+  a0 <- A.aEmptyK kind 4
   pool <- newIORef [(a0, [] :: [Int])]
   forM_ [1 .. steps] $ \step -> do
     vs <- readIORef pool
     i <- below g (length vs)
     let (a, m) = vs !! i
     -- Re-read the chosen (possibly old) version in full first.
-    got <- arrContents a
+    got <- arrContents kind a
     expect c ("step " ++ show step ++ " old version contents") got m
     expect c "length" (A.aLength a) (length m)
-    op <- below g 6
+    op <- below g 8
     k <- subtract 1 <$> below g (length m + 3)
-    v <- below g 1000
+    v <- below g (lim kind)
     new <- case op of
-      0 -> do b <- A.aPush a (toAny v); return (Just (b, m ++ [v]))
+      0 -> do b <- A.aPush a (enc kind v); return (Just (b, m ++ [v]))
       1 -> do b <- A.aPop a; return (Just (b, if null m then m else init m))
-      2 -> do b <- A.aSet a k (toAny v); return (Just (b, modelSet k v m))
+      2 -> do b <- A.aSet a k (enc kind v); return (Just (b, modelSet k v m))
       3 -> do
         j <- subtract 1 <$> below g (length m + 3)
         b <- A.aSwap a k j
         return (Just (b, modelSwap k j m))
       4 -> do
-        r <- A.aGet a k (toAny (-7))
-        expect c "get" (fromAny r) (if k >= 0 && k < length m then m !! k else -7)
+        r <- A.aGet a k (enc kind (-7))
+        expect c "get" (dec kind r) (if k >= 0 && k < length m then m !! k else norm kind (-7))
         return Nothing
+      6 -> do
+        -- Making the buffer boxed must not change what any version reads.
+        A.aDeopt a
+        got2 <- arrContents kind a
+        expect c "contents unchanged by aDeopt" got2 m
+        return Nothing
+      7 -> do
+        -- As Array.modify and swapAt do: store the placeholder to drop the reference, then write the real
+        -- value to the same slot. An unboxed buffer ignores the placeholder, a boxed one stores it; the
+        -- result and every older version must read correctly either way.
+        b1 <- A.aSet a k placeholder
+        b2 <- A.aSet b1 k (enc kind v)
+        return (Just (b2, modelSet k v m))
       _ -> do
         n <- below g 3
-        b <- foldM (\x j -> A.aPush x (toAny (v + j))) a [1 .. n]
-        return (Just (b, m ++ [v + j | j <- [1 .. n]]))
+        b <- foldM (\x j -> A.aPush x (enc kind ((v + j) `mod` lim kind))) a [1 .. n]
+        return (Just (b, m ++ [(v + j) `mod` lim kind | j <- [1 .. n]]))
     case new of
       Nothing -> return ()
       Just (b, mb) -> do
-        gb <- arrContents b
+        gb <- arrContents kind b
         expect c "new version contents" gb mb
         modifyIORef pool (\p -> if length p < 40 then (b, mb) : p else (b, mb) : take 39 p)
   -- Every surviving version must still read correctly after all the later ones were made.
   final <- readIORef pool
   forM_ (zip [0 :: Int ..] final) $ \(i, (a, m)) -> do
-    got <- arrContents a
+    got <- arrContents kind a
     expect c ("final pool member " ++ show i) got m
 
+-- | A placeholder written to a fresh unboxed buffer must change nothing: it is not an element of the
+-- buffer's type, so the buffer ignores it. (Lean's library writes one before writing the real value back;
+-- storing it would read a unit closure as a number.)
+arrPlaceholderRaw :: Check -> Gen -> Int -> IO ()
+arrPlaceholderRaw c g kind = do
+  a0 <- A.aEmptyK kind 4
+  n <- (+ 3) <$> below g 20
+  vals <- replicateM n (below g (lim kind))
+  a <- foldM (\x v -> A.aPush x (enc kind v)) a0 vals
+  forM_ [0 .. n - 1] $ \i -> do
+    b <- A.aSet a i placeholder
+    got <- arrContents kind b
+    expect c ("kind " ++ show kind ++ " placeholder at " ++ show i ++ " leaves the buffer unchanged") got vals
+
 -- | The in-place variants on a single owner, then on a stale version (they must fall back).
-arrInPlace :: Check -> Gen -> Int -> IO ()
-arrInPlace c g steps = do
-  a0 <- A.aEmpty 2
+arrInPlace :: Check -> Gen -> Int -> Int -> IO ()
+arrInPlace c g kind steps = do
+  a0 <- A.aEmptyK kind 2
   (aEnd, mEnd) <- foldM
     (\(a, m) _ -> do
         op <- below g 4
         k <- subtract 1 <$> below g (length m + 3)
-        v <- below g 1000
+        v <- below g (lim kind)
         (b, mb) <- case op of
-          0 -> do b <- A.aPushU a (toAny v); return (b, m ++ [v])
+          0 -> do b <- A.aPushU a (enc kind v); return (b, m ++ [v])
           1 -> do b <- A.aPopU a; return (b, if null m then m else init m)
-          2 -> do b <- A.aSetU a k (toAny v); return (b, modelSet k v m)
+          2 -> do b <- A.aSetU a k (enc kind v); return (b, modelSet k v m)
           _ -> do
             j <- subtract 1 <$> below g (length m + 3)
             b <- A.aSwapU a k j
             return (b, modelSwap k j m)
-        got <- arrContents b
+        got <- arrContents kind b
         expect c "in-place result" got mb
         return (b, mb))
     (a0, []) [1 .. steps]
   -- Make the end version stale by extending it persistently, then misuse it with in-place ops.
-  newer <- A.aPush aEnd (toAny 4242)
-  stale1 <- A.aPushU aEnd (toAny 7)
-  gs <- arrContents stale1
-  expect c "stale in-place push falls back" gs (mEnd ++ [7])
-  stale2 <- A.aSetU aEnd 0 (toAny 9)
-  g2 <- arrContents stale2
-  expect c "stale in-place set falls back" g2 (modelSet 0 9 mEnd)
-  gn <- arrContents newer
-  expect c "the newer version is undisturbed by stale in-place ops" gn (mEnd ++ [4242])
-  g0 <- arrContents aEnd
+  newer <- A.aPush aEnd (enc kind 4242)
+  stale1 <- A.aPushU aEnd (enc kind 7)
+  gs <- arrContents kind stale1
+  expect c "stale in-place push falls back" gs (mEnd ++ [norm kind 7])
+  stale2 <- A.aSetU aEnd 0 (enc kind 9)
+  g2 <- arrContents kind stale2
+  expect c "stale in-place set falls back" g2 (modelSet 0 (norm kind 9) mEnd)
+  gn <- arrContents kind newer
+  expect c "the newer version is undisturbed by stale in-place ops" gn (mEnd ++ [norm kind 4242])
+  g0 <- arrContents kind aEnd
   expect c "the stale version itself is undisturbed" g0 mEnd
 
 -- * Strings against a Text model
@@ -287,8 +341,10 @@ main = do
   check <- newIORef []
   putStrLn ("proptests: seed " ++ show seed ++ ", " ++ show rounds ++ " rounds")
   forM_ [1 .. rounds] $ \_ -> do
-    arrPersistent check gen 600
-    arrInPlace check gen 400
+    forM_ [0 .. 6] $ \kind -> do
+      arrPersistent check gen kind 600
+      arrInPlace check gen kind 400
+      when (kind /= 0) $ arrPlaceholderRaw check gen kind
     strPool check gen 500
   uintType check gen "UInt8" 8 [ (n, f, r) | ((n, r), f) <- zip (uintOps 8)
     [U.u8Add, U.u8Sub, U.u8Mul, U.u8Div, U.u8Mod, U.u8Land, U.u8Lor, U.u8Xor, U.u8Shl, U.u8Shr] ]

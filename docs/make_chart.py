@@ -5,7 +5,9 @@ Each row is the run time of the Haskell output divided by the run time of compil
 two measurements), once with default settings and once with the recommended ones (list fusion on,
 -A256m -O1g). Left of the line is faster than Lean's C backend."""
 import json, math, subprocess
-rows = sorted(json.load(open("chart-data.json")), key=lambda r: r["tuned"])
+data = json.load(open("chart-data.json"))
+meta = data.get("meta", {}) if isinstance(data, dict) else {}
+rows = sorted(data["rows"] if isinstance(data, dict) else data, key=lambda r: r["tuned"])
 W, rh = 1600, 62
 top = 250
 H = top + rh * len(rows) + 150
@@ -57,7 +59,8 @@ for i, row in enumerate(rows):
         elif abs(row["default"] - row["tuned"]) / max(row["tuned"], 1e-9) > 0.12:
             o.append(f'<text x="{tx:.1f}" y="{y+dy+12:.1f}" font-size="16" text-anchor="{anc}" fill="{MUTE}">{label(r)}</text>')
 fy = top + rh * len(rows) + 52
-o.append(f'<text x="80" y="{fy}" font-size="21" fill="{MUTE}">Apple M3, Lean 4.29.1, GHC 9.14.1 -O2, best of 3, pure programs only. Settings change little for compute-bound rows.</text>')
+stamp = f" Measured {meta['date']} at commit {meta['commit']}." if meta else ""
+o.append(f'<text x="80" y="{fy}" font-size="21" fill="{MUTE}">Apple M3, Lean 4.29.1, GHC 9.14.1 -O2, best of 3, pure programs only.{stamp}</text>')
 o.append(f'<text x="80" y="{fy+30}" font-size="21" fill="{MUTE}">Not everything improves: list merge sort slows with fusion, and a shared array mutated in a loop is still far behind.</text>')
 o.append(f'<text x="80" y="{fy+78}" font-size="26" font-weight="700" fill="{FG}">leanzempic</text>')
 o.append(f'<text x="262" y="{fy+78}" font-size="26" fill="{MUTE}">Apache-2.0  github.com/keithadler/leanzempic</text>')
