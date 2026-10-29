@@ -620,7 +620,7 @@ An honest checklist, because "production" depends on what you need.
 |---|---|
 | Continuous integration | GitHub Actions runs the suite on Ubuntu and macOS 15 for every push, including the Cabal package build and a 36-program garden subset at `-O1` with fusion on |
 | Fails fast | an unsupported Lean version or a mistyped mode is a clear error; an unsupported Lean constant is an error that lists it, never silently dropped code |
-| Tested against Lean itself | the examples, 109 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
+| Tested against Lean itself | the examples, 116 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
 | Runtime tested against models | random operation sequences on arrays, strings, integers and the `Word`/`Natural` fast path, with deliberately broken runtimes caught |
 | Differential fuzzing | random Lean programs run by Lean and through leanzempic must agree (`tools/fuzz.py`) |
 | Machine-checked facts | Tenet verifies 265 of 265 declarations, including name-mangling injectivity |
@@ -667,7 +667,7 @@ compile generated Haskell and compare it, value by value, with native Lean at se
 | `proptests` | random operation sequences on arrays, strings, fixed-width integers and the `Word`/`Natural` fast path, each step compared with a pure model |
 | `fuzz` | a short differential-fuzzing run: random Lean programs must give the same answers under Lean and leanzempic |
 | `aes` | AES-256 from the proved [lean-aes](https://github.com/keithadler/lean-aes) (`bench/aes`): Lean's C, the Haskell and OpenSSL (`tools/aes_oracle.py`) give the same ciphertext |
-| `garden` | the [garden](#the-garden): 109 programs locally, 38 in CI |
+| `garden` | the [garden](#the-garden): 116 programs locally, 39 in CI |
 
 ### The garden
 
@@ -905,8 +905,13 @@ Negative results are part of the record, and several of them changed the design:
   raw number from an unboxed buffer instead of a boxed `Any`. I built it (inlined, one reader per type)
   and measured with allocation, which is exact where run time on a loaded laptop is not: `array_funcs`
   allocated 534 MB before and 646 MB after, `array_misc` 116 MB before and 182 MB after, with no
-  run-time gain. Reverted. The reason (GHC boxity of the `NOINLINE` primitives) is found and fixed in
-  [`BENCH.md`](BENCH.md): typed `Nat`/`USize` reads and writes are now in, `array_funcs` 3.9x to 2.5x.
+  run-time gain. Reverted. The causes were GHC boxity, found later and fixed. The read went through
+  `unsafeDupablePerformIO`, which wraps its result in `lazy`: GHC keeps that wrapper until CorePrep, so
+  the raw number it had just unboxed was boxed again before every use. A `NOINLINE` primitive returned
+  its `Word` boxed, any slow path that used an argument boxed made the whole worker take it boxed, and
+  an inlined `error` default was rebuilt as a thunk on every read. Word-mode `Nat`/`USize` arrays now read
+  and write through `runRW#` and unboxed `Word#`, with the common case (a live word buffer) in line
+  (`aGetWU`, `aSetUW`, `aPushUW`): see [`BENCH.md`](BENCH.md).
 * **A GHC panic on cast-heavy code.** Core Lint named GHC 9.14.1's Float Inwards pass; generated
   modules now carry `-fno-float-in`.
 

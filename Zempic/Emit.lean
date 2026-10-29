@@ -811,11 +811,14 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
       let isWordGet := (← get).wordGets.contains letId
       let valW := fun (k : Nat) => match args[k]? with | some a => isW a.2 | none => false
       let setW := ["arrPushU", "arrSetU", "arrUSetU", "arrUSetBU"]
+      -- `get!` hands over its default as a `Word` too, so it is not boxed at every read.
+      let getPtys := fun (h : String) (ps : List String) =>
+        if h == "arrGetD" then ps.set 1 (if fast then "ZNat" else "Word") else ps
       let (hs, ptys, ret) :=
         if ["arrGetD", "arrGetI", "arrUGet"].contains hs && !punned && isW letHs then
-          (hs ++ "W", ptys, letHs)
+          (hs ++ "W", getPtys hs ptys, letHs)
         else if ["arrGetD", "arrGetI", "arrUGet"].contains hs && isWordGet then
-          (hs ++ "W", ptys, if fast then "ZNat" else "Word")
+          (hs ++ "W", getPtys hs ptys, if fast then "ZNat" else "Word")
         else if setW.contains hs && valW (if hs.startsWith "arrPush" then 2 else 3) then
           let k := if hs.startsWith "arrPush" then 2 else 3
           (hs ++ "W", ptys.set k (args[k]!).2, ret)

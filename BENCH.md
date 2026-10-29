@@ -491,6 +491,23 @@ Other array programs, `garden/perf.py` ratio against Lean C, same load, before t
 2.0x to 1.9x, `array_misc` 5.2x to 5.3x (level; both runs are 11 to 17 ms of Lean time, so ratios there
 are noisy).
 
+**Merged with two other branches that touched the same code (2026-10-29).** One made `Nat` reads and
+writes in the Prefix-sums benchmark unboxed with `runRW#` and an in-line fast path; the other made the
+index arguments of the generic primitives strict (`array_misc`). Combined, every row is at least as good
+as its best single-branch number (allocation exact, CPU best of 11, same load):
+
+| row | base | each branch alone | merged |
+|---|---|---|---|
+| Prefix sums (`examples/Arrays.lean`, n = 1e7) | 1308 MB, 3.6x | 508 MB, 1.7x (prefix branch); 668 MB, 2.6x (this branch alone) | 508 MB, 1.7x |
+| `array_misc` | 115.6 MB, 0.046 s | 0.7 MB, 0.035 s (strict-index branch); 82.5 MB (this branch alone) | 0.7 MB, 0.025 s |
+| `array_funcs` | 485.7 MB, 0.175 s | 429.7 MB, 0.177 s (prefix branch); 329.4 MB, 0.107 s (this branch alone) | 321.4 MB, 0.099 s |
+
+What each side was missing: this branch's reads were a `NOINLINE` call (one call per element, and a
+boxed default for `a[i]!` built in every iteration, 16 bytes), and its generic primitives still boxed
+the index; the other side had no `Array.range`, no `UInt8`/`Bool` handling, and boxed the pushes of
+`filter`. One implementation of each primitive is kept, the superset, with the in-line fast path and
+the strict `Word#` default of the other.
+
 **A bug found on the way, not fixed here.** Two `Array.mkEmpty 4` of different element types in one function
 are merged by Lean's common-subexpression elimination into one variable, and the buffer kind follows the
 first one's type. Pushing `Nat`s into an array that began as `Array UInt8` truncates them to bytes. The

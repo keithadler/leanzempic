@@ -69,6 +69,13 @@ The ownership claim above is about aliasing. A separate, narrower claim covers t
   `Nat`s) first makes the buffer boxed, as the generic path does. `array_word_paths` checks it, and a
   deliberate bug (skipping that step) is caught.
 * `Array.range` is a fresh array and is `own`.
+* The `W` push and set primitives (`arrPushUW`, `arrSetUW`, `arrUSetUW`) and the `Word` readers are
+  `INLINE`, not `NOINLINE` like the generic in-place primitives: the fast path (a live word buffer) must
+  be visible to GHC to stay unboxed. The assumption "GHC does not duplicate or reorder them" therefore
+  rests on the same things as for `arrSet`: strict `let`s, `-fno-cse -fno-full-laziness`, and
+  `runRW#`/`unsafeDupablePerformIO` for the effect. Every path that is not the fast one is a `NOINLINE`
+  function. The garden, the aliasing tests and the property tests (including stale and lazily shared
+  versions) pass with it.
 
 ## Assumptions the claim depends on
 

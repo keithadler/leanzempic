@@ -19,7 +19,7 @@ module Zempic.Arr
   ( Arr, aEmpty, aEmptyK, aReplicate, aReplicateK, aLength, aGet, aSet, aPush, aPop, aSwap
   , aToList, aFromList, aFromListK
   , aSetU, aPushU, aPopU, aSwapU, aDeopt, aShare
-  , aRangeW, aDeoptW, aGetW, aGetWI, aPushFromU, aPushUW, aSetUW, aSetUWB
+  , aRangeW, aDeoptW, aGetW, aGetWU, aGetWI, aGetWIS, aPushFromU, aPushUW, aSetUW, aSetUWB
   ) where
 
 import Data.Array.Base (MArray, getNumElements, unsafeRead, unsafeWrite)
@@ -271,7 +271,7 @@ bufClone b n = do
   bufGrow b n cap
 
 aGet :: Arr -> Int -> Any -> IO Any
-aGet arr i d
+aGet !arr !i d
   | i < 0 || i >= aLen arr = return d
   | otherwise = do
       node <- readIORef (aRef arr)
@@ -282,9 +282,11 @@ aGet arr i d
           buf <- reroot arr
           bufRead buf i
 
+-- Index arguments are strict so the caller's @arrIdx@ is not allocated as a thunk per call.
+
 -- | Out-of-bounds sets leave the array unchanged, as in Lean.
 aSet :: Arr -> Int -> Any -> IO Arr
-aSet arr i v
+aSet !arr !i v
   | i < 0 || i >= aLen arr = return arr
   | otherwise = do
       nd <- rerootN arr
@@ -344,7 +346,7 @@ aPop arr
         Diff _ _ -> return arr
 
 aSwap :: Arr -> Int -> Int -> IO Arr
-aSwap arr i j
+aSwap !arr !i !j
   | i < 0 || j < 0 || i >= aLen arr || j >= aLen arr = return arr
   | otherwise = do
       nd <- rerootN arr
@@ -401,7 +403,7 @@ ownNode arr = do
     _ -> return node
 
 aSetU :: Arr -> Int -> Any -> IO Arr
-aSetU arr i v
+aSetU !arr !i v
   | i < 0 || i >= aLen arr = return arr
   | otherwise = do
       node <- ownNode arr
@@ -436,7 +438,7 @@ aPopU arr
         _ -> aPop arr
 
 aSwapU :: Arr -> Int -> Int -> IO Arr
-aSwapU arr i j
+aSwapU !arr !i !j
   | i < 0 || j < 0 || i >= aLen arr || j >= aLen arr = return arr
   | otherwise = do
       node <- ownNode arr
@@ -504,11 +506,25 @@ bufWriteBoxed :: Buf -> Int# -> Word# -> IO ()
 bufWriteBoxed b i# w# = bufWrite b (I# i#) (unsafeCoerce (W# w#))
 {-# NOINLINE bufWriteBoxed #-}
 
+-- | Read element @i@ as a @Word@, or the default (not forced unless used) when out of range. It works on
+-- unboxed words from end to end, with the common case (the live version, a word buffer) read in line:
+-- if the fast and slow paths both returned a boxed 'Word', GHC would merge them at a join point that
+-- takes the box and allocate one per read.
+aGetWU :: Arr -> Int -> Word -> State# RealWorld -> (# State# RealWorld, Word# #)
+aGetWU arr i d s0
+  | i < 0 || i >= aLen arr = case d of W# d# -> (# s0, d# #)
+  | otherwise = case readIORef (aRef arr) of
+      IO m -> case m s0 of
+        (# s1, node #) -> case node of
+          Direct (BW a) _ -> case unsafeRead a i of IO r -> case r s1 of (# s2, W# w #) -> (# s2, w #)
+          _ -> getWP arr i d s1
+{-# INLINE aGetWU #-}
+
 aGetW :: Arr -> Int -> Word -> IO Word
-aGetW arr i d = IO (\s -> case getWP arr i d s of (# s', r #) -> (# s', W# r #))
+aGetW arr i d = IO (\s -> case aGetWU arr i d s of (# s', r #) -> (# s', W# r #))
 {-# INLINE aGetW #-}
 
--- | The read itself, with an unboxed result.
+-- | The read for every case the inline one in 'aGetWU' does not handle, with an unboxed result.
 getWP :: Arr -> Int -> Word -> State# RealWorld -> (# State# RealWorld, Word# #)
 getWP arr i d s
   | i < 0 || i >= aLen arr = case d of W# d# -> (# s, d# #)
@@ -527,13 +543,31 @@ getWP arr i d s
 -- straight into a register and no box is built. The read itself stays a call to a function GHC does
 -- not inline, so it is not moved across the writes around it (every call site is a strict @let@).
 aGetWI :: Arr -> Int -> Word -> Word
-aGetWI arr i d = case runRW# (getWP arr i d) of (# _, r #) -> W# r
+aGetWI arr i d = case runRW# (aGetWU arr i d) of (# _, r #) -> W# r
 {-# INLINE aGetWI #-}
 
--- | `aPushU` for a `Word` element. The rare paths that need the value boxed are separate functions,
--- so this one takes it unboxed.
+-- | 'aGetWI' for a default that is a real value, taken unboxed: a default built at the call site (the
+-- literal in @a[i]!@) is then never boxed, which a lazy default would do on every read.
+aGetWIS :: Arr -> Int -> Word -> Word
+aGetWIS arr i (W# d#) = case runRW# (aGetWU arr i (W# d#)) of (# _, r #) -> W# r
+{-# INLINE aGetWIS #-}
+
+-- | `aPushU` for a `Word` element: a live word buffer with room is written in line.
 aPushUW :: Arr -> Word -> IO Arr
 aPushUW arr !v = do
+  node <- readIORef (aRef arr)
+  case node of
+    Direct (BW a) c | c >= 0 -> do
+      cap <- getNumElements a
+      let n = aLen arr
+      if n < cap then unsafeWrite a n v >> return (Arr (n + 1) (aRef arr)) else aPushUWFull arr v
+    _ -> aPushUWFull arr v
+{-# INLINE aPushUW #-}
+
+-- | The rest of 'aPushUW'. The rare paths that need the value boxed are separate functions,
+-- so this one takes it unboxed.
+aPushUWFull :: Arr -> Word -> IO Arr
+aPushUWFull arr !v = do
   node <- ownNode arr
   case node of
     Diff _ _ -> slowPushW arr v
@@ -548,20 +582,33 @@ aPushUW arr !v = do
           bufWriteW b n v
           writeIORef (aRef arr) (Direct b c)
       return (Arr (n + 1) (aRef arr))
+{-# NOINLINE aPushUWFull #-}
 
 slowPushW :: Arr -> Word -> IO Arr
 slowPushW arr (W# v) = aPush arr (unsafeCoerce (W# v))
 {-# NOINLINE slowPushW #-}
 
--- | `aSetU` for a `Word` element.
+-- | `aSetU` for a `Word` element: a live word buffer is written in line.
 aSetUW :: Arr -> Int -> Word -> IO Arr
 aSetUW arr i !v
+  | i < 0 || i >= aLen arr = return arr
+  | otherwise = do
+      node <- readIORef (aRef arr)
+      case node of
+        Direct (BW a) c | c >= 0 -> unsafeWrite a i v >> return arr
+        _ -> aSetUWFull arr i v
+{-# INLINE aSetUW #-}
+
+-- | The rest of 'aSetUW'.
+aSetUWFull :: Arr -> Int -> Word -> IO Arr
+aSetUWFull arr i !v
   | i < 0 || i >= aLen arr = return arr
   | otherwise = do
       node <- ownNode arr
       case node of
         Direct buf c | c >= 0 -> bufWriteW buf i v >> return arr
         _ -> slowSetW arr i v
+{-# NOINLINE aSetUWFull #-}
 
 slowSetW :: Arr -> Int -> Word -> IO Arr
 slowSetW arr (I# i) (W# v) = aSet arr (I# i) (unsafeCoerce (W# v))
@@ -570,7 +617,8 @@ slowSetW arr (I# i) (W# v) = aSet arr (I# i) (unsafeCoerce (W# v))
 -- | `aSetU` for a `Word` element written through a view as another element type (Lean's in-place
 -- `Array.map`): a `Word` or boxed buffer takes the value as it is, any other is made boxed first.
 aSetUWB :: Arr -> Int -> Word -> IO Arr
-aSetUWB arr i v = aDeoptW arr >> aSetUW arr i v
+aSetUWB arr !i !v = aDeoptW arr >> aSetUWFull arr i v
+{-# NOINLINE aSetUWB #-}
 
 -- | `aDeopt`, except that a `Word` buffer is left as it is (it holds exactly what a `Word` write stores).
 aDeoptW :: Arr -> IO ()

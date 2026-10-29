@@ -194,8 +194,8 @@ idxErrW :: Word
 idxErrW = error "leanzempic: array index out of range"
 {-# NOINLINE idxErrW #-}
 
-arrGetDW :: Any -> Any -> Any -> ZNat -> Word
-arrGetDW _ !d !a !i = aGetWI (zu a) (arrIdx i) (zu d)
+arrGetDW :: Any -> Word -> Any -> ZNat -> Word
+arrGetDW _ d !a !i = aGetWIS (zu a) (arrIdx i) d
 {-# INLINE arrGetDW #-}
 
 arrGetIW :: Any -> Any -> ZNat -> Any -> Word
@@ -208,15 +208,15 @@ arrUGetW _ !a !i _ = aGetWI (zu a) (fromIntegral i) idxErrW
 
 arrPushUW :: Any -> Any -> Word -> Any
 arrPushUW _ !a !v = arrIO (zo <$> aPushUW (zu a) v)
-{-# NOINLINE arrPushUW #-}
+{-# INLINE arrPushUW #-}
 
 arrSetUW :: Any -> Any -> ZNat -> Word -> Any
 arrSetUW _ !a !i !v = arrIO (zo <$> aSetUW (zu a) (arrIdx i) v)
-{-# NOINLINE arrSetUW #-}
+{-# INLINE arrSetUW #-}
 
 arrUSetUW :: Any -> Any -> Word -> Word -> Any -> Any
 arrUSetUW _ !a !i !v _ = arrIO (zo <$> aSetUW (zu a) (fromIntegral i) v)
-{-# NOINLINE arrUSetUW #-}
+{-# INLINE arrUSetUW #-}
 
 arrUSetBUW :: Any -> Any -> Word -> Word -> Any -> Any
 arrUSetBUW _ !a !i !v _ = arrIO (zo <$> aSetUWB (zu a) (fromIntegral i) v)

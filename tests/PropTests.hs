@@ -342,6 +342,60 @@ arrInPlace c g kind steps = do
   g0 <- arrContents kind aEnd
   expect c "the stale version itself is undisturbed" g0 mEnd
 
+-- | The Word-element variants (word-mode Nat arrays), on an unboxed kind-5 buffer and on a boxed one,
+-- against the model: single owner, a lazily shared handle, and stale versions (which must fall back).
+arrWordShare :: Check -> Gen -> Int -> Int -> IO ()
+arrWordShare c g kind steps = do
+  let rd a i = A.aGetW a i 999999
+      allOf a n = mapM (\i -> fromIntegral <$> rd a i) [0 .. n - 1] :: IO [Int]
+  a0 <- A.aEmptyK kind 2
+  (aEnd, mEnd) <- foldM
+    (\(a, m) _ -> do
+        op <- below g 3
+        k <- subtract 1 <$> below g (length m + 3)
+        v <- below g 1000
+        (b, mb) <- case op of
+          0 -> do b <- A.aPushUW a (fromIntegral v); return (b, m ++ [v])
+          1 -> do b <- A.aSetUW a k (fromIntegral v); return (b, modelSet k v m)
+          _ -> do
+            b <- if null m then return a else A.aShare a   -- a lazy handle copies on its first write
+            b' <- A.aSetUW b 0 5
+            return (b', if null m then m else modelSet 0 5 m)
+        got <- allOf b (length mb)
+        expect c ("word in-place result, kind " ++ show kind) got mb
+        oob <- rd b (length mb)
+        expect c "word read past the end gives the default" oob 999999
+        neg <- rd b (-1)
+        expect c "word read at -1 gives the default" neg 999999
+        gl <- A.aToList b
+        expect c "word ops agree with the boxed view" (map (dec 5) gl) mb
+        return (b, mb))
+    (a0, []) [1 .. steps]
+  -- A version whose buffer was copied away (count -1) must not be trusted as sole owner: two in-place
+  -- pushes onto it have to stay apart.
+  base <- foldM (\a i -> A.aPush a (enc 5 i)) a0 [1 .. 3 :: Int]
+  let build (a, ms) i = do b <- A.aSet a 0 (enc 5 i); return (b, ms ++ [b])
+  (_, versions) <- foldM build (base, [base]) [1 .. 80 :: Int]
+  forM_ (reverse (drop 40 (take 80 versions))) $ \v -> do
+    n <- return (A.aLength v)
+    r1 <- A.aPushUW v 111
+    r2 <- A.aPushUW v 222
+    x1 <- allOf r1 (n + 1)
+    x2 <- allOf r2 (n + 1)
+    expect c "copied-away version: first in-place push survives the second" (last x1) 111
+    expect c "copied-away version: second in-place push" (last x2) 222
+  newer <- A.aPush aEnd (enc 5 4242)
+  stale1 <- A.aPushUW aEnd 7
+  gs <- allOf stale1 (length mEnd + 1)
+  expect c "stale word push falls back" gs (mEnd ++ [7])
+  stale2 <- A.aSetUW aEnd 0 9
+  g2 <- allOf stale2 (length mEnd)
+  expect c "stale word set falls back" g2 (modelSet 0 9 mEnd)
+  gn <- allOf newer (length mEnd + 1)
+  expect c "newer version undisturbed by stale word ops" gn (mEnd ++ [4242])
+  g0 <- allOf aEnd (length mEnd)
+  expect c "stale version itself undisturbed (word ops)" g0 mEnd
+
 -- * Strings against a Text model
 
 codepoint :: Gen -> IO Word32
@@ -473,6 +527,7 @@ main = do
     forM_ [0 .. 6] $ \kind -> do
       arrPersistent check gen kind 600
       arrInPlace check gen kind 400
+      when (kind == 5 || kind == 0) $ arrWordShare check gen kind 400
       arrShared check gen kind
       when (kind == 0 || kind == 5) $ arrWord check gen kind 400
       when (kind /= 0) $ arrPlaceholderRaw check gen kind
