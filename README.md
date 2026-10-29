@@ -905,7 +905,7 @@ Negative results are part of the record, and several of them changed the design:
   raw number from an unboxed buffer instead of a boxed `Any`. I built it (inlined, one reader per type)
   and measured with allocation, which is exact where run time on a loaded laptop is not: `array_funcs`
   allocated 534 MB before and 646 MB after, `array_misc` 116 MB before and 182 MB after, with no
-  run-time gain. Reverted. The allocation in array loops is in the persistent writes, not the reads.
+  run-time gain. Reverted. I did not find out why the allocation went up.
 * **A GHC panic on cast-heavy code.** Core Lint named GHC 9.14.1's Float Inwards pass; generated
   modules now carry `-fno-float-in`.
 
