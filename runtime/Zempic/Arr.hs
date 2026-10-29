@@ -46,7 +46,11 @@ data Op
   | OPush Any      -- ^ one element longer, ending in this value
   | OSwap !Int !Int -- ^ same length, elements @i@ and @j@ were exchanged (its own inverse)
 
-data Node = Direct !Buf | Diff !Op !Arr
+-- | A live buffer carries the number of undo records hanging off it. When that outgrows the array a
+-- write starts a fresh copy instead, so a long-lived old version never pins an unbounded chain. The
+-- version a copy was taken from is marked with count -1: it still reads correctly, but the in-place
+-- variants must not trust it as the sole owner.
+data Node = Direct !Buf !Int | Diff !Op !Arr
 
 -- | One version of an array: its length never changes, its contents live behind the reference.
 data Arr = Arr { aLen :: !Int, aRef :: !(IORef Node) }
@@ -150,7 +154,7 @@ growWith a n cap z = do
 aEmptyK :: Int -> Int -> IO Arr
 aEmptyK kind cap = do
   buf <- bufNew kind (max 4 (min cap 1048576))
-  Arr 0 <$> newIORef (Direct buf)
+  Arr 0 <$> newIORef (Direct buf 0)
 
 aEmpty :: Int -> IO Arr
 aEmpty = aEmptyK 0
@@ -158,7 +162,7 @@ aEmpty = aEmptyK 0
 aReplicateK :: Int -> Int -> Any -> IO Arr
 aReplicateK kind n v = do
   buf <- bufNewFilled kind n v
-  Arr (max 0 n) <$> newIORef (Direct buf)
+  Arr (max 0 n) <$> newIORef (Direct buf 0)
 
 aReplicate :: Int -> Any -> IO Arr
 aReplicate = aReplicateK 0
@@ -166,33 +170,56 @@ aReplicate = aReplicateK 0
 aLength :: Arr -> Int
 aLength = aLen
 
--- | Make this version the live one and return its buffer.
-reroot :: Arr -> IO Buf
-reroot arr = do
+-- | Make this version the live one; the result is its @Direct@ node (buffer and undo-record count).
+-- Rerooting only moves a record from one side of the buffer to the other, so the count is unchanged.
+rerootN :: Arr -> IO Node
+rerootN arr = do
   node <- readIORef (aRef arr)
   case node of
-    Direct buf -> return buf
+    Direct _ _ -> return node
     Diff op next -> do
-      buf <- reroot next
-      case op of
-        OSet i old -> do
-          cur <- bufRead buf i
-          bufWrite buf i old
-          writeIORef (aRef next) (Diff (OSet i cur) arr)
-        OPop -> do
-          v <- bufRead buf (aLen arr)
-          writeIORef (aRef next) (Diff (OPush v) arr)
-        OPush v -> do
-          bufWrite buf (aLen arr - 1) v
-          writeIORef (aRef next) (Diff OPop arr)
-        OSwap i j -> do
-          x <- bufRead buf i
-          y <- bufRead buf j
-          bufWrite buf i y
-          bufWrite buf j x
-          writeIORef (aRef next) (Diff (OSwap i j) arr)
-      writeIORef (aRef arr) (Direct buf)
-      return buf
+      nn <- rerootN next
+      case nn of
+        Direct buf c -> do
+          case op of
+            OSet i old -> do
+              cur <- bufRead buf i
+              bufWrite buf i old
+              writeIORef (aRef next) (Diff (OSet i cur) arr)
+            OPop -> do
+              v <- bufRead buf (aLen arr)
+              writeIORef (aRef next) (Diff (OPush v) arr)
+            OPush v -> do
+              bufWrite buf (aLen arr - 1) v
+              writeIORef (aRef next) (Diff OPop arr)
+            OSwap i j -> do
+              x <- bufRead buf i
+              y <- bufRead buf j
+              bufWrite buf i y
+              bufWrite buf j x
+              writeIORef (aRef next) (Diff (OSwap i j) arr)
+          let d = Direct buf c
+          writeIORef (aRef arr) d
+          return d
+        Diff _ _ -> return nn  -- cannot happen: rerootN returns a Direct node
+
+reroot :: Arr -> IO Buf
+reroot arr = do
+  nd <- rerootN arr
+  case nd of
+    Direct buf _ -> return buf
+    Diff _ _ -> error "reroot"
+
+-- | How many undo records a buffer may carry before the next write copies it.
+chainLimit :: Int -> Int
+chainLimit n = max 64 n
+{-# INLINE chainLimit #-}
+
+-- | A fresh buffer holding the same elements and capacity (the old one keeps serving older versions).
+bufClone :: Buf -> Int -> IO Buf
+bufClone b n = do
+  cap <- bufCap b
+  bufGrow b n cap
 
 aGet :: Arr -> Int -> Any -> IO Any
 aGet arr i d
@@ -206,50 +233,87 @@ aSet :: Arr -> Int -> Any -> IO Arr
 aSet arr i v
   | i < 0 || i >= aLen arr = return arr
   | otherwise = do
-      buf <- reroot arr
-      old <- bufRead buf i
-      bufWrite buf i v
-      ref <- newIORef (Direct buf)
-      let arr' = Arr (aLen arr) ref
-      writeIORef (aRef arr) (Diff (OSet i old) arr')
-      return arr'
+      nd <- rerootN arr
+      case nd of
+        Direct buf c
+          | c >= chainLimit (aLen arr) || c < 0 -> do
+              b' <- bufClone buf (aLen arr)
+              bufWrite b' i v
+              writeIORef (aRef arr) (Direct buf (-1))
+              Arr (aLen arr) <$> newIORef (Direct b' 0)
+          | otherwise -> do
+              old <- bufRead buf i
+              bufWrite buf i v
+              ref <- newIORef (Direct buf (c + 1))
+              let arr' = Arr (aLen arr) ref
+              writeIORef (aRef arr) (Diff (OSet i old) arr')
+              return arr'
+        Diff _ _ -> return arr
 
 aPush :: Arr -> Any -> IO Arr
 aPush arr v = do
-  buf <- reroot arr
-  cap <- bufCap buf
-  let n = aLen arr
-  buf' <- if n < cap then return buf else bufGrow buf n (max 4 (2 * cap))
-  bufWrite buf' n v
-  ref <- newIORef (Direct buf')
-  let arr' = Arr (n + 1) ref
-  writeIORef (aRef arr) (Diff OPop arr')
-  return arr'
+  nd <- rerootN arr
+  case nd of
+    Direct buf c -> do
+      cap <- bufCap buf
+      let n = aLen arr
+      if n >= cap || c >= chainLimit n || c < 0
+        then do
+          buf' <- bufGrow buf n (if n < cap then cap else max 4 (2 * cap))
+          bufWrite buf' n v
+          writeIORef (aRef arr) (Direct buf (-1))
+          Arr (n + 1) <$> newIORef (Direct buf' 0)
+        else do
+          bufWrite buf n v
+          ref <- newIORef (Direct buf (c + 1))
+          let arr' = Arr (n + 1) ref
+          writeIORef (aRef arr) (Diff OPop arr')
+          return arr'
+    Diff _ _ -> return arr
 
 aPop :: Arr -> IO Arr
 aPop arr
   | aLen arr == 0 = return arr
   | otherwise = do
-      buf <- reroot arr
-      v <- bufRead buf (aLen arr - 1)
-      ref <- newIORef (Direct buf)
-      let arr' = Arr (aLen arr - 1) ref
-      writeIORef (aRef arr) (Diff (OPush v) arr')
-      return arr'
+      nd <- rerootN arr
+      case nd of
+        Direct buf c
+          | c < 0 -> do
+              b' <- bufClone buf (aLen arr)
+              Arr (aLen arr - 1) <$> newIORef (Direct b' 0)
+          | otherwise -> do
+              v <- bufRead buf (aLen arr - 1)
+              ref <- newIORef (Direct buf (c + 1))
+              let arr' = Arr (aLen arr - 1) ref
+              writeIORef (aRef arr) (Diff (OPush v) arr')
+              return arr'
+        Diff _ _ -> return arr
 
 aSwap :: Arr -> Int -> Int -> IO Arr
 aSwap arr i j
   | i < 0 || j < 0 || i >= aLen arr || j >= aLen arr = return arr
   | otherwise = do
-      buf <- reroot arr
-      x <- bufRead buf i
-      y <- bufRead buf j
-      bufWrite buf i y
-      bufWrite buf j x
-      ref <- newIORef (Direct buf)
-      let arr' = Arr (aLen arr) ref
-      writeIORef (aRef arr) (Diff (OSwap i j) arr')
-      return arr'
+      nd <- rerootN arr
+      case nd of
+        Direct buf c
+          | c >= chainLimit (aLen arr) || c < 0 -> do
+              b' <- bufClone buf (aLen arr)
+              x <- bufRead b' i
+              y <- bufRead b' j
+              bufWrite b' i y
+              bufWrite b' j x
+              writeIORef (aRef arr) (Direct buf (-1))
+              Arr (aLen arr) <$> newIORef (Direct b' 0)
+          | otherwise -> do
+              x <- bufRead buf i
+              y <- bufRead buf j
+              bufWrite buf i y
+              bufWrite buf j x
+              ref <- newIORef (Direct buf (c + 1))
+              let arr' = Arr (aLen arr) ref
+              writeIORef (aRef arr) (Diff (OSwap i j) arr')
+              return arr'
+        Diff _ _ -> return arr
 
 aToList :: Arr -> IO [Any]
 aToList arr = do
@@ -264,7 +328,7 @@ aFromListK kind xs = do
       fill !_ [] = return ()
       fill !k (y : ys) = bufWrite buf k y >> fill (k + 1) ys
   fill 0 xs
-  Arr n <$> newIORef (Direct buf)
+  Arr n <$> newIORef (Direct buf 0)
 
 aFromList :: [Any] -> IO Arr
 aFromList = aFromListK 0
@@ -282,15 +346,16 @@ aSetU arr i v
   | otherwise = do
       node <- readIORef (aRef arr)
       case node of
-        Direct buf -> bufWrite buf i v >> return arr
-        Diff _ _ -> aSet arr i v
+        Direct buf c | c >= 0 -> bufWrite buf i v >> return arr
+        _ -> aSet arr i v
 
 aPushU :: Arr -> Any -> IO Arr
 aPushU arr v = do
   node <- readIORef (aRef arr)
   case node of
     Diff _ _ -> aPush arr v
-    Direct buf -> do
+    Direct _ c | c < 0 -> aPush arr v
+    Direct buf c -> do
       cap <- bufCap buf
       let n = aLen arr
       if n < cap
@@ -298,7 +363,7 @@ aPushU arr v = do
         else do
           b <- bufGrow buf n (max 4 (2 * cap))
           bufWrite b n v
-          writeIORef (aRef arr) (Direct b)
+          writeIORef (aRef arr) (Direct b c)
       return (Arr (n + 1) (aRef arr))
 
 aPopU :: Arr -> IO Arr
@@ -307,8 +372,8 @@ aPopU arr
   | otherwise = do
       node <- readIORef (aRef arr)
       case node of
-        Direct _ -> return (Arr (aLen arr - 1) (aRef arr))
-        Diff _ _ -> aPop arr
+        Direct _ c | c >= 0 -> return (Arr (aLen arr - 1) (aRef arr))
+        _ -> aPop arr
 
 aSwapU :: Arr -> Int -> Int -> IO Arr
 aSwapU arr i j
@@ -316,21 +381,23 @@ aSwapU arr i j
   | otherwise = do
       node <- readIORef (aRef arr)
       case node of
-        Direct buf -> do
+        Direct buf c | c >= 0 -> do
           x <- bufRead buf i
           y <- bufRead buf j
           bufWrite buf i y
           bufWrite buf j x
           return arr
-        Diff _ _ -> aSwap arr i j
+        _ -> aSwap arr i j
 
 -- | Make this array's buffer boxed. Code that views an array as boxed values of a different type
 -- (Lean's in-place `Array.map` does) must not write into an unboxed buffer, so it converts first. The
 -- live buffer is replaced; older versions reach it through their undo records and see boxed elements.
 aDeopt :: Arr -> IO ()
 aDeopt arr = do
-  buf <- reroot arr
-  case buf of
+  nd <- rerootN arr
+  case nd of
+   Diff _ _ -> return ()
+   Direct buf c -> case buf of
     BBox _ -> return ()
     _ -> do
       cap <- bufCap buf
@@ -339,4 +406,4 @@ aDeopt arr = do
           copy !k | k >= aLen arr = return ()
                   | otherwise = bufRead buf k >>= unsafeWrite b k >> copy (k + 1)
       copy 0
-      writeIORef (aRef arr) (Direct (BBox b))
+      writeIORef (aRef arr) (Direct (BBox b) c)

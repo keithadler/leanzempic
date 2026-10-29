@@ -7,6 +7,13 @@ everything is pre-release (`0.1.0`).
 
 First complete version.
 
+### Changed
+* Persistent arrays bound their undo chain: once a buffer carries as many undo records as the array has
+  elements, the next write copies the buffer instead. A long-lived old version (the shared array a loop
+  was started from) no longer pins millions of records, which was most of the cost of mutating a shared
+  array in a loop (insertion sort of a shared array: 18x slower than Lean's C backend, now about 10x).
+  The version a copy was taken from is marked so the in-place variants fall back to the persistent path.
+
 ### Added
 * The Haskell backend: `#zempic f g to "x.hs"` prints Lean's mono-phase LCNF as Haskell shaped like
   GHC Core, with a Core-notation dump.
