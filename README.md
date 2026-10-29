@@ -5,7 +5,7 @@ shaped like GHC Core, so that GHC's optimizer (strictness analysis, worker/wrapp
 list fusion, unboxing) decides how your Lean program runs, instead of Lean's C backend.
 
 * License: Apache-2.0
-* Status: pre-release (v0.1.0, unreleased), private repository, single maintainer
+* Status: pre-release (`v0.1.0-rc1` is the first tag), Apache-2.0, single maintainer
 * Tested on: macOS arm64 (Apple M3, and macOS 15 in CI) and Linux x86_64 (Ubuntu, in CI); Lean 4.29.1
   and GHC 9.14.1 only. CI runs the full test suite on both platforms.
 * Honest one-line summary: faster than Lean's C backend on numeric loops, record loops and fused list
@@ -606,7 +606,7 @@ An honest checklist, because "production" depends on what you need.
 
 | | |
 |---|---|
-| No release | nothing is tagged or published; the repository is private |
+| Pre-release | `v0.1.0-rc1` is tagged; there is no final `v0.1.0`, no package on Hackage or Reservoir, and the interface may change |
 | One Lean, one GHC | Lean 4.29.x and GHC 9.14.1 only. Windows is untested |
 | Pure functions only | no `IO`, so you compile functions and call them from Haskell; a Lean `main` cannot be compiled |
 | Missing | `IO`, `FloatArray`, `Float.toString`; any `@[extern]` constant that is not in the primitive table is reported, never dropped |
