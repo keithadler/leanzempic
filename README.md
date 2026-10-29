@@ -905,7 +905,12 @@ Negative results are part of the record, and several of them changed the design:
   raw number from an unboxed buffer instead of a boxed `Any`. I built it (inlined, one reader per type)
   and measured with allocation, which is exact where run time on a loaded laptop is not: `array_funcs`
   allocated 534 MB before and 646 MB after, `array_misc` 116 MB before and 182 MB after, with no
-  run-time gain. Reverted. I did not find out why the allocation went up.
+  run-time gain. Reverted. The cause, found later: the read went through `unsafeDupablePerformIO`, which
+  wraps its result in `lazy`. GHC keeps that wrapper until CorePrep, so the raw number it had just
+  unboxed was boxed again (`case lazy (W# x) of W# y`) before every use, and the boxed fallback path
+  merged at a join point that took the box too. Word-mode `Nat` arrays now read and write through
+  `runRW#` and unboxed `Word#` (`aGetWU`, `aSetUW`, `aPushUW`): "Prefix sums" allocation fell from
+  1.31 GB to 0.51 GB and the run time from 3.6x to 1.7x Lean's.
 * **A GHC panic on cast-heavy code.** Core Lint named GHC 9.14.1's Float Inwards pass; generated
   modules now carry `-fno-float-in`.
 

@@ -764,6 +764,17 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
       let hs := if punned && ["arrSet", "arrSetH", "arrUSet", "arrPush"].contains hs then hs ++ "B" else hs
       -- The analysis proved this array operation may update in place: use the in-place primitive.
       let hs := if (← get).destr.contains ((← get).cur, letId) then hs ++ "U" else hs
+      -- In word mode a Nat element of an array travels as a raw Word: no box per read or write.
+      let natElem := (← get).fast && !punned && (← get).typedArrays
+      let letNat := (← hsTyM letTy) == "ZNat"
+      let (hs, ptys, ret) :=
+        if hs == "arrGetDU" || hs == "arrGetD" then
+          (if natElem && letNat then ("arrGetDW", ["Any", "ZNat", "Any", "ZNat"], "ZNat") else (hs, ptys, ret))
+        else if hs == "arrSetU" then
+          (if natElem && args[3]?.map (·.2) == some "ZNat" then ("arrSetUW", ["Any", "Any", "ZNat", "ZNat"], ret) else (hs, ptys, ret))
+        else if hs == "arrPushU" then
+          (if natElem && args[2]?.map (·.2) == some "ZNat" then ("arrPushUW", ["Any", "Any", "ZNat"], ret) else (hs, ptys, ret))
+        else (hs, ptys, ret)
       -- A new array of a known numeric element type gets an unboxed buffer.
       let hs ← if hs == "arrMkEmpty" || hs == "arrReplicate" || hs == "arrOfList" then
           match elem? with

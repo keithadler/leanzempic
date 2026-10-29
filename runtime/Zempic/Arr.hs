@@ -14,18 +14,21 @@
 -- element, nothing for the garbage collector to scan or copy, and no box allocated per stored
 -- value. Every operation dispatches on the buffer, so a function that does not know the element
 -- type still works on either; an unboxed array just hands back a freshly boxed element.
-{-# LANGUAGE BangPatterns, FlexibleContexts, MagicHash #-}
+{-# LANGUAGE BangPatterns, FlexibleContexts, MagicHash, UnboxedTuples #-}
 module Zempic.Arr
   ( Arr, aEmpty, aEmptyK, aReplicate, aReplicateK, aLength, aGet, aSet, aPush, aPop, aSwap
   , aToList, aFromList, aFromListK
   , aSetU, aPushU, aPopU, aSwapU, aDeopt, aShare
+  , aGetW, aGetWU, aSetUW, aPushUW
   ) where
 
 import Data.Array.Base (MArray, getNumElements, unsafeRead, unsafeWrite)
 import Data.Array.IO (IOArray, IOUArray, newArray)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word16, Word32, Word64, Word8)
-import GHC.Exts (Any, isTrue#, reallyUnsafePtrEquality#)
+import GHC.Exts (Any, Word#, State#, RealWorld, isTrue#, reallyUnsafePtrEquality#)
+import GHC.IO (IO (..), unIO)
+import GHC.Word (Word (W#))
 import Unsafe.Coerce (unsafeCoerce)
 
 -- | The element storage. Kind codes: 0 boxed, 1 Word8, 2 Word16, 3 Word32, 4 Word64, 5 Word,
@@ -463,3 +466,59 @@ aDeopt arr = do
                   | otherwise = bufRead buf k >>= unsafeWrite b k >> copy (k + 1)
       copy 0
       writeIORef (aRef arr) (Direct (BBox b) c)
+
+-- * Word elements without a box
+--
+-- In word mode a @Nat@ is a @Word@, and an array of them has an unboxed 'BW' buffer. The general
+-- operations above hand the element over as a boxed @Any@, so every read and write allocates a box
+-- and, worse, hides it from GHC (the call is opaque, and the placeholder test in 'bufWrite' needs the
+-- box as a pointer). These variants take and return the raw @Word@. The fast path (a live 'BW'
+-- buffer with room) is small and inlined, so the box never exists; anything else goes through the
+-- general operation with a freshly made box, which is always correct.
+
+-- | Read element @i@ as a @Word@, or the default when out of range. It works on unboxed words end to
+-- end: if the fast and slow paths both returned a boxed 'Word', GHC would merge them at a join point
+-- that takes the box, and allocate one per read.
+aGetW :: Arr -> Int -> Word -> IO Word
+aGetW arr i (W# d) = IO (\s -> case aGetWU arr i d s of (# s1, w #) -> (# s1, W# w #))
+{-# INLINE aGetW #-}
+
+aGetWU :: Arr -> Int -> Word# -> State# RealWorld -> (# State# RealWorld, Word# #)
+aGetWU arr i d s0
+  | i < 0 || i >= aLen arr = (# s0, d #)
+  | otherwise = case unIO (readIORef (aRef arr)) s0 of
+      (# s1, node #) -> case node of
+        Direct (BW a) _ -> case unIO (unsafeRead a i) s1 of (# s2, W# w #) -> (# s2, w #)
+        _ -> case unIO (aGetWSlow arr i (W# d)) s1 of (# s2, W# w #) -> (# s2, w #)
+{-# INLINE aGetWU #-}
+
+aGetWSlow :: Arr -> Int -> Word -> IO Word
+aGetWSlow arr i d = do
+  v <- aGet arr i (unsafeCoerce d)
+  return $! (unsafeCoerce v :: Word)
+{-# NOINLINE aGetWSlow #-}
+
+-- | 'aSetU' of a @Word@ element.
+aSetUW :: Arr -> Int -> Word -> IO Arr
+aSetUW arr i w
+  | i < 0 || i >= aLen arr = return arr
+  | otherwise = do
+      node <- readIORef (aRef arr)
+      case node of
+        Direct (BW a) c | c >= 0 -> unsafeWrite a i w >> return arr
+        _ -> aSetU arr i (unsafeCoerce w)
+{-# INLINE aSetUW #-}
+
+-- | 'aPushU' of a @Word@ element.
+aPushUW :: Arr -> Word -> IO Arr
+aPushUW arr w = do
+  node <- readIORef (aRef arr)
+  case node of
+    Direct (BW a) c | c >= 0 -> do
+      cap <- getNumElements a
+      let n = aLen arr
+      if n < cap
+        then unsafeWrite a n w >> return (Arr (n + 1) (aRef arr))
+        else aPushU arr (unsafeCoerce w)
+    _ -> aPushU arr (unsafeCoerce w)
+{-# INLINE aPushUW #-}

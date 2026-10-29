@@ -99,6 +99,22 @@ zTake n = take (fromIntegral (min n 4611686018427387903))
 natOfInteger :: Integer -> ZNat
 natOfInteger i = if i > 18446744073709551615 then overflow else fromInteger i
 
+-- (arrGetDW uses runRW# directly: unsafeDupablePerformIO wraps its result in `lazy`, which GHC keeps
+-- until CorePrep, so a raw Word read back out of it was boxed again before use.)
+-- Array operations on Nat elements without a box (word mode only; see Zempic.Arr.aGetW). The compiler
+-- picks these where the element type is Nat and the array is not viewed as another type.
+arrGetDW :: Any -> ZNat -> Any -> ZNat -> ZNat
+arrGetDW _ (W# d) !a !i = case runRW# (aGetWU (zu a) (arrIdx i) d) of (# _, w #) -> W# w
+{-# INLINE arrGetDW #-}
+
+arrSetUW :: Any -> Any -> ZNat -> ZNat -> Any
+arrSetUW _ a i v = unsafeDupablePerformIO (zo <$> aSetUW (zu a) (arrIdx i) v)
+{-# INLINE arrSetUW #-}
+
+arrPushUW :: Any -> Any -> ZNat -> Any
+arrPushUW _ a v = unsafeDupablePerformIO (zo <$> aPushUW (zu a) v)
+{-# INLINE arrPushUW #-}
+
 -- BEGIN GENERATED (tools/gen_runtime.py)
 -- Conversions between Nat and the fixed-width integers.
 u8OfNat :: ZNat -> Word8
