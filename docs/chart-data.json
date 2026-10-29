@@ -1,6 +1,6 @@
 {
  "meta": {
-  "commit": "73b4913",
+  "commit": "77ed816",
   "date": "2026-10-29",
   "machine": "Apple M3",
   "dirty": false
@@ -8,171 +8,171 @@
  "rows": [
   {
    "label": "Float loop",
-   "native_s": 0.452,
-   "default_s": 0.042,
+   "native_s": 0.544,
+   "default_s": 0.048,
    "tuned_s": 0.05,
-   "default": 0.093,
-   "tuned": 0.111
+   "default": 0.088,
+   "tuned": 0.092
   },
   {
    "label": "Int arithmetic",
-   "native_s": 1.157,
-   "default_s": 0.296,
-   "tuned_s": 0.172,
-   "default": 0.256,
-   "tuned": 0.149
+   "native_s": 1.411,
+   "default_s": 0.359,
+   "tuned_s": 0.17,
+   "default": 0.254,
+   "tuned": 0.12
   },
   {
    "label": "Tree map and sum",
-   "native_s": 2.213,
-   "default_s": 1.499,
-   "tuned_s": 0.933,
-   "default": 0.677,
-   "tuned": 0.422
+   "native_s": 2.305,
+   "default_s": 1.469,
+   "tuned_s": 1.267,
+   "default": 0.637,
+   "tuned": 0.55
   },
   {
    "label": "Record update loop",
-   "native_s": 0.103,
-   "default_s": 0.108,
+   "native_s": 0.101,
+   "default_s": 0.125,
    "tuned_s": 0.052,
-   "default": 1.049,
-   "tuned": 0.505
+   "default": 1.238,
+   "tuned": 0.515
   },
   {
    "label": "List merge sort",
-   "native_s": 0.076,
-   "default_s": 0.11,
-   "tuned_s": 0.135,
-   "default": 1.447,
-   "tuned": 1.776
+   "native_s": 0.1,
+   "default_s": 0.15,
+   "tuned_s": 0.19,
+   "default": 1.5,
+   "tuned": 1.9
   },
   {
    "label": "HashMap inserts",
-   "native_s": 0.075,
-   "default_s": 0.22,
-   "tuned_s": 0.113,
-   "default": 2.933,
-   "tuned": 1.507
+   "native_s": 0.076,
+   "default_s": 0.259,
+   "tuned_s": 0.108,
+   "default": 3.408,
+   "tuned": 1.421
   },
   {
    "label": "String iteration",
-   "native_s": 0.092,
-   "default_s": 0.547,
-   "tuned_s": 0.136,
-   "default": 5.946,
-   "tuned": 1.478
+   "native_s": 0.091,
+   "default_s": 0.41,
+   "tuned_s": 0.166,
+   "default": 4.505,
+   "tuned": 1.824
   },
   {
    "label": "List functions",
-   "native_s": 0.059,
+   "native_s": 0.06,
    "default_s": 0.095,
-   "tuned_s": 0.087,
-   "default": 1.61,
-   "tuned": 1.475
+   "tuned_s": 0.092,
+   "default": 1.583,
+   "tuned": 1.533
   },
   {
    "label": "Array map/filter/fold",
-   "native_s": 0.046,
-   "default_s": 0.192,
-   "tuned_s": 0.174,
-   "default": 4.174,
-   "tuned": 3.783
+   "native_s": 0.045,
+   "default_s": 0.121,
+   "tuned_s": 0.111,
+   "default": 2.689,
+   "tuned": 2.467
   },
   {
    "label": "Shared array, insertion sort",
-   "native_s": 0.008,
-   "default_s": 0.059,
-   "tuned_s": 0.076,
-   "default": 7.375,
-   "tuned": 9.5
+   "native_s": 0.009,
+   "default_s": 0.033,
+   "tuned_s": 0.048,
+   "default": 3.667,
+   "tuned": 5.333
   },
   {
    "label": "List of UInt8, hashed",
-   "native_s": 0.053,
-   "default_s": 0.16,
-   "tuned_s": 0.048,
-   "default": 3.019,
-   "tuned": 0.906
+   "native_s": 0.059,
+   "default_s": 0.201,
+   "tuned_s": 0.084,
+   "default": 3.407,
+   "tuned": 1.424
   },
   {
    "label": "Tuple-state fold",
-   "native_s": 0.097,
-   "default_s": 0.268,
-   "tuned_s": 0.097,
-   "default": 2.763,
-   "tuned": 1.0
+   "native_s": 0.11,
+   "default_s": 0.353,
+   "tuned_s": 0.118,
+   "default": 3.209,
+   "tuned": 1.073
   },
   {
    "label": "Option chain",
    "native_s": 0.124,
-   "default_s": 0.097,
-   "tuned_s": 0.036,
-   "default": 0.782,
-   "tuned": 0.29
+   "default_s": 0.149,
+   "tuned_s": 0.039,
+   "default": 1.202,
+   "tuned": 0.315
   },
   {
    "label": "Nat sum loop",
-   "native_s": 0.45230913162231445,
-   "default_s": 0.18598699569702148,
-   "tuned_s": 0.20206999778747559,
+   "native_s": 0.45308685302734375,
+   "default_s": 0.1863389015197754,
+   "tuned_s": 0.1886296272277832,
    "default": 0.411,
-   "tuned": 0.447
+   "tuned": 0.416
   },
   {
    "label": "Fused list pipeline",
-   "native_s": 0.35445618629455566,
-   "default_s": 0.05024003982543945,
-   "tuned_s": 0.06615114212036133,
-   "default": 0.142,
-   "tuned": 0.187
+   "native_s": 0.3643059730529785,
+   "default_s": 0.05074882507324219,
+   "tuned_s": 0.06435394287109375,
+   "default": 0.139,
+   "tuned": 0.177
   },
   {
    "label": "Sieve (Bool array)",
-   "native_s": 0.10367918014526367,
-   "default_s": 0.13859295845031738,
-   "tuned_s": 0.1376359462738037,
-   "default": 1.337,
-   "tuned": 1.328
+   "native_s": 0.11160802841186523,
+   "default_s": 0.12499475479125977,
+   "tuned_s": 0.14021992683410645,
+   "default": 1.12,
+   "tuned": 1.256
   },
   {
    "label": "Prefix sums (Nat array)",
-   "native_s": 0.07942891120910645,
-   "default_s": 0.2885270118713379,
-   "tuned_s": 0.2918980121612549,
-   "default": 3.633,
-   "tuned": 3.675
+   "native_s": 0.0806739330291748,
+   "default_s": 0.14524292945861816,
+   "tuned_s": 0.16318273544311523,
+   "default": 1.8,
+   "tuned": 2.023
   },
   {
    "label": "Array map and fold",
-   "native_s": 0.04958605766296387,
-   "default_s": 0.12585711479187012,
-   "tuned_s": 0.11348724365234375,
-   "default": 2.538,
-   "tuned": 2.289
+   "native_s": 0.051824092864990234,
+   "default_s": 0.04780316352844238,
+   "tuned_s": 0.06385684013366699,
+   "default": 0.922,
+   "tuned": 1.232
   },
   {
    "label": "Reverse by swaps",
-   "native_s": 0.04897189140319824,
-   "default_s": 0.08808207511901855,
-   "tuned_s": 0.07766199111938477,
-   "default": 1.799,
-   "tuned": 1.586
+   "native_s": 0.04868912696838379,
+   "default_s": 0.04935503005981445,
+   "tuned_s": 0.04978585243225098,
+   "default": 1.014,
+   "tuned": 1.023
   },
   {
    "label": "Push and pop stack",
-   "native_s": 0.08081698417663574,
-   "default_s": 0.08831310272216797,
-   "tuned_s": 0.10056185722351074,
-   "default": 1.093,
-   "tuned": 1.244
+   "native_s": 0.0828859806060791,
+   "default_s": 0.08784222602844238,
+   "tuned_s": 0.10185694694519043,
+   "default": 1.06,
+   "tuned": 1.229
   },
   {
    "label": "Proved AES-256",
-   "native_s": 2.53,
-   "default_s": 4.99,
-   "tuned_s": 4.99,
-   "default": 1.972,
-   "tuned": 1.972
+   "native_s": 3.38,
+   "default_s": 5.05,
+   "tuned_s": 5.05,
+   "default": 1.494,
+   "tuned": 1.494
   }
  ]
 }

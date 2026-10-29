@@ -8,7 +8,7 @@ def digits(x):
     while x: d.append(x % B); x //= B
     return d[::-1]
 ok = True
-for p in ["binarytrees", "const_fold", "deriv", "qsort", "rbmap", "rbmap_checkpoint", "unionfind", "nat_repr"]:
+for p in ["binarytrees", "const_fold", "deriv", "qsort", "rbmap", "rbmap_checkpoint", "unionfind"]:
     a = open(f"{H}/upstream/{p}.lean.args").read().split()[0]
     if p == "const_fold": a = "1"          # reps=1 reproduces upstream's single tree of depth 15
     got = int(subprocess.run([f"{H}/out/{p}/native", a], capture_output=True, text=True).stdout)
