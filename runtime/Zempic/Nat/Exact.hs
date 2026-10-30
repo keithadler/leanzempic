@@ -599,6 +599,10 @@ arrUSetUWH :: HB Word -> Any -> Any -> Word -> Word -> Any -> Any
 arrUSetUWH b _ !a !i !v _ = hSet b a (fromIntegral i) v
 {-# INLINE arrUSetUWH #-}
 
+arrUSetBUWH :: HB Word -> Any -> Any -> Word -> Word -> Any -> Any
+arrUSetBUWH b _ !a !i !v _ = hSet b a (fromIntegral i) v
+{-# INLINE arrUSetBUWH #-}
+
 arrSwapUWH :: HB Word -> Any -> Any -> ZNat -> ZNat -> Any
 arrSwapUWH b _ !a !i !j = hSwap b a (arrIx i) (arrIx j)
 {-# INLINE arrSwapUWH #-}

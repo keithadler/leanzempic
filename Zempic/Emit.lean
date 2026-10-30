@@ -239,7 +239,12 @@ structure Hoist where
   sfx : String
   hty : String
   amap : Std.HashMap FVarId (List Nat)
+  /-- The function never writes the array (`hoistReadOnly`); its worker is named `_hr`, not `_h`. -/
+  ro : Bool := false
   deriving Inhabited
+
+/-- The suffix of the worker's name. -/
+def Hoist.suffix (h : Hoist) : String := if h.ro then "_hr" else "_h"
 
 /-- Emitter state: variable names and types, join points, the queue of constants still to
 compile, and what is unsupported. -/
@@ -793,8 +798,9 @@ at every access (`Zempic.Arr`, "Hoisted buffers"). `hoistPlan` decides when. The
 itself or lie inside the loop-state cells (`MProd`, `Prod`) that a `for` or `while` loop passes around. The
 conditions, all of which must hold:
 
-* the array is `Array e` with `e` a `UInt8/16/32/64`, `Char`, `USize`, `Bool` or (in word mode) `Nat`, and the
-  function is not the in-place `Array.map`, whose writes change the buffer's element type;
+* the array is `Array e` with `e` a `UInt8/16/32/64`, `Char`, `USize`, `Bool` or (in word mode) `Nat`; or the
+  function is the in-place `Array.map` (typed `Array NonScalar`), and every write to the array is of a `Word`
+  value (`hoistMapWords`);
 * every use of the array, and of every variable that is the array or a cell holding it (the parameter; the
   result of each in-place update; the fields of a cell that is taken apart; a cell built from such a variable;
   a join point's parameter that every jump fills with such a variable) is a read (`size`, `get`, `uget`,
@@ -992,9 +998,14 @@ def hoistKind (e : Expr) : EmitM (Option (String × String × String)) := do
 
 /-- Where in a parameter of this type an array with an unboxed buffer lies: the path of field indices, the
 cell types along it, and the buffer kind. -/
-partial def hoistSlots (ty : Expr) : EmitM (List (List Nat × List Name × String × String × String)) := do
+partial def hoistSlots (ty : Expr) (pun : Bool := false) :
+    EmitM (List (List Nat × List Name × String × String × String)) := do
   match ty with
   | .app (.const `Array _) e =>
+    -- Inside Lean's in-place `Array.map` the array is typed as `Array NonScalar` and the real element
+    -- type is hidden; it is taken to be a `Word`, which `hoistMapWords` then checks against the code.
+    if pun && (e.isConstOf `Zempic.NonScalar || e.isConstOf `NonScalar) then
+      return [([], [], "W", "W", "Word")]
     match ← hoistKind e with
     | some (k, sfx, hty) => return [([], [], k, sfx, hty)]
     | none => return []
@@ -1004,20 +1015,80 @@ partial def hoistSlots (ty : Expr) : EmitM (List (List Nat × List Name × Strin
       if c == `MProd || c == `Prod then
         let mut out := []
         for (t, j) in [(a, 0), (b, 1)] do
-          for (path, cells, k, sfx, hty) in ← hoistSlots t do
+          for (path, cells, k, sfx, hty) in ← hoistSlots t pun do
             out := out ++ [(j :: path, c :: cells, k, sfx, hty)]
         return out
       else return []
     | _, _ => return []
 
+/-- In Lean's in-place `Array.map` the array is typed `Array NonScalar`, so nothing in its type says what the
+buffer holds. The hoisted worker writes raw `Word`s into the buffer, and a write of any other value would have
+to make the buffer boxed (a change of the array's node that the worker must never cause). So the hoist is allowed
+only if every write to the array in the function is an `Array.uset` of a value that the emitter has typed as a
+`Word` (a `Nat` in word mode, or a `USize`). A `Word` buffer then stays a `Word` buffer; any other kind of
+buffer fails the run-time check of `aHoistW` and runs the ordinary code. -/
+partial def hoistMapWords (a : Std.HashMap FVarId (List Nat)) (c : Code .pure) : EmitM Bool := do
+  let fast := (← get).fast
+  match c with
+  | .let d k =>
+    let here ← match d.value with
+      | .const g _ args =>
+        if hoistCount a args > 0 && hoistIsSet g then
+          match args[3]? with
+          | some (Arg.fvar v) =>
+            let t ← tyOf v
+            pure (g == `Array.uset && hoistSimple a args 1 && (t == "Word" || (fast && t == "ZNat")))
+          | _ => pure false
+        else pure true
+      | _ => pure true
+    return here && (← hoistMapWords a k)
+  | .fun d k => return (← hoistMapWords a d.value) && (← hoistMapWords a k)
+  | .jp d k => return (← hoistMapWords a d.value) && (← hoistMapWords a k)
+  | .cases cs =>
+    let mut ok := true
+    for alt in cs.alts do
+      match alt with
+      | .alt _ _ k => ok := ok && (← hoistMapWords a k)
+      | .default k => ok := ok && (← hoistMapWords a k)
+    return ok
+  | _ => return true
+
+/-- Constants that cannot touch any array: arithmetic and comparisons on numbers, characters and booleans. -/
+def hoistScalarPrim (g : Name) : Bool :=
+  [`Nat, `Int, `UInt8, `UInt16, `UInt32, `UInt64, `USize, `Bool, `Char, `Float].contains g.getRoot
+
+/-- A function that never writes the array can read its buffer raw only if nothing that runs during the
+loop can change the array's node. A node changes when a persistent update of the array or of a version in
+its family runs, or when a read of an older version reroots the buffer. So the whole function may call
+only: itself, passing the array on at its place; reads of the array itself; the cell constructors; and
+`hoistScalarPrim` constants on arguments that are not the array. No closure is called, no join point
+parameter or local function holds a closure that could be, and no other array is touched. -/
+partial def hoistReadOnly (f : Name) (kidx : Nat) (path : List Nat) (a : Std.HashMap FVarId (List Nat)) :
+    Code .pure → Bool
+  | .let d k =>
+    (match d.value with
+     | .const g _ args =>
+       hoistCount a args == 0 && hoistScalarPrim g
+       || (hoistIsRead g && (hoistArrIdx g).any (hoistSimple a args))
+       || (hoistIsCell g && hoistCount a (args.extract 2 args.size) == 1)
+       || (g == f && hoistSimpleAt a path args kidx)
+     | .fvar _ _ => false
+     | _ => true) && hoistReadOnly f kidx path a k
+  | .fun _ _ => false
+  | .jp d k => hoistReadOnly f kidx path a d.value && hoistReadOnly f kidx path a k
+  | .cases cs => cs.alts.all fun
+    | .alt _ _ k => hoistReadOnly f kidx path a k
+    | .default k => hoistReadOnly f kidx path a k
+  | _ => true
+
 /-- Is function `d` a loop whose array parameter can be hoisted? (See above.) -/
 def hoistPlan (d : Decl .pure) (body : Code .pure) : EmitM (Option Hoist) := do
-  if ((← get).cur.toString.splitOn "Array.mapMUnsafe").length > 1 then return none
+  let pun := ((← get).cur.toString.splitOn "Array.mapMUnsafe").length > 1
   let jf := Own.jpFvs body
   let jumps := hoistJumps body {}
   let destr := (← get).destr
   for p in d.params, k in [0:d.params.size] do
-    for (path, cells, kind, sfx, hty) in ← hoistSlots p.type do
+    for (path, cells, kind, sfx, hty) in ← hoistSlots p.type pun do
       -- the first pass is repeated until no new variable turns up
       let mut sc : HScan := { amap := ({} : Std.HashMap FVarId (List Nat)).insert p.fvarId path }
       let mut settled := false
@@ -1030,7 +1101,11 @@ def hoistPlan (d : Decl .pure) (body : Code .pure) : EmitM (Option Hoist) := do
           break
       -- a variable that was not found would be used without being checked: give up if it is not settled
       let (_, sc') := (hoistCheck d.name k path destr jf body).run { sc with ok := sc.ok && settled }
-      if sc'.ok && sc'.destr && (sc'.loops || sc'.raws ≥ 3) then
+      if sc'.ok && (sc'.loops || sc'.raws ≥ 3) && !pun && !sc'.destr
+          && hoistReadOnly d.name k path sc'.amap body then
+        -- a function that only reads the array: see `hoistReadOnly`
+        return some { kidx := k, path, cells, kind, sfx, hty, amap := sc'.amap, ro := true }
+      if sc'.ok && sc'.destr && (sc'.loops || sc'.raws ≥ 3) && (!pun || (← hoistMapWords sc'.amap body)) then
         return some { kidx := k, path, cells, kind, sfx, hty, amap := sc'.amap }
   return none
 
@@ -1090,7 +1165,7 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
       -- a copy of the loop fixed to literals: inside a hoisted worker, the copy's worker
       if selfH then
         let h := hoist?.get!
-        return apply (hs ++ "_h") (s!"HB {h.hty}" :: ptys) ret (#[("hb", s!"HB {h.hty}")] ++ free) false
+        return apply (hs ++ h.suffix) (s!"HB {h.hty}" :: ptys) ret (#[("hb", s!"HB {h.hty}")] ++ free) false
       return apply hs ptys ret free false
     let mut args : Array (String × String) := #[]
     let mut j := 0
@@ -1181,7 +1256,7 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
       -- Inside a hoisted worker the array's accesses go to the raw buffer.
       if let some h := (← get).hoist then
         if let some i := hoistArrIdx c then
-          let base? := ["arrGetD", "arrGetI", "arrUGet", "arrSetU", "arrUSetU", "arrSwapU", "arrSwapPU"].find?
+          let base? := ["arrGetD", "arrGetI", "arrUGet", "arrSetU", "arrUSetU", "arrUSetBU", "arrSwapU", "arrSwapPU"].find?
             (fun b => hs == b ++ h.sfx)
           if let some b := base? then
            if (match argsRaw[i]? with | some (.fvar y) => h.amap[y]? == some [] | _ => false) then
@@ -1190,7 +1265,7 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
     | .decl hs ptys ret =>
       if selfH then
         let h := (← get).hoist.get!
-        return apply (hs ++ "_h") (s!"HB {h.hty}" :: ptys) ret (#[("hb", s!"HB {h.hty}")] ++ args) false
+        return apply (hs ++ h.suffix) (s!"HB {h.hty}" :: ptys) ret (#[("hb", s!"HB {h.hty}")] ++ args) false
       else return apply hs ptys ret args false
     | .ctor hs ptys ret np => return apply hs ptys ret (args.extract np args.size) false
     | .bad => return ("erased", "Any")
@@ -1412,6 +1487,10 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
     return s!"case ({x} :: {ty}) of \{\n{pad (ind + 1)}{sep.intercalate alts.toList} }"
 end
 
+/-- The parameter names, with a bang on each one whose type is a machine word (`ZNat`, `Word`). -/
+def bangWords (tys : List String) (ps : Array String) : Array String :=
+  (ps.toList.zip tys).toArray.map fun (p, t) => if t == "ZNat" || t == "Word" then "!" ++ p else p
+
 /-- Print one declaration as a typed Haskell function. -/
 def hsDecl (d : Decl .pure) : EmitM String := do
   let .code body := d.value | return ""
@@ -1422,8 +1501,11 @@ def hsDecl (d : Decl .pure) : EmitM String := do
   let ptys ← d.params.toList.mapM (hsTyM ·.type)
   let sig := " -> ".intercalate (ptys ++ [ret])
   let text ← hsCode body 1 ret
+  -- A `ZNat`/`Word` parameter is always an evaluated value (every `let` is strict). The bang tells GHC to
+  -- pass it unboxed even when the function returns it as it is (a loop whose accumulator is the result).
+  let bps := bangWords ptys ps
   let some h ← hoistPlan d body
-    | return s!"{n} :: {sig}\n{n} {" ".intercalate ps.toList} =\n{pad 1}{text}\n"
+    | return s!"{n} :: {sig}\n{n} {" ".intercalate bps.toList} =\n{pad 1}{text}\n"
   -- A loop over an unshared array: `n` checks once that the array is a live buffer and runs the worker on
   -- the raw buffer; if it is not, the ordinary code `n_slow` runs one step, and its recursive calls come
   -- back to `n`, which checks again (a lazy handle becomes a live buffer at its first write).
@@ -1434,9 +1516,9 @@ def hsDecl (d : Decl .pure) : EmitM String := do
   let ps2 ← d.params.mapM bindP
   let fast ← hsCode body 1 ret
   modify fun s => { s with hoist := none }
-  return s!"{n} :: {sig}\n{n} {args} =\n{pad 1}aHoist{h.kind} {arr} (\\hb -> {n}_h hb {args}) ({n}_slow {args})\n\n" ++
-    s!"{n}_slow :: {sig}\n{n}_slow {args} =\n{pad 1}{text}\n\n" ++
-    s!"{n}_h :: {hb} -> {sig}\n{n}_h !hb {" ".intercalate (ps2.toList.map ("!" ++ ·))} =\n{pad 1}{fast}\n"
+  return s!"{n} :: {sig}\n{n} {args} =\n{pad 1}aHoist{h.kind} {arr} (\\hb -> {n}{h.suffix} hb {args}) ({n}_slow {args})\n\n" ++
+    s!"{n}_slow :: {sig}\n{n}_slow {" ".intercalate bps.toList} =\n{pad 1}{text}\n\n" ++
+    s!"{n}{h.suffix} :: {hb} -> {sig}\n{n}{h.suffix} !hb {" ".intercalate (ps2.toList.map ("!" ++ ·))} =\n{pad 1}{fast}\n"
 
 /-- Print the copy of `d` whose parameters `ks` are fixed to literals. It takes only the other
 parameters; `INLINE` lets GHC splice the chain of copies of an unrolled loop into straight-line
@@ -1484,9 +1566,9 @@ def hsVariant (d : Decl .pure) (ks : Array (Option Nat)) : EmitM String := do
       idx := idx + 1
   let some arrName := arrArg | return s!"{n} :: {full}\n{n} {args} =\n{pad 1}{pre}{text}\n\{-# INLINABLE {n} #-}\n"
   let arr := hoistExtract arrName h.path h.cells
-  return s!"{n} :: {full}\n{n} {args} =\n{pad 1}aHoist{h.kind} {arr} (\\hb -> {n}_h hb {args}) ({n}_slow {args})\n\{-# INLINABLE {n} #-}\n\n" ++
+  return s!"{n} :: {full}\n{n} {args} =\n{pad 1}aHoist{h.kind} {arr} (\\hb -> {n}{h.suffix} hb {args}) ({n}_slow {args})\n\{-# INLINABLE {n} #-}\n\n" ++
     s!"{n}_slow :: {full}\n{n}_slow {args} =\n{pad 1}{pre}{text}\n\n" ++
-    s!"{n}_h :: {hb} -> {full}\n{n}_h !hb {" ".intercalate (names2.toList.map ("!" ++ ·))} =\n{pad 1}{pre2}{fast}\n"
+    s!"{n}{h.suffix} :: {hb} -> {full}\n{n}{h.suffix} !hb {" ".intercalate (names2.toList.map ("!" ++ ·))} =\n{pad 1}{pre2}{fast}\n"
 
 /-! ## Core-notation printer (for reading; GHC cannot ingest this) -/
 

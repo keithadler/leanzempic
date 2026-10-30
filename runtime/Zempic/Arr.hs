@@ -19,7 +19,7 @@ module Zempic.Arr
   ( Arr, aEmpty, aEmptyK, aReplicate, aReplicateK, aLength, aGet, aSet, aPush, aPop, aSwap
   , aToList, aFromList, aFromListK
   , aSetU, aPushU, aPopU, aSwapU, aDeopt, aShare
-  , aRangeW, aDeoptW, aGetW, aGetWU, aGetWI, aGetWIS, aPushFromU, aPushUW, aSetUW, aSetUWB
+  , aRangeW, aDeoptW, aGetW, aGetWU, aGetWI, aGetWIS, aPushFromU, aPushUW, aSetUW, aSetUWB, aSetUWBF
   , aGetP8, aGetP16, aGetP32, aGetP64, aGetPS8, aGetPS16, aGetPS32, aGetPS64
   , aSwapU8, aSwapU16, aSwapU32, aSwapU64, aSwapUW, aSwapF8, aSwapF16, aSwapF32, aSwapF64, aSwapFW
   , aSetF8, aSetF16, aSetF32, aSetF64
@@ -639,6 +639,21 @@ slowSetW arr (I# i) (W# v) = aSet arr (I# i) (unsafeCoerce (W# v))
 aSetUWB :: Arr -> Int -> Word -> IO Arr
 aSetUWB arr !i !v = aDeoptW arr >> aSetUWFull arr i v
 {-# NOINLINE aSetUWB #-}
+
+-- | The in-line part of 'aSetUWB' for a caller that wants the array itself back when nothing else is
+-- needed (a pure expression that returns its own argument does not rebuild it from its fields): 1# if
+-- the write was done in place (or the index is out of range, which changes nothing), 0# if the array is
+-- not a live word buffer and the caller must take the slow path.
+aSetUWBF :: Arr -> Int -> Word -> State# RealWorld -> (# State# RealWorld, Int# #)
+aSetUWBF arr i v s0
+  | outOfRange i arr = (# s0, 1# #)
+  | otherwise = case readIORef (aRef arr) of
+      IO m -> case m s0 of
+        (# s1, node #) -> case node of
+          Direct (BW a) c | c >= 0 -> case unsafeWrite a i v of IO w -> case w s1 of (# s2, _ #) -> (# s2, 1# #)
+          _ -> (# s1, 0# #)
+{-# INLINE aSetUWBF #-}
+
 
 -- | `aDeopt`, except that a `Word` buffer is left as it is (it holds exactly what a `Word` write stores).
 aDeoptW :: Arr -> IO ()

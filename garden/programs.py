@@ -1779,3 +1779,91 @@ def entry (n : Nat) : Nat := Id.run do
       b := t
   return acc + sum a + sum b * 3
 ''', _CELL)
+
+# Lean's in-place `Array.map` and read-only loops over an array (fold, any, all, contains, a hand-written loop)
+# run on the raw buffer when the emitter can show that nothing changes the array's node while they run
+# (`hoistMapWords`, `hoistReadOnly`). Every array is built by pushes (a `Word` buffer) and every loop starts at a
+# value that is not a literal. YES programs must run a hoisted worker, NO programs must not (tools/hoist_count.py);
+# a NO program therefore sums its arrays through lists, which are not array loops.
+_MAPPRE = '''
+def fromFn (k : Nat) (f : Nat → Nat) : Array Nat := Id.run do
+  let mut a : Array Nat := Array.mkEmpty 4
+  for i in [0:k] do a := a.push (f i)
+  return a
+
+def sumA (v : Array Nat) : Nat := v.foldl (fun acc w => (acc * 13 + w) % 1000003) 0
+def sumL (v : Array Nat) : Nat := v.toList.foldl (fun acc w => (acc * 13 + w) % 1000003) 0
+'''
+add("hoist_map_nat", _MAPPRE + '''
+-- an owned array mapped (hoisted), a shared one (the copy is made at the first write; the source must be unchanged),
+-- a closure that reads the source while it is mapped, a map of a persistent update, a map of a map
+def entry (n : Nat) : Nat :=
+  let z := n / 1000 -- 0, but not a literal
+  let a := fromFn (n * 3 + 5) (fun i => i * 7 + 1)
+  let b := a.map (fun x => (x * 3 + z) % 1000003)
+  let c := (fromFn (n * 2 + 3) (fun i => i + z)).map (fun x => x + 1)
+  let d := c.map (fun x => x % 5)
+  let e := a.map (fun x => x + a.size + a[z]!)
+  let g := (a.set! z 9).map (· + 1)
+  let h := (b.push 4).map (fun x => x * 2)
+  sumA a + sumA b * 3 + sumA c * 5 + sumA d * 7 + sumA e * 11 + sumA g * 13 + sumA h * 17
+''')
+add("hoist_map_mixed", _MAPPRE + '''
+-- maps that change the element type, or start from a buffer of another kind: they must not write raw words
+-- into a buffer that cannot hold them
+def u8s (k : Nat) : Array UInt8 := Id.run do
+  let mut a : Array UInt8 := Array.mkEmpty 5
+  for i in [0:k] do a := a.push (i * 13 + 5).toUInt8
+  return a
+
+def entry (n : Nat) : Nat :=
+  let z := n / 1000
+  let a := fromFn (n * 3 + 5) (fun i => i * 7 + 1)
+  let bs := a.map (fun x => (x + z) % 3 == 0)
+  let us := a.map (fun x => (x + z).toUInt8)
+  let back := us.map (fun x => x.toNat * 1000 + z)
+  let u := (u8s (n * 2 + 7)).map (fun x => x.toNat * 3 + z)
+  let ps := a.map (fun x => (x, x + z))
+  let cnt := bs.toList.foldl (fun acc w => if w then acc + 1 else acc) 0
+  sumL a + cnt * 3 + sumL back * 5 + sumL u * 7 + ps.size + (ps.toList.foldl (fun acc p => (acc + p.1 + p.2) % 1000003) 0) * 11
+    + us.toList.foldl (fun acc w => (acc * 3 + w.toNat) % 1000003) 0
+''')
+add("hoist_fold_nat", _MAPPRE + '''
+-- read-only loops: fold, any, all, contains, and a loop written by hand, over arrays that are shared and later
+-- changed (the loops must see the array as it was)
+partial def sumFrom (a : Array Nat) (i acc : Nat) : Nat :=
+  if i < a.size then sumFrom a (i + 1) ((acc * 31 + a[i]!) % 1000003) else acc
+
+def entry (n : Nat) : Nat :=
+  let z := n / 1000
+  let a := fromFn (n * 3 + 5) (fun i => i * 7 + 1)
+  let s1 := a.foldl (fun acc x => (acc * 3 + x) % 1000003) z
+  let a2 := a.set! z 100
+  let s2 := a2.foldl (fun acc x => (acc * 3 + x) % 1000003) z
+  let a3 := a.push 5
+  let s3 := sumFrom a3 z z
+  let s4 := sumFrom a z z
+  let t1 := if a.any (fun x => x > n * 20 + z) then 1 else 0
+  let t2 := if a.all (fun x => x > z) then 2 else 0
+  let t3 := if a.contains (n * 7 + 1 + z) then 4 else 0
+  let t4 := if a2.contains 100 then 8 else 0
+  s1 + s2 * 3 + s3 * 5 + s4 * 7 + t1 + t2 + t3 + t4 + a.foldr (fun x acc => (acc + x) % 1000003) z
+''')
+add("hoist_fold_alias", _MAPPRE + '''
+-- loops whose body also touches the array in a way that can move or change its buffer, or reads an older version
+-- of it (which reroots the buffer): none may read the buffer raw
+def entry (n : Nat) : Nat :=
+  let z := n / 1000
+  let a0 := fromFn (n * 3 + 5) (fun i => i * 7 + 1)
+  let a1 := a0.set! z 5
+  -- a1 owns the buffer now; the body reads a0, an older version of the same buffer
+  let s1 := a1.foldl (fun acc x => (acc + x + a0[z]! + a0[1]!) % 1000003) z
+  -- the body pushes onto the array it folds over
+  let s2 := a1.foldl (fun acc x => (acc + (a1.push x).size) % 1000003) z
+  -- the accumulator is an array derived from the one read
+  let s3 := (a1.foldl (fun (acc : Array Nat) x => if x % 2 == z then acc.push x else acc) a1).size
+  -- two arrays read at once
+  let a4 := fromFn (n * 3 + 5) (fun i => i + 2)
+  let s4 := a1.foldl (fun acc x => (acc + x * a4[z]!) % 1000003) z
+  s1 + s2 * 3 + s3 * 5 + s4 * 7 + sumL a0 + sumL a1 * 9
+''')

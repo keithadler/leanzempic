@@ -332,8 +332,10 @@ arrUSetUW _ !a !i !v _ = arrIO (zo <$> aSetUW (zu a) (fromIntegral i) v)
 {-# INLINE arrUSetUW #-}
 
 arrUSetBUW :: Any -> Any -> Word -> Word -> Any -> Any
-arrUSetBUW _ !a !i !v _ = arrIO (zo <$> aSetUWB (zu a) (fromIntegral i) v)
-{-# NOINLINE arrUSetBUW #-}
+arrUSetBUW _ !a !i !v _ = case runRW# (aSetUWBF (zu a) (fromIntegral i) v) of
+  (# _, 1# #) -> a
+  _ -> arrIO (zo <$> aSetUWB (zu a) (fromIntegral i) v)
+{-# INLINE arrUSetBUW #-}
 
 -- Push element @j@ of another array onto an array updated in place (the compiler fuses a read and the
 -- push of its value into this).
@@ -598,6 +600,10 @@ arrSetUWH b _ !a !i !v = hSet b a (arrIx i) v
 arrUSetUWH :: HB Word -> Any -> Any -> Word -> Word -> Any -> Any
 arrUSetUWH b _ !a !i !v _ = hSet b a (fromIntegral i) v
 {-# INLINE arrUSetUWH #-}
+
+arrUSetBUWH :: HB Word -> Any -> Any -> Word -> Word -> Any -> Any
+arrUSetBUWH b _ !a !i !v _ = hSet b a (fromIntegral i) v
+{-# INLINE arrUSetBUWH #-}
 
 arrSwapUWH :: HB Word -> Any -> Any -> ZNat -> ZNat -> Any
 arrSwapUWH b _ !a !i !j = hSwap b a (arrIx i) (arrIx j)

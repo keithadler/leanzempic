@@ -639,6 +639,54 @@ arrInPlace c g kind steps = do
   g0 <- arrContents kind aEnd
   expect c "the stale version itself is undisturbed" g0 mEnd
 
+-- | The write through a view as another element type that Lean's in-place `Array.map` makes, `arrUSetBUW`, whose
+-- in-line fast path (`aSetUWBF`) takes a live word buffer and leaves every other state to the slow path. Against the
+-- model, on a live buffer, a lazily shared handle (the source must not change), the version a persistent update was made from (it
+-- must keep its contents), and indices at -1, the length and `maxBound`. A write in place is made only when nothing
+-- else needs the array, which is the ownership analysis's promise, so the older versions are dropped before one.
+arrSetBW :: Check -> Gen -> Int -> Int -> IO ()
+arrSetBW c g kind steps = do
+  let unit = unsafeCoerce () :: Any
+      setB :: A.Arr -> Int -> Int -> A.Arr
+      setB a i v = unsafeCoerce (W.arrUSetBUW unit (unsafeCoerce a) (fromIntegral i) (fromIntegral v) unit)
+      allOf a = mapM (\i -> fromIntegral <$> A.aGetW a i 999999) [0 .. A.aLength a - 1] :: IO [Int]
+      label s = s ++ " (arrUSetBUW, kind " ++ show kind ++ ")"
+  a0 <- A.aEmptyK kind 2
+  -- (the live array, its model, older versions with their models)
+  _ <- foldM
+    (\(a, m, olds) _ -> do
+        op <- below g 5
+        r <- below g 4
+        k <- case r of
+               0 -> return (-1)
+               1 -> return (length m)
+               2 -> return maxBound
+               _ -> below g (length m + 1)
+        v <- below g 1000
+        let inRange = k >= 0 && k < length m
+            m' = if inRange then modelSet k v m else m
+        (b, mb, olds') <- case op of
+          -- an in-place update is only made on an array nothing else needs (the ownership analysis proved it), so
+          -- the older versions are dropped first
+          0 -> do b <- A.aPushUW a (fromIntegral v); return (b, m ++ [v], [])
+          1 -> return (setB a k v, m', [])                                    -- in place on the live buffer
+          2 -> do                                                             -- a lazy handle: copy at its first write
+            h <- A.aShare a
+            return (setB h k v, m', (a, m) : take 3 olds)
+          3 -> do                                                             -- a persistent update, then the old one is kept
+            b <- A.aSet a (if null m then 0 else v `mod` length m) (enc 5 v)
+            return (b, if null m then m else modelSet (v `mod` length m) v m, (a, m) : take 3 olds)
+          _ -> return (a, m, olds)
+        gb <- allOf b
+        expect c (label "the array after the write") gb mb
+        -- the source of a lazy handle and every older version keep their contents
+        forM_ olds' $ \(o, mo) -> do
+          go <- allOf o
+          expect c (label "an older version is unchanged by writes to a newer one") go mo
+        return (b, mb, olds'))
+    (a0, [], []) [1 .. steps]
+  return ()
+
 -- | The Word-element variants (word-mode Nat arrays), on an unboxed kind-5 buffer and on a boxed one,
 -- against the model: single owner, a lazily shared handle, and stale versions (which must fall back).
 arrWordShare :: Check -> Gen -> Int -> Int -> IO ()
@@ -854,6 +902,7 @@ main = do
       arrPersistent check gen kind 600
       arrInPlace check gen kind 400
       when (kind == 5 || kind == 0) $ arrWordShare check gen kind 400
+      when (kind == 5 || kind == 0) $ arrSetBW check gen kind 400
       arrShared check gen kind
       when (kind == 0 || kind == 5) $ arrWord check gen kind 400
       when (kind /= 0) $ arrPlaceholderRaw check gen kind
