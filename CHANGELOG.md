@@ -5,6 +5,8 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+## 0.1.0-rc3 (2026-10-29)
+
 * The exact (`Natural`) path inlines its small-operand cases (`natAdd/Sub/Mul/Div/Mod/Eq/Lt/Le` match
   `NS` and keep the big-number work out of line) instead of calling `naturalAdd` and friends, and generated
   modules carry `-fworker-wrapper-cbv` (strict arguments arrive evaluated and tagged) unless a function
