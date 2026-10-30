@@ -12,6 +12,13 @@ everything is pre-release (`0.1.0`).
   found: `hoist_set_*`, `hoist_shared_*` and `hoist_escape_*` built their arrays with `map`, which keeps a boxed
   buffer, so the hoisted loops never ran on them; they now build by pushes and run hoisted. The garden is
   155 programs (22 new) and 48 run in CI.
+* Peak memory diagnosed and an opt-in low-memory preset: `ZEMPIC_RTS=lowmem` in `tools/zghc` (`-A64m -O1g`)
+  cuts peak resident memory on the seven real-world programs by 25% to 73% (for example `qsort` 268 MB to
+  73 MB, `const_fold` 323 MB to 89 MB) with instructions retired within 3.0% on six of them and +15.8% on
+  `deriv`. The defaults are unchanged: no smaller `-A` keeps all seven within 3%, and making list fusion or
+  `-A256m -O1g` the default regresses garden programs (`list_mergesort` +9%, `closures` +15%,
+  `float_math` +20%). New `bench/realworld/rts.py` sweeps RTS options over the built programs. See `BENCH.md`,
+  "Peak memory".
 
 ## 0.1.0-rc3 (2026-10-29)
 

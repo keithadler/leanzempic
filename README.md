@@ -122,7 +122,7 @@ main = print (z_fact 25 :: Natural)   -- 15511210043330985984000000, exact
 tools/zghc -ibuild Main.hs -o main && ./main
 ```
 
-`tools/zghc` is GHC with the right flags (`-O2`, `-iruntime`, `-A256m -O1g`, which raises peak memory by about the allocation area; set `ZEMPIC_RTS="-A64m"` to use less) and with Lean's
+`tools/zghc` is GHC with the right flags (`-O2`, `-iruntime`, `-A256m -O1g`, which raises peak memory by about the allocation area; set `ZEMPIC_RTS=lowmem`, which is `-A64m -O1g`, to use 25% to 73% less memory on the real-world programs at a cost of 16% more instructions on one of them (`deriv`); see `BENCH.md`, "Peak memory") and with Lean's
 toolchain taken off `PATH`, which avoids the clang trap below. Plain `ghc -O2 -iruntime -ibuild`
 works too if Lean's `bin` is not on your `PATH`. To use the runtime as a package instead of
 `-iruntime`, build `runtime/zempic-runtime.cabal` and pass `-package zempic-runtime`.
