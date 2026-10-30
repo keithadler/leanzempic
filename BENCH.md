@@ -795,3 +795,136 @@ Limits and what is not done:
   `Nat`/`USize`/`Bool` arrays and arrays inside a loop's state tuple are not hoisted. `qsortAux`, whose array reaches
   its helpers through join-point parameters and a pair component, is not either, and it is now a quarter of the time.
 * `qsortAux` (16 bytes per call), `mkRandomArray` (23 per push) and `isSorted` (23 per step) still allocate (ticky, n = 100).
+
+## Peak memory: where it comes from, and what it costs to reduce (2026-10-29)
+
+Question: peak memory is 4x to 46x Lean's C backend on the real-world programs (recommended settings).
+Where does it come from, and can it fall without raising instructions retired or time by more than 3% on any
+of the seven programs? Machine and method as in `bench/realworld/RESULTS.md`; every cell below is from
+`bench/realworld/rts.py` (best instructions, largest peak resident set, 3 interleaved runs unless noted).
+The RTS options are changed on the command line of the same binary (`+RTS ... -RTS` overrides
+`-with-rtsopts`), so the generated code is identical across columns.
+
+### Diagnosis (`+RTS -s`, recommended binaries)
+
+| program | allocated | copied by GC | max residency | peak resident (MB) | native (MB) |
+|---|---|---|---|---|---|
+| binarytrees | 2.05 GB | 42 MB | 12.6 MB | 292 | 35 |
+| const_fold | 10.5 GB | 44 MB | 1.4 MB | 323 | 8 |
+| deriv | 0.66 GB | 533 MB | 44 KB (one sample; nearly all of the 0.66 GB survives) | 785 | 549 |
+| qsort | 1.52 GB | 15 KB | 0.06 MB | 268 | 3 |
+| rbmap | 3.84 GB | 190 MB | 22.6 MB | 365 | 95 |
+| rbmap_checkpoint | 3.85 GB | 740 MB | 81.4 MB | 653 | 366 |
+| unionfind | 7.42 GB | 178 MB | 86.8 MB | 757 | 134 |
+
+* **Fixed floor: the allocation area, `-A`.** The collector's nursery is touched page by page and then
+  reused, so any program that allocates more than `-A` bytes holds `-A` of resident memory plus its live data.
+  `qsort` (live data 0.06 MB) is 268 MB = 256 MB + 12 MB; `const_fold` (1.4 MB live) is 323 MB because
+  `-O1g` also keeps promoted garbage (next point; with `-A4m` the same program peaks at 717 MB). It does not
+  scale with the problem; halving `-A` halves it.
+* **Old generation, `-O1g`.** `-O1g` means no major collection until the old generation reaches 1 GB, so
+  promoted garbage accumulates: `unionfind` has 87 MB live and peaks at 757 MB (`-O128m` gives 526 MB at the
+  same 26.1 G instructions, but `rbmap_checkpoint` then retires 9.9 G instead of 9.1 G). The two programs
+  want opposite values of `-O`, and `-O1g` also removes major collections that cost instructions.
+* **The part that scales with the problem** is live data, and it is what native Lean pays too: `deriv`
+  (native 549 MB), `rbmap_checkpoint` (366 MB), `unionfind` (134 MB). Our excess over native there is
+  the copying collector's to-space and the allocation area.
+* **Large objects and the persistent `Arr`:** not measured separately. Maximum residency is far below the
+  peak in every row, so they are not what sets the peak.
+* **Instructions retired include page faults.** The same `float_math` binary retires 0.284 G instructions at
+  `-A128m` and 0.341 G at `-A256m -O1g` (garden, fusion off). Its code is identical; the extra 57 M are
+  consistent with the kernel faulting in 128 MB more nursery. So a large `-A` is not free for small programs.
+
+### The trade-off: no smaller `-A` passes the 3% gate on all seven
+
+Recommended build, the seven real-world programs (instructions in billions, peak MB):
+
+| program | -A256m (now) | -A128m | -A64m | -A32m | -A16m |
+|---|---|---|---|---|---|
+| binarytrees | 11.48 G, 292 | 11.56 G, 174 | 11.55 G, 109 | 11.63 G, 77 | 11.80 G, 59 |
+| const_fold | 19.46 G, 323 | 19.66 G, 167 | 20.04 G, 89 | 20.97 G, 50 | 22.83 G, 30 |
+| deriv | 8.36 G, 785 | 9.43 G, 569 | 9.68 G, 505 | 9.87 G, 472 | 9.97 G, 456 |
+| qsort | 14.66 G, 268 | 14.65 G, 138 | 14.55 G, 73 | 14.53 G, 40 | 14.52 G, 24 |
+| rbmap | 6.11 G, 365 | 6.06 G, 232 | 6.00 G, 167 | 5.98 G, 134 | 5.97 G, 118 |
+| rbmap_checkpoint | 9.11 G, 653 | 9.04 G, 510 | 9.01 G, 445 | 9.00 G, 412 | 8.99 G, 395 |
+| unionfind | 26.06 G, 757 | 26.49 G, 660 | 26.66 G, 570 | 26.96 G, 541 | 27.33 G, 546 |
+
+(`-O1g` throughout. The `-A128m` column was measured in a later session in which the `-A256m` baseline for
+`deriv` was 8.47 G, so its `deriv` ratio is +11%.) `-A128m` passes the gate on six programs and fails `deriv`;
+every smaller area fails `deriv` too and, below 64 MB, `const_fold`. `deriv` allocates only 0.66 GB, nearly all of
+it survives, and with a 256 MB area just two collections copy it (533 MB copied); at `-A16m` it copies 867 MB.
+It is also erratic in `-A`: `-A224m` retires 7.9 G and `-A340m` 6.6 G with 582 MB, while `-A192m` retires 10.1 G
+and `-A208m` 10.5 G, because the result depends on which allocation the collections happen to land on. A value
+picked from that sweep would be overfitting to these inputs, so I did not take one. `const_fold` allows
+`-A64m` only at exactly the limit (+3.0%).
+
+So the defaults stay (`-A128m` for the default build, `-A256m -O1g` for the recommended). What changes is an
+explicit low-memory preset, `ZEMPIC_RTS=lowmem` in `tools/zghc` (the same as `-A64m -O1g`):
+
+| program | instructions, recommended | instructions, lowmem | peak MB, recommended | peak MB, lowmem |
+|---|---|---|---|---|
+| binarytrees | 11.48 G | 11.55 G (+0.6%) | 292 | 109 (-63%) |
+| const_fold | 19.46 G | 20.04 G (+3.0%) | 323 | 89 (-72%) |
+| deriv | 8.36 G | 9.68 G (+15.8%) | 785 | 505 (-36%) |
+| qsort | 14.66 G | 14.55 G (-0.8%) | 268 | 73 (-73%) |
+| rbmap | 6.11 G | 6.00 G (-1.8%) | 365 | 167 (-54%) |
+| rbmap_checkpoint | 9.11 G | 9.01 G (-1.1%) | 653 | 445 (-32%) |
+| unionfind | 26.06 G | 26.66 G (+2.3%) | 757 | 570 (-25%) |
+
+Six of seven are within the 3% gate; `deriv` is not, which is why it is a preset and not the default.
+Garden programs show the same split (fusion on, `-A64m -O1g` against `-A256m -O1g`, one run): 18 of 23 retire
+fewer instructions (`float_math` 0.344 G to 0.257 G and 268 MB to 73 MB; `parser_monad` 0.287 G to 0.178 G),
+`string_split` is level (+0.4%), and `functor_tree` (+15%), `list_funcs` (+67%), `list_mergesort` (+11%) and
+`array_funcs` (+10%), whose live data is large, lose.
+
+### Rejected, with data (recommended binaries, 1 run, against `-A256m -O1g`)
+
+| option | result |
+|---|---|
+| `-O128m` | `unionfind` 758 to 526 MB, but `rbmap_checkpoint` 9.14 G to 9.93 G (+8.6%) |
+| `-O512m` | no change in either direction on any program |
+| `-F1.5`, `-n8m` | no change in instructions or memory (single capability) |
+| `-xn` (nonmoving old generation) | `deriv` 8.45 G to 10.41 G (+23%), `rbmap_checkpoint` +17%, `rbmap` +5%; memory not lower |
+| `-c` (compacting old generation) | `deriv` +5%, `rbmap_checkpoint` +13%, `rbmap` +5%; memory not lower |
+| `-G3` | `deriv` 8.4 G (level) but `rbmap_checkpoint` +3.3%, `rbmap` +1.3%; memory not lower |
+| `-A8m -H64m` ... `-H192m` (suggested heap) | `deriv` +18% to +19%, `const_fold` +5.3% to +5.6%, `unionfind` +3.4% to +6.3%; peak follows H |
+| `-H` with no size | peak 800 MB to 1.2 GB on every program (the automatic suggestion is large) |
+| `-A128m` / `-A160m` / `-A192m` alone | `deriv` +12% / +10% / +19% |
+
+A runtime-adaptive nursery (small `-A`, growing as live data grows) would give both columns, but GHC has no
+such mode and its only entry point, `resizeNurseriesFixed`, is not exported from the RTS; poking
+`RtsFlags` from Haskell would depend on the GHC version's struct layout, so I did not try it.
+Per-allocation overhead: the generated data types are strict and `Nat` fields are unpacked words in
+word mode (an `rbmap` node is six words), so I found nothing to shave in the runtime in this pass.
+
+### Should list fusion and the recommended RTS settings become the defaults? No.
+
+Garden, 23 programs, 3 runs each, instructions retired (the four combinations, `d` = fusion off, `f` = on):
+
+| program | d, -A128m | f, -A128m | d, -A256m -O1g | f, -A256m -O1g |
+|---|---|---|---|---|
+| list_mergesort | 1.209 G | 1.318 G | 1.199 G | 1.308 G |
+| closures | 0.321 G | 0.370 G | 0.356 G | 0.428 G |
+| typeclass | 3.141 G | 3.068 G | 1.732 G | 3.156 G |
+| tuples | 1.386 G | 0.646 G | 0.620 G | 0.704 G |
+| float_math | 0.284 G | 0.283 G | 0.341 G | 0.341 G |
+| state_monad | 0.229 G | 0.228 G | 0.287 G | 0.287 G |
+| parser_monad | 0.263 G | 0.201 G | 0.320 G | 0.259 G |
+| array_misc | 0.485 G | 0.485 G | 0.543 G | 0.542 G |
+| deriving | 2.118 G | 0.137 G | 1.429 G | 0.195 G |
+| sum_type | 2.267 G | 0.990 G | 1.525 G | 1.058 G |
+| uint64_hash | 2.048 G | 0.530 G | 1.356 G | 0.595 G |
+
+* Fusion on by default regresses `list_mergesort` by 9% under either RTS setting and `closures` by 15% to
+  20%; with the larger area it regresses `typeclass` by 82% and `tuples` by 14% (the fused binary lands on
+  different collection points). It wins by 1.8x to 16x on `deriving`, `uint64_hash`, `sum_type`, `tuples` (at
+  `-A128m`), `option_chain`, `struct_update`, `hashmap` and `string_chars`. A default that makes some programs
+  1.1x to 1.8x worse is not a safe default; it stays opt-in, as `Command.lean`'s warning tells users.
+* `-A256m -O1g` as the default regresses the small programs in the table (`float_math` +20%, `state_monad`
+  +25%, `parser_monad` +22%, `array_misc` +12%, `closures` +11%) because of the page-in cost above, and
+  doubles the memory floor (138 MB to 268 MB for `float_math`). It helps programs with large live data.
+  Mixed, so it stays recommended, not default.
+
+Reproduce: `python3 bench/realworld/rts.py 3 all rec=@/recommended/m 'low=@/recommended/m::-A64m'`.
+The garden half used `GARDEN_FUSE=0/1 python3 garden/run.py`, then the generated `Out.hs` compiled with
+`ghc -O2 -rtsopts` and run with `+RTS` options under `/usr/bin/time -l`.

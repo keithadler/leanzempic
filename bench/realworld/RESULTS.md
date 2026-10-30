@@ -151,3 +151,27 @@ instructions retired (billions), the minimization target; ratio is against nativ
 | rbmap | 22.32 | 6.39, 0.29x | 6.08, 0.27x |
 | rbmap_checkpoint | 22.38 | 10.41, 0.46x | 9.08, 0.41x |
 | unionfind | 35.86 | 27.32, 0.76x | 26.05, 0.73x |
+
+Update (2026-10-29, branch `agent-mem`, peak memory): the memory columns above are unchanged, because the defaults are
+unchanged (`-A128m` default, `-A256m -O1g` recommended). The diagnosis: peak resident is the allocation area `-A`
+plus live data plus, under `-O1g`, promoted garbage that is not collected before 1 GB. `qsort` has 0.06 MB live and
+peaks at 268 MB = 256 MB + 12 MB; `deriv` has nearly everything live and no smaller `-A` is free for it. A smaller area
+costs instructions only where live data is large, so there is no single value that keeps all seven programs
+within 3%. New opt-in preset `ZEMPIC_RTS=lowmem` in `tools/zghc` (`-A64m -O1g`), recommended build, best of 3
+(`bench/realworld/rts.py`):
+
+| program | peak MB, recommended | peak MB, lowmem | instructions retired (G), recommended | instructions (G), lowmem |
+|---|---|---|---|---|
+| binarytrees | 292 | 109 | 11.48 | 11.55 (+0.6%) |
+| const_fold | 323 | 89 | 19.46 | 20.04 (+3.0%) |
+| deriv | 785 | 505 | 8.36 | 9.68 (+15.8%) |
+| qsort | 268 | 73 | 14.66 | 14.55 (-0.8%) |
+| rbmap | 365 | 167 | 6.11 | 6.00 (-1.8%) |
+| rbmap_checkpoint | 653 | 445 | 9.11 | 9.01 (-1.1%) |
+| unionfind | 757 | 570 | 26.06 | 26.66 (+2.3%) |
+
+Native peak MB for reference: 35, 8, 549, 3, 95, 366, 134. With `lowmem` the ratio to native is 3.1x, 11x, 0.92x,
+24x, 1.8x, 1.2x and 4.3x (recommended: 8.3x, 40x, 1.4x, 89x, 3.8x, 1.8x and 5.6x). `deriv` is why it is not the
+default. List fusion as a default and `-A256m -O1g` as a default were also evaluated over 23 garden programs and
+rejected; the data, and every RTS option tried (`-O`, `-F`, `-n`, `-xn`, `-c`, `-G3`, `-H`), is in `BENCH.md`,
+"Peak memory".

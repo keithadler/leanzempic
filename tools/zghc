@@ -5,11 +5,15 @@
 #
 # * -O2, and a large allocation area for the collector: -A256m -O1g makes list and array programs 25 to
 #   40% faster, and raises peak memory by about the allocation area. Override with ZEMPIC_RTS, e.g.
-#   ZEMPIC_RTS="-A64m" when memory matters more than speed (BENCH.md has the measurements).
+#   ZEMPIC_RTS=lowmem (the same as "-A64m -O1g") when memory matters more than speed: peak memory falls
+#   by 25% to 73% on the seven real-world programs and instructions retired stay within 3.0% on six of
+#   them (deriv +16%; BENCH.md, "Peak memory").
 # * -iruntime, so the runtime modules are found (not needed once zempic-runtime is installed as a
 #   package; see runtime/zempic-runtime.cabal).
 # * Lean's toolchain is taken off PATH. Lean bundles its own clang, and when it shadows the system
 #   one GHC's C compiler step fails with "'inttypes.h' file not found".
+rts=${ZEMPIC_RTS:--A256m -O1g}
+[ "$rts" = lowmem ] && rts="-A64m -O1g"
 root=$(cd "$(dirname "$0")/.." && pwd)
 clean=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/\.elan/' | tr '\n' ':' | sed 's/:$//')
-PATH="$clean" exec ghc -O2 -i"$root/runtime" -rtsopts "-with-rtsopts=${ZEMPIC_RTS:--A256m -O1g}" "$@"
+PATH="$clean" exec ghc -O2 -i"$root/runtime" -rtsopts "-with-rtsopts=$rts" "$@"

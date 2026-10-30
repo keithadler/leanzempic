@@ -5,6 +5,14 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* Peak memory diagnosed and an opt-in low-memory preset: `ZEMPIC_RTS=lowmem` in `tools/zghc` (`-A64m -O1g`)
+  cuts peak resident memory on the seven real-world programs by 25% to 73% (for example `qsort` 268 MB to
+  73 MB, `const_fold` 323 MB to 89 MB) with instructions retired within 3.0% on six of them and +15.8% on
+  `deriv`. The defaults are unchanged: no smaller `-A` keeps all seven within 3%, and making list fusion or
+  `-A256m -O1g` the default regresses garden programs (`list_mergesort` +9%, `closures` +15%,
+  `float_math` +20%). New `bench/realworld/rts.py` sweeps RTS options over the built programs. See `BENCH.md`,
+  "Peak memory".
+
 ## 0.1.0-rc3 (2026-10-29)
 
 * The exact (`Natural`) path inlines its small-operand cases (`natAdd/Sub/Mul/Div/Mod/Eq/Lt/Le` match
