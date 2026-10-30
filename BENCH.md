@@ -384,7 +384,7 @@ process start-up, about 15 ms with `-A128m`) and are not reported. Of the rest:
 
 **The pattern.** Arithmetic, records, `Int`, `Float` and trees are level or faster. Everything that
 holds many boxed elements (lists, arrays, hash maps, strings built from pieces) is 2x to 7x slower,
-and the one case where an array is both shared and mutated in a loop is about 5x to 9x (lazy copies).
+and the one case where an array is both shared and mutated in a loop is about 5x (lazy copies).
 
 **Why, from the profiles.**
 

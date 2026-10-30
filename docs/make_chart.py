@@ -61,7 +61,7 @@ for i, row in enumerate(rows):
 fy = top + rh * len(rows) + 52
 stamp = f" Measured {meta['date']} at commit {meta['commit']}." if meta else ""
 o.append(f'<text x="80" y="{fy}" font-size="21" fill="{MUTE}">Apple M3, Lean 4.29.1, GHC 9.14.1 -O2, best of 3, pure programs only.{stamp}</text>')
-o.append(f'<text x="80" y="{fy+30}" font-size="21" fill="{MUTE}">Not everything improves: list merge sort slows with fusion, and a shared array mutated in a loop is still far behind.</text>')
+o.append(f'<text x="80" y="{fy+30}" font-size="21" fill="{MUTE}">Not everything improves: list merge sort slows with fusion, and a shared array mutated in a loop is still about 5x behind.</text>')
 o.append(f'<text x="80" y="{fy+78}" font-size="26" font-weight="700" fill="{FG}">leanzempic</text>')
 o.append(f'<text x="262" y="{fy+78}" font-size="26" fill="{MUTE}">Apache-2.0  github.com/keithadler/leanzempic</text>')
 o.append('</svg>')

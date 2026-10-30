@@ -115,7 +115,7 @@
 <rect x="1043.5" y="1516.0" width="217.2" height="22" rx="3" fill="#fb923c"/>
 <text x="1270.7" y="1533.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">5.4x slower</text>
 <text x="80" y="1604" font-size="21" fill="#94a3b8">Apple M3, Lean 4.29.1, GHC 9.14.1 -O2, best of 3, pure programs only. Measured 2026-10-29 at commit 70366b2.</text>
-<text x="80" y="1634" font-size="21" fill="#94a3b8">Not everything improves: list merge sort slows with fusion, and a shared array mutated in a loop is still far behind.</text>
+<text x="80" y="1634" font-size="21" fill="#94a3b8">Not everything improves: list merge sort slows with fusion, and a shared array mutated in a loop is still about 5x behind.</text>
 <text x="80" y="1682" font-size="26" font-weight="700" fill="#e2e8f0">leanzempic</text>
 <text x="262" y="1682" font-size="26" fill="#94a3b8">Apache-2.0  github.com/keithadler/leanzempic</text>
 </svg>
