@@ -593,6 +593,105 @@ first one's type. Pushing `Nat`s into an array that began as `Array UInt8` trunc
 baseline commit does the same (`garden/programs.py` `array_word_paths` first drew it out). The test avoids it
 with different capacities.
 
+
+## Array map, filter and fold: instructions per stage, then hoisted (2026-10-30)
+
+`array_funcs` was 2.6x slower than Lean's C backend (2.5x at the recommended settings). The goal of this work is the
+fewest instructions retired, so the numbers below are instructions retired (`/usr/bin/time -l`, deterministic to
+about 0.01 G between runs), heap allocation (`+RTS -s`) and best-of-15 CPU time, n = 2e6, `-A128m`, one worktree
+at `main` (01cd7c2) against one with the change, interleaved. Each stage was measured as its own program (the
+library call and the minimum around it), because the whole program hides which part costs what. Every program
+includes the 0.114 G that starting the Haskell program costs at `-A128m`, and `range` (the same for both).
+
+| program | Lean C | before | after |
+|---|---|---|---|
+| `Array.range` | 0.231 G | 0.152 G, 16.1 MB, 12 ms | 0.152 G, 16.1 MB, 11 ms |
+| range, then `map (* 3)` | 0.321 G | 0.508 G, 16.1 MB, 22 ms | 0.194 G, 16.1 MB, 14 ms |
+| range, then `filter (% 2 == 0)` | 0.301 G | 0.367 G, 56.8 MB, 21 ms | 0.367 G, 56.8 MB, 21 ms |
+| range, then `foldl (+)` | 0.271 G | 0.323 G, 48.0 MB, 17 ms | 0.192 G, 16.1 MB, 13 ms |
+| map, filter, `foldl` and the size of the filter | 0.431 G | 0.894 G, 88.8 MB | 0.449 G, 56.8 MB |
+| `array_funcs` (the whole program) | 0.792 G, 41 ms | 2.156 G, 321.4 MB, 94 ms | 1.481 G, 289.5 MB, 70 ms |
+
+Above `range`, the three stages cost (instructions per element in brackets): `map` 0.356 G (178) before, 0.042 G
+(21) after, against 0.090 G (45) for Lean; `foldl` 0.171 G (86) before, 0.040 G (20) after, against 0.040 G (20);
+`filter` 0.215 G (108) before and after, against 0.070 G (35). The rest of the program, which the three stages do
+not cover, is where most of what remains lies (increments over the map-and-filter prefix, before / after /
+Lean C): `zip` then `map` over pairs +0.70 G / +0.59 G / +0.27 G, `reverse` +0.16 G / +0.16 G / +0.02 G, `a ++ b`
+and `extract` +0.28 G / +0.28 G / +0.06 G, `any`, `all` and `contains` about 0.01 G before the change and in Lean C (they stop at
+the first hit; not measured separately after). `garden/perf.py` (best of 3, noisy on a shared machine): 2.3x to 2.4x before, 1.8x to 2.0x after.
+
+**Diagnosis.** Reading the STG and the assembly of the generated module for each stage:
+
+* `map`: 178 instructions per element, though the loop is unboxed and allocation-free. Each element did a read
+  (read the array's `IORef`, evaluate the node, branch on `Direct`/`BW`), an overflow-checked multiply, and a write
+  through `arrUSetBUW`, a `NOINLINE` call that read the node again, dispatched on its kind and rebuilt the result.
+  GHC saved seven registers in a continuation frame at every node evaluation. `Array.mapMUnsafe` was excluded from
+  hoisting because its writes change the buffer's element type.
+* `foldl`: 86 instructions per element, and 16 bytes of allocation per element: the accumulator was passed boxed.
+  GHC does not unbox a `ZNat` parameter that the function returns as it is (the base case of the loop is `b`), and
+  with a bang pattern on the parameter it does (checked by editing the generated module by hand: 48 MB to 16 MB).
+  The read is the same node evaluation as in `map`. A read-only loop had no hoist at all, because the hoist wanted
+  an in-place update to show that the array is unshared.
+* `filter`: 108 instructions per element: the read (as above) and `arrPushUW`, which writes the element in place
+  but must build a new 24-byte `Arr` (the length is a field) and read the node again, and doubles the buffer
+  (the 40 MB over `range`). Not changed, see below.
+* `zip`, `reverse`, `append`, `extract` are library functions compiled from Lean's definitions at an erased
+  element type, so they use the generic boxed element access and the persistent push, element by element. Native
+  Lean does a block copy or in-place swaps.
+
+**What shipped** (each change measured alone on `map` / `fold` before the next was added; the numbers are whole
+programs at n = 2e6):
+
+| change | `map` | `fold` |
+|---|---|---|
+| none | 0.508 G | 0.323 G |
+| the map's write has an in-line fast path that returns its argument (`aSetUWBF`) | 0.364 G, 16.1 MB | |
+| `Array.map` hoisted (`hoistMapWords`) | 0.216 G | |
+| `ZNat`/`Word` parameters get a bang pattern | | 0.312 G, 16.1 MB |
+| read-only loops hoisted (`hoistReadOnly`) | | 0.214 G |
+| a map over pairs is not hoisted (its check could only fail), and the in-line write handles a boxed buffer | 1.425 G before all of it, 1.002 G now, for `zip` then `map` | |
+
+* **`Array.map` on the raw buffer.** The same hoist as for loops that update an array in place, with one more
+  condition (every write is a `Word`, every read a `Word` read) so that the worker never changes the node.
+* **Read-only loops on the raw buffer** (`fold`, `any`, `all`, `contains`, `foldr`, hand-written loops). Sound
+  without ownership when the function calls nothing but itself, reads of the array and scalar arithmetic: nothing
+  that runs can change the node or the buffer. The argument and its tests are in `SOUNDNESS.md`.
+* **Bang patterns on `ZNat` and `Word` parameters** of every generated function. Every `let` of the generated code is
+  strict, so such a parameter is always an evaluated value. Not applied to `Any` (it can hold a lazy value).
+* **An in-line write that returns its own argument.** With `-fno-cse` an inlined function that matches on `Arr` and
+  returns it rebuilds the record: the first in-line version of the map's write allocated 48 MB more at n = 2e6
+  (0.414 G instead of 0.364 G, and 64 MB allocated). Deciding in line whether the write was done and returning the
+  argument gives 16.1 MB.
+
+**Guard against regressions.** Instructions retired against `main`, interleaved builds, default and recommended
+settings (`zempic.fuse`, `-A256m -O1g`). The seven real-world programs (`bench/realworld`): `binarytrees` -0.05% /
+-0.09%, `const_fold` +0.01% / -0.04%, `deriv` +0.53% / +0.49%, `qsort` +0.02% / +0.12%, `rbmap` +0.47% / +0.71%,
+`rbmap_checkpoint` +0.46% / +0.48%, `unionfind` -4.4% / -6.3% (the bang patterns); no output changed. The 18 chart
+rows that run here (13 garden programs and the five `Arrays` rows, `Main` and `FusionMain` included): every row is
+within -3.4% and +2.0%, except the ones this change was for. `array_funcs` 2.195 G to 1.521 G (-30.7%) at the
+default settings and 2.116 G to 1.564 G (-26.1%) at the recommended ones, "Array map and fold" 0.981 G to 0.304 G
+(-69.0%) and 1.029 G to 0.361 G (-64.9%), "Reverse by swaps" 0.444 G to 0.291 G (-34.6%) and 0.494 G to 0.347 G
+(-29.7%), `list_funcs` -5.6% / -1.1%. The one row that moved up by more
+than 1% is `float_math` (+2.0% at the default settings, -1.8% at the recommended ones): it has no array and the same
+binary varies between 0.279 G and 0.300 G from run to run, so that is noise. `rbmap` +0.7% is the largest increase
+that is not noise: it uses no array loop that this change touches, and the generated code differs from `main`'s only
+by the bang patterns on word parameters.
+
+**Tried and not shipped.**
+
+* A hoisted read of the input of `filter` while it pushes to another array. The read is 25 of the 108
+  instructions per element. Not sound without more: the pushed-to array could be an older version of the one read
+  (a `Diff`), and a write to it reroots the buffer under the worker. It would need a run-time check that the two are
+  in different families, for a gain of at most 0.05 G. Not built.
+* Bulk primitives for `Array.append`, `Array.extract` and `Array.reverse` (a block copy instead of a push per
+  element). They are the largest remaining costs after `zip` (0.28 G and 0.16 G above Lean) and need an ownership
+  rule (`append` consumes its first argument), a runtime function per buffer kind and tests of every kind
+  combination. Not built.
+* The first in-line version of the map's write (see above), 64 MB allocated: replaced.
+* Hoisting the map over pairs: it passes every static test, and the run-time check (a boxed buffer) fails at every
+  step, so the wrapper only added instructions: `zip` then `map` took 1.191 G with the hoist and 1.150 G without it
+  (adjacent runs), and 1.021 G once the in-line write also handled a boxed buffer. The read condition keeps it out.
+
 ## Ideas from tenet-hs, tried (2026-10-29)
 
 tenet-hs (an independent Lean kernel in Haskell, same author) got a 2.5x memory cut and large speed-ups
@@ -640,7 +739,7 @@ first. With it set correctly, best of 3, identical answers:
 
 The reason is what tenet-hs found about copying collectors: live data is the cost, not allocation.
 A fused pipeline never builds the intermediate list, so there is nothing for the collector to copy.
-All 219 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
+All 223 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
 
 **A GHC panic, found by fusion.** `list_funcs` with fusion made GHC 9.14.1 panic ("the 'impossible'
 happened", `StgToCmm.Env: variable not found co5_Xc`). It was deterministic for a given invocation but

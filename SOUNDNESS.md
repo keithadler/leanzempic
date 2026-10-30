@@ -109,9 +109,10 @@ A function may resolve an array's buffer once instead of at every access (`Zempi
 the hoisted worker runs. The claim and why it should hold:
 
 * The emitter hoists an array of function `f` only if the array is `Array e` with `e` of 8, 16, 32 or 64 bits
-  (also `Char`), `USize`, `Bool` or, in word mode, `Nat` (each has an unboxed buffer kind); `f` is not
-  `Array.mapMUnsafe`; and the array is a parameter `P` of `f`, or lies at a fixed path of field indices inside the
-  loop-state cells (`MProd`, `Prod`) that `P` holds. The scan follows *aliases*: variables that are the array, or
+  (also `Char`), `USize`, `Bool` or, in word mode, `Nat` (each has an unboxed buffer kind); or `f` is Lean's
+  in-place `Array.map` and passes the extra test of "Hoisted `Array.map` and read-only loops" below; and the array
+  is a parameter `P` of `f`, or lies at a fixed path of field indices inside the loop-state cells (`MProd`,
+  `Prod`) that `P` holds. The scan follows *aliases*: variables that are the array, or
   a cell holding it at a known path. They are `P`; the result of an in-place same-length update (`swap`, `set`,
   `uset`) of an alias that the analysis marked in place; the fields of an alias cell taken apart (`cases`, `proj`),
   at the right index only; a cell built (`MProd.mk`, `Prod.mk`) with exactly one alias among its fields; and a join
@@ -125,7 +126,8 @@ the hoisted worker runs. The claim and why it should hold:
   through the wrapper, which looks again. A closure that captures an alias, or a `cases` on the array itself,
   disables hoisting for the function.
 * At least one update is marked in place (so the array is `own` at entry: the analysis gives a parameter, or a field
-  of a cell parameter, that ownership only if every call passes an owned, dead array), and either the function
+  of a cell parameter, that ownership only if every call passes an owned, dead array; the one exception is a function
+  that never writes the array, see "Hoisted `Array.map` and read-only loops"), and either the function
   calls itself passing the array at the same path (a loop) or it reads or updates the array in place at three or
   more places (a step such as `qsortAux`'s median of three). The worker calls itself, and the copies of the
   function fixed to literals (`Emit.hsVariant`) call theirs, only when the call passes a cell holding the alias at
@@ -245,6 +247,88 @@ Survived, and why they cannot be observed:
 The earlier note here that two emitter mutations (`push` as length-preserving, and the in-place requirement
 dropped) went undetected is superseded: the first was not caught because the old garden programs never ran a
 hoisted loop at all, and no old program pushed in a loop whose array stayed hoistable. Both are now killed.
+
+## Hoisted `Array.map` and read-only loops
+
+Two more kinds of function resolve the buffer once (`Emit.hoistPlan`). Both use the scan above (aliases, uses, the
+run-time check of `aHoist*`); each adds one condition and one proof.
+
+**Lean's in-place `Array.map`** (`Array.mapMUnsafe`'s loop). It views the array as `Array NonScalar` and stores
+results of any type, so nothing in its type says what the buffer holds, and the runtime had to make a buffer boxed
+before a write of another type (`aDeopt`), which changes the array's node. The hoisted worker must never do that.
+So the hoist is allowed only if every write to the array in the function is an `Array.uset` of a value the emitter
+typed as a `Word` (`hoistMapWords`) and every read is a `Word` read. The wrapper's check then admits only a `Word`
+buffer (`aHoistW`), a `Word` written into a `Word` buffer leaves the buffer a `Word` buffer, and the worker only
+reads slot `i` and then writes slot `i` of the buffer it holds. Any other buffer (a `UInt8` buffer mapped to
+numbers, a buffer of pairs, a boxed one) fails the check and runs the ordinary code. The extra condition on reads
+is a performance guard: a map over pairs passes every other condition, and the check would fail at every step.
+
+**Functions that never write the array** (`fold`, `any`, `all`, `contains`, loops written by hand). They have no
+in-place update to show that the array is unshared, and the array may well be shared: the caller keeps it, or an
+older version of it exists. Reading the buffer raw is still sound if nothing can change the array's *node* or the
+buffer's contents while the worker runs. That needs no ownership, because the node is `Direct` with count >= 0 at
+entry (checked at run time) and only four things change a live node or its buffer: a persistent update of the array
+or of a version of its family (the new version takes the buffer and the array becomes a `Diff`), an in-place update
+(an owner), a read of an older version of the family (it reroots the buffer), and a copy (it marks the node stale,
+which leaves the contents alone). `hoistReadOnly` therefore accepts a function only if it calls nothing but: itself,
+passing the array on at its place; reads (`size`, `usize`, `get`, `uget`, `toList`) of the array itself; the cell
+constructors; and constants whose root is `Nat`, `Int`, `UInt8` .. `UInt64`, `USize`, `Bool`, `Char` or `Float`, on
+arguments that are not the array. It has no function value call, no local function, and no operation on any other
+array (another array could be an older version of this one: reading it reroots the buffer, and pushing to or
+writing it is a persistent update). Then nothing that runs during the loop can do any of the four, and the buffer
+the worker holds stays the array's contents. The worker of such a function is named `_hr`, so
+`tools/hoist_count.py` counts it apart from the workers that write.
+
+Testing: the garden programs `hoist_map_nat` (owned and shared sources, a closure that reads the source while it is
+mapped, a map of a persistent update, a map of a map), `hoist_map_mixed` (maps that change the element type or start
+from another buffer kind, and must not hoist), `hoist_fold_nat` (fold, `foldr`, `any`, `all`, `contains` and a
+hand-written loop over arrays that are shared and later changed) and `hoist_fold_alias` (loops that must not read
+raw: the body reads an older version of the array, pushes to it, accumulates into an array derived from it, reads
+a second array, or calls a function value that updates the array persistently). `tools/hoist_count.py --check`
+requires the first and third to run hoisted workers and the other two to run none. The property test
+`arrSetBW` runs `arrUSetBUW` (the map's write and its in-line fast path `aSetUWBF`) against a model on a live
+buffer, a lazy handle, the version a persistent update was made from, a version in a chain of 70 updates whose buffer
+was copied away (count -1), and indices -1, the length and `maxBound`, with a collection after each stray write and a
+check of the buffer's size word.
+
+Mutation testing of the new logic, 18 edits, each built and run against the four garden programs above, `array_funcs`,
+`array_word_paths` and the older `hoist_*` programs (the runtime edits against `tests/PropTests.hs` as well), then
+reverted:
+
+| Mutation | Result |
+|---|---|
+| read-only scan accepts any constant, not only scalar ones | killed: `hoist_fold_alias` gives a wrong answer |
+| read-only scan accepts any `Array.*` constant | killed: `hoist_fold_alias` |
+| read-only scan accepts a call of a function value | killed: `hoist_fold_alias` (`sumWith (poke a1)`) |
+| the read-only scan not applied at all | killed: `hoist_fold_alias` |
+| the read-only worker named `_h` like the others | killed: `tools/hoist_count.py --check` (`hoist_fold_nat` reports no read-only calls) |
+| `aSetUWBF` writes a version whose count is -1 | killed: `arrSetBW` (a chain keeps its contents) |
+| `aSetUWBF` writes a boxed buffer whose count is -1 | killed: `arrSetBW` |
+| `aSetUWBF` writes the wrong slot of a boxed buffer | killed: `arrSetBW` |
+| `aSetUWBF` without the range check | killed: `arrSetBW` (the buffer's size word is overwritten, and the run crashes) |
+| `arrUSetBUW` returns its argument when the fast path declined | killed: `arrSetBW`; `hoist_map_nat`, `hoist_map_mixed`, `array_word_paths` give wrong answers |
+| the hoisted map's write goes to slot `i + 1` | killed: `hoist_map_nat`, `array_funcs` |
+| `aSetUWBF` checks only `i >= length`, not `i < 0` | killed in three of the four seeds tried (the run crashed on a write at index -1); one seed passed, so it is weaker than the others |
+
+Survived, and why:
+
+* The scan of a call of a local function (`.fun`) in `hoistReadOnly` allows it. Not reachable, as for `hoistCheck`
+  above: local functions are lambda-lifted before the emitter runs.
+* A constant is accepted with the array among its arguments if it is scalar. Not observable: no scalar constant takes an array.
+* `hoistMapWords` accepting every write (a `UInt8` or `Bool` value into the array). Not observable in the
+  output: the map reads each slot immediately before it writes it, so the stale buffer the worker keeps reading is
+  still right, and the write goes to a new boxed buffer through the ordinary primitive. It does break the rule that
+  the worker never changes the node, so the check stays; it is a second line of defense.
+* The condition that every read of a mapped array is a `Word` read dropped (not run; by inspection a performance
+  guard only: the pair-map hoist then exists but its check fails at every step).
+* A bang pattern on `Any` parameters as well as `ZNat` and `Word` ones: survived the nine garden programs it was run
+  against (not the whole garden). It is not shipped: an `Any` parameter can hold a lazy value, which the bang would force.
+* `aSetUWBF` with `i > aLen arr` instead of `i >= aLen arr` (a write one slot past the end, into the buffer's spare
+  capacity). Equivalent: that slot is never read before a push writes it.
+
+One more finding: with `-fno-cse` (which the generated modules use) an inlined function that pattern-matches on `Arr`
+and returns it rebuilds the record, so an in-line write that returns its array allocated 24 bytes per element (48 MB
+at n = 2e6). `arrUSetBUW` therefore decides in line whether the write was done and returns its own argument.
 
 ## Assumptions the claim depends on
 

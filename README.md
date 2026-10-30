@@ -347,7 +347,7 @@ on.** Set the option before the definitions (the pass runs when Lean compiles th
 prints them). Measured on the garden with identical answers: a list pipeline over a `UInt8` hash 5x
 faster (0.15 s to 0.03 s), a tuple-state fold 3x (0.26 s to 0.08 s), `Int` list work 2x, `Option` and
 sum-type folds 2x to 3x. It is not free everywhere: a list merge sort got slower (0.09 s to 0.12 s).
-All 219 garden programs give the same answers with it on (`GARDEN_FUSE=1 python3 garden/run.py`).
+All 223 garden programs give the same answers with it on (`GARDEN_FUSE=1 python3 garden/run.py`).
 `#zempic` prints a warning when the code contains Lean's own list loops and the pass is off, so the
 speedup is not missed.
 
@@ -433,6 +433,13 @@ arrays, whether the array is a parameter of the loop or travels in the `MProd`/`
 used, a shared array, and an array of boxed elements run the ordinary code. If the array is not a live
 buffer at the loop's entry (a lazy handle, an old version) the ordinary code runs one step and the check is
 made again.
+
+Two more kinds of loop resolve the buffer once. Lean's in-place `Array.map` does when every value it writes is a
+`Nat` (word mode) or `USize`, and a loop that never writes the array (`foldl`, `foldr`, `any`, `all`, `contains`,
+or one written by hand) does when it calls nothing but itself, reads of the array and arithmetic, so that nothing
+that runs can change the array: it need not be unshared. On `array_funcs` (n = 2e6) the map went from 178 to 21
+instructions per element and the fold from 86 to 20, and the program from 2.16 G to 1.48 G instructions retired
+(Lean's C: 0.79 G); see [`BENCH.md`](BENCH.md).
 
 `set_option zempic.own false` turns the analysis off. [`SOUNDNESS.md`](SOUNDNESS.md) states exactly
 what is claimed, the assumptions it rests on, and what would make it stronger (it is tested and
@@ -584,8 +591,8 @@ Reading these honestly:
 * Arrays are slower only where a loop cannot resolve its buffer once. The ownership analysis took them from 3x to
   10x slower down to about 1x, and hoisting the buffer of a loop that updates an unshared unboxed array in place
   (see [Hoisted buffers](#hoisted-buffers)) made the sieve and the reversal faster than Lean's. What is left: the
-  library `Array.map`, `filter` and `zip` (the chart's 2.3x), loops that push or pop (1.1x), read-only loops over an
-  array the caller keeps, and a shared array mutated in a loop (2.9x in the chart, on an 8 ms native run that is mostly
+  library `filter`, `zip`, `append`, `extract` and `reverse` (`array_funcs` is 1.9x Lean's instructions, and the chart's 2.3x
+  was measured before `map` and read-only loops were hoisted), loops that push or pop (1.1x), and a shared array mutated in a loop (2.9x in the chart, on an 8 ms native run that is mostly
   start-up for the Haskell program too), where the persistent fallback runs.
 * Allocation-heavy code (trees, lists of pairs) is where GHC's copying collector and Lean's
   in-place reuse differ most.
@@ -637,7 +644,7 @@ An honest checklist, because "production" depends on what you need.
 |---|---|
 | Continuous integration | GitHub Actions runs the suite on Ubuntu and macOS 15 for every push, including the Cabal package build and a 52-program garden subset at `-O1` with fusion on |
 | Fails fast | an unsupported Lean version or a mistyped mode is a clear error; an unsupported Lean constant is an error that lists it, never silently dropped code |
-| Tested against Lean itself | the examples, 219 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
+| Tested against Lean itself | the examples, 223 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
 | Runtime tested against models | random operation sequences on arrays, strings, integers and the `Word`/`Natural` fast path, with deliberately broken runtimes caught |
 | Differential fuzzing | random Lean programs run by Lean and through leanzempic must agree (`tools/fuzz.py`) |
 | Machine-checked facts | Tenet verifies 265 of 265 declarations, including name-mangling injectivity |

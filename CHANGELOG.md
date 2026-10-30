@@ -5,6 +5,19 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* `Array.map` and read-only loops (`foldl`, `foldr`, `any`, `all`, `contains`, hand-written loops) read and write the
+  raw buffer like the other hoisted loops. The map's write has an in-line fast path that returns its own argument (an
+  inlined function that rebuilds `Arr` allocated 24 bytes per element under `-fno-cse`), and `ZNat` and `Word`
+  parameters of generated functions carry a bang pattern (GHC passes a returned accumulator unboxed only then). On
+  `array_funcs` (n = 2e6) instructions retired 2.16 G to 1.48 G (Lean's C: 0.79 G), allocation 321 MB to 290 MB; `map`
+  178 to 21 instructions per element, `foldl` 86 to 20, `filter` unchanged at 108 (Lean: 35). Against `main`, the seven
+  real-world programs change by -6.3% to +0.7% in instructions retired and the 18 chart rows by -69.0% to +2.0%
+  (`float_math` +2.0%, run-to-run noise; the large drops are `Array map and fold`, `array_funcs` and `Reverse by
+  swaps`). The soundness argument, 18 deliberate edits and what survived are in `SOUNDNESS.md`; per-stage data and
+  what was not built are in `BENCH.md`.
+* New garden programs `hoist_map_nat`, `hoist_map_mixed`, `hoist_fold_nat`, `hoist_fold_alias` (223 in all);
+  `tools/hoist_count.py` counts the read-only workers (`_hr`) apart from the writing ones and checks both; new
+  property test `arrSetBW` for the map's write.
 * Hoisted buffers now cover `Nat` (word mode), `USize` and `Bool` arrays, arrays inside the `MProd`/`Prod` state of
   `for` and `while` loops, arrays that reach a join point as a parameter, the copies of a loop fixed to literals, and
   functions without a loop that read or update the array in place at three or more places (`qsortAux`). Instructions
