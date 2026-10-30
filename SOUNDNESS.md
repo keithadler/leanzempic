@@ -102,6 +102,41 @@ versions, and `arrSwapU{8,16,32,64,W}` for swaps.
 * `growRaw`/`growBoxed` copy a buffer with `copyMutableByteArray#`/`copyMutableArray#` and clear the tail. A
   deliberate bug in the copy length crashes the property tests.
 
+## Hoisted buffers
+
+A loop may resolve an array's buffer once instead of at every access (`Zempic.Arr`, "Hoisted buffers";
+`Emit.hoistPlan`). The raw accesses assume that the array's node (`Direct buffer count`) does not change while
+the loop runs. The claim and why it should hold:
+
+* The emitter hoists parameter `P` of a self-recursive function only if: `P` is `Array e` with `e` of 8, 16, 32 or
+  64 bits; the function is not `Array.mapMUnsafe`; at least one in-place update of `P` or of the result of such an
+  update is marked in place by the analysis (so `P` is `own` at entry: the analysis gives a parameter that
+  ownership only if every call passes an owned, dead array); and every use of `P` and of those results is a read,
+  an in-place same-length update (`swap`, `set`, `uset`) marked in place, or a use after which no variable that
+  is that array is live (passed on, stored, returned, jumped with). A `push`, `pop` or persistent update is the
+  third kind, so it ends the raw accesses on that path; the next step goes back through the wrapper, which looks
+  again. A closure that captures the array, or a `cases` on it, disables hoisting for the function.
+* Owned means no other reference exists, so no other code can reroot or copy the buffer, create a lazy handle on
+  it (`aShare`) or mark it stale (count -1) while the loop runs; and the loop itself only reads and updates in
+  place, which leave the node unchanged.
+* The wrapper checks at run time that the node is `Direct` of the expected kind with count >= 0. A lazy handle, an
+  old version, the source of a copy and a boxed buffer all fail the check and run the ordinary code, so a wrong
+  static verdict is caught for those states. It is not caught if two live owners share a live buffer, as for the
+  ordinary in-place primitives.
+* Only the in-place primitives are replaced by raw ones. A persistent operation on the array stays persistent.
+
+Testing: `tests/PropTests.hs` `arrHoisted` (all four widths): raw reads, sets and swaps against a list model at
+indices -1, length, `maxBound`, `minBound` and in range; a default that must not be forced in range; a lazy handle,
+an old version, the version a copy was taken from (one of 401 along a chain with copies) and a boxed buffer must
+not be hoisted. Five deliberate bugs in the runtime were all detected: hoisting ignores the stale mark, swap
+bound off by one, read without a range check, write without a range check (crash), hoisting a lazy handle. Garden:
+`hoist_qsort_*`, `hoist_set_*`, `hoist_shared_*` (the caller keeps the array; one loop also pushes) and
+`hoist_escape_*` (the loop is also a value) for UInt8/16/32/64. **Not detected:** two deliberate bugs in the
+emitter's rule (treating `push` as length-preserving, and dropping the in-place requirement). The first
+produced hoisted code that kept a stale buffer after a push, yet no garden program differed; I did not find out
+why. The second changes nothing observable because only in-place primitives are made raw. Treat the emitter's
+scan as covered by the review above and by the runtime guard, not by a test that fails when it is wrong.
+
 ## Assumptions the claim depends on
 
 * **Single thread of use.** Arrays are mutable buffers behind `unsafeDupablePerformIO`; two threads

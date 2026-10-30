@@ -13,6 +13,9 @@ everything is pre-release (`0.1.0`).
   to 29.0 G; the other real-world programs are unchanged within 1%. New property test `natExactBig`.
   Cause of the 1.59x: `const_fold`'s packed answer exceeds 2^64, so the whole word run (10.5 G) is thrown
   away at the last multiply and the exact run repeats it; see `BENCH.md`.
+* Loops over an unshared `UInt8/16/32/64` array resolve its buffer once (hoisted buffers) and a pair has the
+  Haskell type of its components, so GHC returns pairs unboxed. `qsort` from 22.0 G to 14.7 G instructions
+  retired (native 15.1 G), 1.29 s to 0.89 s; unionfind 29.8 G to 26.1 G. See `BENCH.md` and `SOUNDNESS.md`.
 * Array reads and writes of a `Nat` (word mode) or `USize` element are done with no box (`arrUGetW`,
   `arrPushUW`, `arrUSetBUW`, ...), `Array.range` fills a word buffer in one pass, swaps and
   append/extract element moves no longer box, and the in-place primitives take unboxed arguments.

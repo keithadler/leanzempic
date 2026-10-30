@@ -460,6 +460,24 @@ def narrow_funcs():
             f"arrSetU{n} _ !a !i !v = arrIO (aSetF{n} (zu a) (arrIx i) v >>= \\ok -> if ok then return a else zo <$> aSetU{n} (zu a) (arrIx i) v)", f"{{-# INLINE arrSetU{n} #-}}", "",
             f"arrUSetU{n} :: Any -> Any -> Word -> {h} -> Any -> Any",
             f"arrUSetU{n} _ !a !i !v _ = arrIO (aSetF{n} (zu a) (fromIntegral i) v >>= \\ok -> if ok then return a else zo <$> aSetU{n} (zu a) (fromIntegral i) v)", f"{{-# INLINE arrUSetU{n} #-}}", ""]
+    # The same operations on a hoisted buffer (see "Hoisted buffers" in Zempic.Arr): the first argument is the
+    # resolved buffer, the array itself is only handed back.
+    for n, h in [("8", "Word8"), ("16", "Word16"), ("32", "Word32"), ("64", "Word64")]:
+        out += [
+            f"arrGetD{n}H :: HB {h} -> Any -> {h} -> Any -> ZNat -> {h}",
+            f"arrGetD{n}H b _ d _ !i = hGetD{n} b (arrIx i) d", f"{{-# INLINE arrGetD{n}H #-}}", "",
+            f"arrGetI{n}H :: HB {h} -> Any -> Any -> ZNat -> Any -> {h}",
+            f"arrGetI{n}H b _ _ !i _ = hGetD{n} b (arrIx i) idxErr{n}", f"{{-# INLINE arrGetI{n}H #-}}", "",
+            f"arrUGet{n}H :: HB {h} -> Any -> Any -> Word -> Any -> {h}",
+            f"arrUGet{n}H b _ _ !i _ = hGetD{n} b (fromIntegral i) idxErr{n}", f"{{-# INLINE arrUGet{n}H #-}}", "",
+            f"arrSetU{n}H :: HB {h} -> Any -> Any -> ZNat -> {h} -> Any",
+            f"arrSetU{n}H b _ !a !i !v = hSet b a (arrIx i) v", f"{{-# INLINE arrSetU{n}H #-}}", "",
+            f"arrUSetU{n}H :: HB {h} -> Any -> Any -> Word -> {h} -> Any -> Any",
+            f"arrUSetU{n}H b _ !a !i !v _ = hSet b a (fromIntegral i) v", f"{{-# INLINE arrUSetU{n}H #-}}", "",
+            f"arrSwapU{n}H :: HB {h} -> Any -> Any -> ZNat -> ZNat -> Any",
+            f"arrSwapU{n}H b _ !a !i !j = hSwap b a (arrIx i) (arrIx j)", f"{{-# INLINE arrSwapU{n}H #-}}", "",
+            f"arrSwapPU{n}H :: HB {h} -> Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any",
+            f"arrSwapPU{n}H b _ !a !i !j _ _ = hSwap b a (arrIx i) (arrIx j)", f"{{-# INLINE arrSwapPU{n}H #-}}", ""]
     for n in ["8", "16", "32", "64", "W"]:
         out += [f"arrSwapU{n} :: Any -> Any -> ZNat -> ZNat -> Any",
                 f"arrSwapU{n} _ !a !i !j = arrIO (aSwapF{n} (zu a) (arrIx i) (arrIx j) >>= \\ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))",

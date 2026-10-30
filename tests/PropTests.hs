@@ -59,6 +59,108 @@ failWith c msg = modifyIORef c (msg :)
 expect :: (Eq a, Show a) => Check -> String -> a -> a -> IO ()
 expect c what got want = unless (got == want) $ failWith c (what ++ ": got " ++ show got ++ ", want " ++ show want)
 
+-- * Hoisted buffers (Zempic.Arr, "Hoisted buffers")
+
+-- | The raw-buffer operations of one element width.
+data HOps t = HOps
+  { hoistT :: A.Arr -> Maybe (A.HB t)
+  , hGetT :: A.HB t -> Int -> t -> t
+  , hSetT :: A.HB t -> A.Arr -> Int -> t -> A.Arr
+  , hSwapT :: A.HB t -> A.Arr -> Int -> Int -> A.Arr
+  , hPushT :: A.Arr -> t -> IO A.Arr }
+
+-- | A loop that resolved the raw buffer once reads and writes exactly as a list model does, at every index
+-- (negative, past the end, huge), and the buffer is only handed out for an array that is a plain live
+-- buffer of the right kind: not a lazy handle, not an old version, not the source of a copy, not boxed.
+arrHoisted :: forall t. (Integral t, Bounded t) => Check -> Gen -> HOps t -> Int -> Int -> Int -> IO ()
+arrHoisted c g ops kind bits steps = do
+  let label s = s ++ " (hoisted, " ++ show bits ++ " bits)"
+      contents a = map (fromIntegral . (fromIntegral :: t -> Integer) . unsafeCoerce) <$> A.aToList a :: IO [Integer]
+      mset k v m = take k m ++ [v] ++ drop (k + 1) m
+      randV = do w <- next g
+                 r <- below g 4
+                 return (if r == 0 then toInteger (maxBound :: t) else toInteger (fromIntegral w :: t))
+      idx m = do r <- below g 8
+                 case r of
+                   0 -> return (-1)
+                   1 -> return (length m)
+                   2 -> return maxBound
+                   3 -> return minBound
+                   _ -> below g (length m + 1)
+      box :: Integer -> Any
+      box v = unsafeCoerce (fromInteger v :: t)
+  -- build a live array
+  a0 <- A.aEmptyK kind 2
+  let build a m 0 = return (a, m)
+      build a m k = do v <- randV; a' <- hPushT ops a (fromInteger v); build a' (m ++ [v]) (k - 1 :: Int)
+  n0 <- (+ 3) <$> below g 40
+  (a, m0) <- build a0 [] n0
+  case hoistT ops a of
+    Nothing -> failWith c (label "a live buffer of its kind is not hoisted")
+    Just hb -> do
+      let go :: A.Arr -> [Integer] -> Int -> IO [Integer]
+          go _ m 0 = return m
+          go arr m k = do
+            op <- below g 4
+            i <- idx m
+            j <- idx m
+            v <- randV
+            case op of
+              0 -> do
+                let want = if i >= 0 && i < length m then m !! i else v
+                expect c (label "get") (toInteger (hGetT ops hb i (fromInteger v))) want
+                when (i >= 0 && i < length m) $
+                  expect c (label "get does not force the default in range") (toInteger (hGetT ops hb i (error "default forced"))) want
+                go arr m (k - 1)
+              1 -> do
+                let r = hSetT ops hb arr i (fromInteger v)
+                got <- contents r
+                let m' = if i >= 0 && i < length m then mset i v m else m
+                expect c (label "set") got m'
+                go r m' (k - 1)
+              _ -> do
+                let r = hSwapT ops hb arr i j
+                got <- contents r
+                let m' = if i >= 0 && j >= 0 && i < length m && j < length m then mset j (m !! i) (mset i (m !! j) m) else m
+                expect c (label "swap") got m'
+                go r m' (k - 1)
+      mEnd <- go a m0 steps
+      gEnd <- contents a
+      expect c (label "the array after the loop") gEnd mEnd
+  -- not hoistable: a lazy handle (it copies at its first write), then a live buffer after that write
+  h <- A.aShare a
+  case hoistT ops h of
+    Nothing -> return ()
+    Just _ -> failWith c (label "a lazy handle is hoisted")
+  h' <- A.aSetU h 0 (box 1)
+  case hoistT ops h' of
+    Nothing -> failWith c (label "the copy a lazy handle made is not hoisted")
+    Just _ -> return ()
+  -- not hoistable: an old version (a persistent write made it a diff)
+  new <- A.aSet a 0 (box 5)
+  case hoistT ops a of
+    Nothing -> return ()
+    Just _ -> failWith c (label "an old version is hoisted")
+  case hoistT ops new of
+    Nothing -> failWith c (label "the newest version is not hoisted")
+    Just _ -> return ()
+  -- not hoistable: the version a buffer copy was taken from (marked stale) -- grow a chain of persistent writes
+  b0 <- A.aEmptyK kind 2
+  (b, _) <- build b0 [] 4
+  versions <- newIORef [b]
+  let grow arr 0 = return arr
+      grow arr k = do arr' <- A.aSet arr (k `mod` 4) (box (fromIntegral k)); modifyIORef versions (arr' :); grow arr' (k - 1 :: Int)
+  _ <- grow b 400
+  vs <- readIORef versions
+  let hoisted = [ () | v <- vs, Just _ <- [hoistT ops v] ]
+  expect c (label "of 401 versions along a chain with copies only the newest is hoisted") (length hoisted) 1
+  -- not hoistable: a boxed buffer
+  bx <- A.aEmptyK 0 2
+  bx' <- A.aPush bx (box 3)
+  case hoistT ops bx' of
+    Nothing -> return ()
+    Just _ -> failWith c (label "a boxed buffer is hoisted")
+
 -- * Arrays against a list model
 
 -- | The element kinds of an array (see Zempic.Arr): 0 boxed Int, 1 Word8, 2 Word16, 3 Word32,
@@ -664,6 +766,10 @@ main = do
       when (kind /= 0) $ arrPlaceholderRaw check gen kind
     arrRangeMove check gen
     natExactBig check gen
+    arrHoisted check gen (HOps (\a -> A.aHoist8 a Just Nothing) A.hGetD8 (\b a i v -> A.hSet b a i v) (\b a i j -> A.hSwap b a i j) A.aPushU8) 1 8 400
+    arrHoisted check gen (HOps (\a -> A.aHoist16 a Just Nothing) A.hGetD16 (\b a i v -> A.hSet b a i v) (\b a i j -> A.hSwap b a i j) A.aPushU16) 2 16 400
+    arrHoisted check gen (HOps (\a -> A.aHoist32 a Just Nothing) A.hGetD32 (\b a i v -> A.hSet b a i v) (\b a i j -> A.hSwap b a i j) A.aPushU32) 3 32 400
+    arrHoisted check gen (HOps (\a -> A.aHoist64 a Just Nothing) A.hGetD64 (\b a i v -> A.hSet b a i v) (\b a i j -> A.hSwap b a i j) A.aPushU64) 4 64 400
     forM_ [(0, 8), (1, 8), (0, 16), (2, 16), (0, 32), (3, 32), (0, 64), (4, 64)] $ \(kind, bits) ->
       case bits :: Int of
         8 -> arrNarrow check gen (NOps A.aPushU8 A.aSetU8 A.aGetP8 A.aGetPS8 A.aSwapU8) kind bits 300

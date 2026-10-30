@@ -24,16 +24,19 @@ module Zempic.Arr
   , aSwapU8, aSwapU16, aSwapU32, aSwapU64, aSwapUW, aSwapF8, aSwapF16, aSwapF32, aSwapF64, aSwapFW
   , aSetF8, aSetF16, aSetF32, aSetF64
   , aPushU8, aPushU16, aPushU32, aPushU64, aSetU8, aSetU16, aSetU32, aSetU64
+  , HB (..), aHoist8, aHoist16, aHoist32, aHoist64, hGetD8, hGetD16, hGetD32, hGetD64, hSwap, hSet
   ) where
 
 import Data.Array.Base (MArray, STUArray (..), getNumElements, unsafeRead, unsafeWrite)
+import System.IO.Unsafe (unsafeDupablePerformIO)
 import Data.Array.IO (IOArray, IOUArray, newArray)
 import Data.Array.IO.Internals (IOArray (..), IOUArray (..))
 import GHC.Arr (STArray (..))
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word16, Word32, Word64, Word8)
-import GHC.Exts (Any, Int (I#), Int#, RealWorld, State#, Word (W#), Word#, copyMutableArray#, copyMutableByteArray#, isTrue#, newArray#, newByteArray#, reallyUnsafePtrEquality#, runRW#, setByteArray#, (+#), (-#), (*#), (<#))
+import GHC.Exts (readWord8Array#, readWord16Array#, readWord32Array#, readWord64Array#, Any, Int (I#), Int#, RealWorld, State#, Word (W#), Word#, copyMutableArray#, copyMutableByteArray#, isTrue#, newArray#, newByteArray#, reallyUnsafePtrEquality#, runRW#, setByteArray#, (+#), (-#), (*#), (<#))
 import GHC.IO (IO (..))
+import GHC.Word (Word16 (W16#), Word32 (W32#), Word64 (W64#), Word8 (W8#))
 import Unsafe.Coerce (unsafeCoerce)
 
 -- | The element storage. Kind codes: 0 boxed, 1 Word8, 2 Word16, 3 Word32, 4 Word64, 5 Word,
@@ -1073,3 +1076,88 @@ aPushFromU arr src i = do
           writeIORef (aRef arr) (Direct b c)
       return (Arr (n + 1) (aRef arr))
     _ -> aGet src i (error "leanzempic: array index out of range") >>= aPushU arr
+
+-- * Hoisted buffers
+--
+-- A loop over an array that the ownership analysis proved unshared, and that only reads it and swaps or
+-- overwrites elements in place, need not look at the array's node on every access: the node cannot change
+-- while the loop runs (nothing else holds the array, and the loop never pushes, pops, copies or hands it
+-- on). The emitter resolves the buffer once, at the loop's entry, with 'aHoist8' .. 'aHoist64', and the loop
+-- then reads and writes the raw buffer through 'hGetD', 'hSwap' and 'hSet'. If the array is not in the one
+-- state the loop needs (a live buffer of the right kind, not marked stale, not a lazy handle), the loop runs
+-- on the ordinary primitives instead, and re-checks at each step, so a lazy handle that its first write turns
+-- into a live buffer is picked up from the next step on.
+
+-- | A live buffer of element type @e@ and the array's length, resolved once.
+data HB e = HB {-# UNPACK #-} !Int {-# UNPACK #-} !(IOUArray Int e)
+
+-- | Run @ok@ with the raw buffer if this array is a live (not stale, not lazy) buffer of kind 'B32'
+-- (resp. 8, 16, 64); otherwise run @slow@.
+aHoist32 :: Arr -> (HB Word32 -> r) -> r -> r
+aHoist32 arr ok slow = case unsafeDupablePerformIO (readIORef (aRef arr)) of
+  Direct (B32 a) c | c >= 0 -> ok (HB (aLen arr) a)
+  _ -> slow
+{-# INLINE aHoist32 #-}
+
+aHoist8 :: Arr -> (HB Word8 -> r) -> r -> r
+aHoist8 arr ok slow = case unsafeDupablePerformIO (readIORef (aRef arr)) of
+  Direct (B8 a) c | c >= 0 -> ok (HB (aLen arr) a)
+  _ -> slow
+{-# INLINE aHoist8 #-}
+
+aHoist16 :: Arr -> (HB Word16 -> r) -> r -> r
+aHoist16 arr ok slow = case unsafeDupablePerformIO (readIORef (aRef arr)) of
+  Direct (B16 a) c | c >= 0 -> ok (HB (aLen arr) a)
+  _ -> slow
+{-# INLINE aHoist16 #-}
+
+aHoist64 :: Arr -> (HB Word64 -> r) -> r -> r
+aHoist64 arr ok slow = case unsafeDupablePerformIO (readIORef (aRef arr)) of
+  Direct (B64 a) c | c >= 0 -> ok (HB (aLen arr) a)
+  _ -> slow
+{-# INLINE aHoist64 #-}
+
+-- | Read element @i@ of a hoisted buffer: the default when out of range (not forced otherwise); one unsigned
+-- comparison. One function per width, written on the primitive read so that no box is built for the result.
+hGetD8 :: HB Word8 -> Int -> Word8 -> Word8
+hGetD8 (HB n (IOUArray (STUArray _ _ _ m))) i@(I# i#) d
+  | (fromIntegral i :: Word) >= fromIntegral n = d
+  | otherwise = case runRW# (readWord8Array# m i#) of (# _, w #) -> W8# w
+{-# INLINE hGetD8 #-}
+
+hGetD16 :: HB Word16 -> Int -> Word16 -> Word16
+hGetD16 (HB n (IOUArray (STUArray _ _ _ m))) i@(I# i#) d
+  | (fromIntegral i :: Word) >= fromIntegral n = d
+  | otherwise = case runRW# (readWord16Array# m i#) of (# _, w #) -> W16# w
+{-# INLINE hGetD16 #-}
+
+hGetD32 :: HB Word32 -> Int -> Word32 -> Word32
+hGetD32 (HB n (IOUArray (STUArray _ _ _ m))) i@(I# i#) d
+  | (fromIntegral i :: Word) >= fromIntegral n = d
+  | otherwise = case runRW# (readWord32Array# m i#) of (# _, w #) -> W32# w
+{-# INLINE hGetD32 #-}
+
+hGetD64 :: HB Word64 -> Int -> Word64 -> Word64
+hGetD64 (HB n (IOUArray (STUArray _ _ _ m))) i@(I# i#) d
+  | (fromIntegral i :: Word) >= fromIntegral n = d
+  | otherwise = case runRW# (readWord64Array# m i#) of (# _, w #) -> W64# w
+{-# INLINE hGetD64 #-}
+
+-- | Exchange two elements in place (out of range: nothing happens); returns the array it was given.
+hSwap :: MArray IOUArray e IO => HB e -> x -> Int -> Int -> x
+hSwap (HB n a) arr i j
+  | (fromIntegral i :: Word) >= fromIntegral n || (fromIntegral j :: Word) >= fromIntegral n = arr
+  | otherwise = unsafeDupablePerformIO (do
+      x <- unsafeRead a i
+      y <- unsafeRead a j
+      unsafeWrite a i y
+      unsafeWrite a j x
+      return arr)
+{-# INLINE hSwap #-}
+
+-- | Overwrite an element in place (out of range: nothing happens); returns the array it was given.
+hSet :: MArray IOUArray e IO => HB e -> x -> Int -> e -> x
+hSet (HB n a) arr i v
+  | (fromIntegral i :: Word) >= fromIntegral n = arr
+  | otherwise = unsafeDupablePerformIO (unsafeWrite a i v >> return arr)
+{-# INLINE hSet #-}

@@ -49,6 +49,8 @@ Update (2026-10-29, branch `agent-cf`): `const_fold` retires 19.7 G instructions
 
 Update (2026-10-29): after the narrow-integer array work on branch `agent-perf2`, `qsort` is 1.58x (default) and 1.61x (recommended) of native instead of 2.84x and 2.82x; see `BENCH.md`. The other rows are unchanged within noise. The table above is the earlier measurement.
 
+Update (2026-10-29, hoisted buffers and typed pairs): `qsort` retires 14.7 G instructions against native's 15.1 G (was 22.0 G) and runs in 0.89 s against 0.80 s (was 1.29 s); unionfind 1.35 s against native 1.54 s; the other rows are unchanged in instructions. See `BENCH.md`.
+
 load averages at the start of each program's runs (1/5/15 min): binarytrees 4.7/4.8/6.7; const_fold 5.7/5.1/6.8; deriv 5.5/5.0/6.7; qsort 5.6/5.1/6.7; unionfind 5.2/5.1/6.6; nat_repr 7.2/5.5/6.8
 
 
