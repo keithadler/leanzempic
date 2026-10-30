@@ -1852,6 +1852,12 @@ def entry (n : Nat) : Nat :=
 add("hoist_fold_alias", _MAPPRE + '''
 -- loops whose body also touches the array in a way that can move or change its buffer, or reads an older version
 -- of it (which reroots the buffer): none may read the buffer raw
+-- a loop that calls a function value, which updates the array it is reading (persistently, so the array's node moves)
+partial def sumWith (f : Nat → Nat) (a : Array Nat) (i acc : Nat) : Nat :=
+  if i < a.size then sumWith f a (i + 1) ((acc + f a[i]!) % 1000003) else acc
+
+@[noinline] def poke (a : Array Nat) (x : Nat) : Nat := (a.set! 0 (x + 77))[0]! + (a.set! 1 x)[1]!
+
 def entry (n : Nat) : Nat :=
   let z := n / 1000
   let a0 := fromFn (n * 3 + 5) (fun i => i * 7 + 1)
@@ -1865,5 +1871,6 @@ def entry (n : Nat) : Nat :=
   -- two arrays read at once
   let a4 := fromFn (n * 3 + 5) (fun i => i + 2)
   let s4 := a1.foldl (fun acc x => (acc + x * a4[z]!) % 1000003) z
-  s1 + s2 * 3 + s3 * 5 + s4 * 7 + sumL a0 + sumL a1 * 9
+  let s5 := sumWith (poke a1) a1 z z
+  s1 + s2 * 3 + s3 * 5 + s4 * 7 + s5 * 11 + sumL a0 + sumL a1 * 9
 ''')

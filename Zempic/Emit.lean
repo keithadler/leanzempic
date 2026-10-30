@@ -1025,7 +1025,7 @@ partial def hoistSlots (ty : Expr) (pun : Bool := false) :
 buffer holds. The hoisted worker writes raw `Word`s into the buffer, and a write of any other value would have
 to make the buffer boxed (a change of the array's node that the worker must never cause). So the hoist is allowed
 only if every write to the array in the function is an `Array.uset` of a value that the emitter has typed as a
-`Word` (a `Nat` in word mode, or a `USize`). A `Word` buffer then stays a `Word` buffer; any other kind of
+`Word` (a `Nat` in word mode, or a `USize`) and every read is a `Word` read. A `Word` buffer then stays a `Word` buffer; any other kind of
 buffer fails the run-time check of `aHoistW` and runs the ordinary code. -/
 partial def hoistMapWords (a : Std.HashMap FVarId (List Nat)) (c : Code .pure) : EmitM Bool := do
   let fast := (← get).fast
@@ -1033,7 +1033,11 @@ partial def hoistMapWords (a : Std.HashMap FVarId (List Nat)) (c : Code .pure) :
   | .let d k =>
     let here ← match d.value with
       | .const g _ args =>
-        if hoistCount a args > 0 && hoistIsSet g then
+        -- a read that is not a `Word` read says the buffer is not a word buffer (a map over pairs, say), where the
+        -- hoist could only fail its run-time check at every step
+        if g == `Array.uget && hoistCount a args > 0 then
+          pure ((← get).wordGets.contains d.fvarId)
+        else if hoistCount a args > 0 && hoistIsSet g then
           match args[3]? with
           | some (Arg.fvar v) =>
             let t ← tyOf v

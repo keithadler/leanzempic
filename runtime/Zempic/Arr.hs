@@ -651,6 +651,8 @@ aSetUWBF arr i v s0
       IO m -> case m s0 of
         (# s1, node #) -> case node of
           Direct (BW a) c | c >= 0 -> case unsafeWrite a i v of IO w -> case w s1 of (# s2, _ #) -> (# s2, 1# #)
+          -- a boxed buffer takes the value as it is (the array holds pairs, say, and is mapped to numbers)
+          Direct (BBox a) c | c >= 0 -> case unsafeWrite a i (unsafeCoerce v) of IO w -> case w s1 of (# s2, _ #) -> (# s2, 1# #)
           _ -> (# s1, 0# #)
 {-# INLINE aSetUWBF #-}
 

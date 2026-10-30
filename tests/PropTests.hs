@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns, ScopedTypeVariables, MagicHash, UnboxedTuples #-}
 -- Copyright 2026 Keith Adler. Licensed under the Apache License, Version 2.0.
 --
 -- Model-based randomized tests of the Haskell runtime. Each structure is driven through long random
@@ -23,6 +23,11 @@ import System.Exit (exitFailure)
 import Unsafe.Coerce (unsafeCoerce)
 
 import Control.Exception (SomeException, evaluate, try)
+import System.Mem (performMajorGC)
+import Data.Array.Base (STUArray (..))
+import Data.Array.IO.Internals (IOUArray (..))
+import GHC.Exts (Int (I#), getSizeofMutableByteArray#)
+import GHC.IO (IO (..))
 import qualified Zempic.Arr as A
 import qualified Zempic.Nat.Exact as E
 import qualified Zempic.Nat.Word as W
@@ -662,7 +667,8 @@ arrSetBW c g kind steps = do
                1 -> return (length m)
                2 -> return maxBound
                _ -> below g (length m + 1)
-        v <- below g 1000
+        -- an out-of-range write uses the value 0, so that a stray one that lands on the buffer's size word is seen
+        v <- (\x -> if k < 0 || k >= length m then 0 else x) <$> below g 1000
         let inRange = k >= 0 && k < length m
             m' = if inRange then modelSet k v m else m
         (b, mb, olds') <- case op of
@@ -679,12 +685,46 @@ arrSetBW c g kind steps = do
           _ -> return (a, m, olds)
         gb <- allOf b
         expect c (label "the array after the write") gb mb
+        -- a write at an index outside the array must not touch memory outside the buffer: a stray write just before
+        -- the first element lands on the buffer's size word, and the next collection copies too little of it
+        when (k < 0 || k >= length m) performMajorGC
+        gb' <- allOf b
+        expect c (label "the array after a collection") gb' mb
+        -- the buffer's own size word is intact (an index of -1 would overwrite it)
+        case A.aHoistW b Just Nothing of
+          Just (A.HB n (IOUArray (STUArray _ _ _ marr))) -> do
+            bytes <- IO (\s -> case getSizeofMutableByteArray# marr s of (# s', z #) -> (# s', I# z #))
+            expect c (label "the buffer's size word") (bytes >= 8 * n) True
+          Nothing -> return ()
         -- the source of a lazy handle and every older version keep their contents
         forM_ olds' $ \(o, mo) -> do
           go <- allOf o
           expect c (label "an older version is unchanged by writes to a newer one") go mo
         return (b, mb, olds'))
     (a0, [], []) [1 .. steps]
+  -- a version whose buffer was copied away (count -1) is not the sole owner of what it holds: the versions older than it
+  -- are rebuilt from that buffer. The write goes the slow way, and every version in the chain keeps its contents.
+  forM_ [1 .. 3 :: Int] $ \_ -> do
+    n <- (+ 3) <$> below g 20
+    fresh <- A.aEmptyK kind 2
+    base <- foldM (\a i -> A.aPushUW a (fromIntegral i)) fresh [1 .. n]
+    let step (cur, ms) j = do
+          v <- below g 1000
+          let i = j `mod` n
+          nxt <- A.aSet cur i (enc 5 v)
+          return (nxt, ms ++ [(nxt, modelSet i v (snd (last ms)))])
+    (_, chain) <- foldM step (base, [(base, [1 .. n])]) [0 .. 70]
+    -- version 64 of the chain is the one whose buffer the 65th update copied away (the chain limit is 64 records);
+    -- nothing has read the older versions yet, so it still holds the buffer
+    let (vq, mq) = chain !! 64
+    kq <- below g (n + 2)
+    vv <- below g 1000
+    let r = setB vq (kq - 1) vv
+    gr <- allOf r
+    expect c (label "a write to the version whose buffer was copied away") gr (modelSet (kq - 1) vv mq)
+    forM_ chain $ \(o, mo) -> do
+      go <- allOf o
+      expect c (label "every version of the chain keeps its contents") go mo
   return ()
 
 -- | The Word-element variants (word-mode Nat arrays), on an unboxed kind-5 buffer and on a boxed one,
