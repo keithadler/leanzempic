@@ -161,6 +161,99 @@ arrHoisted c g ops kind bits steps = do
     Nothing -> return ()
     Just _ -> failWith c (label "a boxed buffer is hoisted")
 
+-- | The same for a hoisted Bool buffer: one byte per element, read back as a boxed Bool (the default, already
+-- boxed, when out of range).
+arrHoistedBool :: Check -> Gen -> Int -> IO ()
+arrHoistedBool c g steps = do
+  let label s = s ++ " (hoisted, Bool)"
+      contents a = map (unsafeCoerce :: Any -> Bool) <$> A.aToList a
+      mset k v m = take k m ++ [v] ++ drop (k + 1) m
+      randB = (== 0) <$> below g 2
+      byte b = if b then 1 else 0 :: Word8
+      boxB :: Bool -> Any
+      boxB = unsafeCoerce
+      idx m = do r <- below g 8
+                 case r of
+                   0 -> return (-1)
+                   1 -> return (length m)
+                   2 -> return maxBound
+                   3 -> return minBound
+                   _ -> below g (length m + 1)
+  a0 <- A.aEmptyK 6 2
+  let build a m 0 = return (a, m)
+      build a m k = do v <- randB; a' <- A.aPushU a (boxB v); build a' (m ++ [v]) (k - 1 :: Int)
+  n0 <- (+ 3) <$> below g 40
+  (a, m0) <- build a0 [] n0
+  case A.aHoistBool a Just Nothing of
+    Nothing -> failWith c (label "a live buffer of its kind is not hoisted")
+    Just hb -> do
+      let go :: A.Arr -> [Bool] -> Int -> IO [Bool]
+          go _ m 0 = return m
+          go arr m k = do
+            op <- below g 4
+            i <- idx m
+            j <- idx m
+            v <- randB
+            case op of
+              0 -> do
+                let want = if i >= 0 && i < length m then m !! i else v
+                expect c (label "get") (unsafeCoerce (A.hGetBool hb i (boxB v)) :: Bool) want
+                when (i >= 0 && i < length m) $
+                  expect c (label "get does not force the default in range") (unsafeCoerce (A.hGetBool hb i (error "default forced")) :: Bool) want
+                go arr m (k - 1)
+              1 -> do
+                let r = A.hSet hb arr i (byte v)
+                got <- contents r
+                let m' = if i >= 0 && i < length m then mset i v m else m
+                expect c (label "set") got m'
+                go r m' (k - 1)
+              _ -> do
+                let r = A.hSwap hb arr i j
+                got <- contents r
+                let m' = if i >= 0 && j >= 0 && i < length m && j < length m then mset j (m !! i) (mset i (m !! j) m) else m
+                expect c (label "swap") got m'
+                go r m' (k - 1)
+      mEnd <- go a m0 steps
+      gEnd <- contents a
+      expect c (label "the array after the loop") gEnd mEnd
+  h <- A.aShare a
+  case A.aHoistBool h Just Nothing of
+    Nothing -> return ()
+    Just _ -> failWith c (label "a lazy handle is hoisted")
+  new <- A.aSet a 0 (boxB True)
+  case A.aHoistBool a Just Nothing of
+    Nothing -> return ()
+    Just _ -> failWith c (label "an old version is hoisted")
+  case A.aHoistBool new Just Nothing of
+    Nothing -> failWith c (label "the newest version is not hoisted")
+    Just _ -> return ()
+  -- the version a buffer copy was taken from (marked stale) is not hoistable: of 401 versions only the newest is
+  b0 <- A.aEmptyK 6 2
+  (b, _) <- build b0 [] 4
+  versions <- newIORef [b]
+  let grow arr 0 = return arr
+      grow arr k = do arr' <- A.aSet arr (k `mod` 4) (boxB (even k)); modifyIORef versions (arr' :); grow arr' (k - 1 :: Int)
+  _ <- grow b 400
+  vs <- readIORef versions
+  expect c (label "of 401 versions along a chain with copies only the newest is hoisted")
+    (length [ () | v <- vs, Just _ <- [A.aHoistBool v Just Nothing] ]) 1
+  case A.aHoistW a Just Nothing of
+    Nothing -> return ()
+    Just _ -> failWith c (label "a Bool buffer is hoisted as Word")
+  bx <- A.aEmptyK 0 2
+  bx' <- A.aPush bx (boxB True)
+  case A.aHoistBool bx' Just Nothing of
+    Nothing -> return ()
+    Just _ -> failWith c (label "a boxed buffer is hoisted")
+  w <- A.aEmptyK 5 2
+  w' <- A.aPushUW w 1
+  case A.aHoistBool w' Just Nothing of
+    Nothing -> return ()
+    Just _ -> failWith c (label "a Word buffer is hoisted as Bool")
+  case A.aHoistW w' Just Nothing of
+    Nothing -> failWith c (label "a Word buffer is not hoisted as Word")
+    Just _ -> return ()
+
 -- * Arrays against a list model
 
 -- | The element kinds of an array (see Zempic.Arr): 0 boxed Int, 1 Word8, 2 Word16, 3 Word32,
@@ -770,6 +863,8 @@ main = do
     arrHoisted check gen (HOps (\a -> A.aHoist16 a Just Nothing) A.hGetD16 (\b a i v -> A.hSet b a i v) (\b a i j -> A.hSwap b a i j) A.aPushU16) 2 16 400
     arrHoisted check gen (HOps (\a -> A.aHoist32 a Just Nothing) A.hGetD32 (\b a i v -> A.hSet b a i v) (\b a i j -> A.hSwap b a i j) A.aPushU32) 3 32 400
     arrHoisted check gen (HOps (\a -> A.aHoist64 a Just Nothing) A.hGetD64 (\b a i v -> A.hSet b a i v) (\b a i j -> A.hSwap b a i j) A.aPushU64) 4 64 400
+    arrHoisted check gen (HOps (\a -> A.aHoistW a Just Nothing) A.hGetDW (\b a i v -> A.hSet b a i v) (\b a i j -> A.hSwap b a i j) A.aPushUW) 5 64 400
+    arrHoistedBool check gen 400
     forM_ [(0, 8), (1, 8), (0, 16), (2, 16), (0, 32), (3, 32), (0, 64), (4, 64)] $ \(kind, bits) ->
       case bits :: Int of
         8 -> arrNarrow check gen (NOps A.aPushU8 A.aSetU8 A.aGetP8 A.aGetPS8 A.aSwapU8) kind bits 300

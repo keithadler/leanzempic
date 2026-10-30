@@ -440,6 +440,39 @@ baSet a i b = strIO (zo <$> sSetByte (zu a) (arrIdx i) b)
 """.split("\n")
 
 
+BOOL_HOISTED = """arrGetDBoolH :: HB Word8 -> Any -> Any -> Any -> ZNat -> Any
+arrGetDBoolH b _ !d _ !i = hGetBool b (arrIx i) d
+{-# INLINE arrGetDBoolH #-}
+
+arrGetIBoolH :: HB Word8 -> Any -> Any -> ZNat -> Any -> Any
+arrGetIBoolH b _ _ !i _ = hGetBool b (arrIx i) (error "leanzempic: array index out of range")
+{-# INLINE arrGetIBoolH #-}
+
+arrUGetBoolH :: HB Word8 -> Any -> Any -> Word -> Any -> Any
+arrUGetBoolH b _ _ !i _ = hGetBool b (fromIntegral i) (error "leanzempic: array index out of range")
+{-# INLINE arrUGetBoolH #-}
+
+arrSetUBoolH :: HB Word8 -> Any -> Any -> ZNat -> Any -> Any
+arrSetUBoolH b _ !a !i !v = hSet b a (arrIx i) (boolByte v)
+{-# INLINE arrSetUBoolH #-}
+
+arrUSetUBoolH :: HB Word8 -> Any -> Any -> Word -> Any -> Any -> Any
+arrUSetUBoolH b _ !a !i !v _ = hSet b a (fromIntegral i) (boolByte v)
+{-# INLINE arrUSetUBoolH #-}
+
+arrSwapUBoolH :: HB Word8 -> Any -> Any -> ZNat -> ZNat -> Any
+arrSwapUBoolH b _ !a !i !j = hSwap b a (arrIx i) (arrIx j)
+{-# INLINE arrSwapUBoolH #-}
+
+arrSwapPUBoolH :: HB Word8 -> Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
+arrSwapPUBoolH b _ !a !i !j _ _ = hSwap b a (arrIx i) (arrIx j)
+{-# INLINE arrSwapPUBoolH #-}
+
+boolByte :: Any -> Word8
+boolByte v = case (zu v :: Bool) of { True -> 1; False -> 0 }
+{-# INLINE boolByte #-}
+""".split("\n")
+
 # Narrow-typed element operations (UInt8/16/32/64 and Char), chosen from the static element type.
 def narrow_funcs():
     out = ["-- Narrow-typed element operations: a UInt8/16/32/64 (or Char) element is read and written with no box",
@@ -462,7 +495,7 @@ def narrow_funcs():
             f"arrUSetU{n} _ !a !i !v _ = arrIO (aSetF{n} (zu a) (fromIntegral i) v >>= \\ok -> if ok then return a else zo <$> aSetU{n} (zu a) (fromIntegral i) v)", f"{{-# INLINE arrUSetU{n} #-}}", ""]
     # The same operations on a hoisted buffer (see "Hoisted buffers" in Zempic.Arr): the first argument is the
     # resolved buffer, the array itself is only handed back.
-    for n, h in [("8", "Word8"), ("16", "Word16"), ("32", "Word32"), ("64", "Word64")]:
+    for n, h in [("8", "Word8"), ("16", "Word16"), ("32", "Word32"), ("64", "Word64"), ("W", "Word")]:
         out += [
             f"arrGetD{n}H :: HB {h} -> Any -> {h} -> Any -> ZNat -> {h}",
             f"arrGetD{n}H b _ d _ !i = hGetD{n} b (arrIx i) d", f"{{-# INLINE arrGetD{n}H #-}}", "",
@@ -478,6 +511,8 @@ def narrow_funcs():
             f"arrSwapU{n}H b _ !a !i !j = hSwap b a (arrIx i) (arrIx j)", f"{{-# INLINE arrSwapU{n}H #-}}", "",
             f"arrSwapPU{n}H :: HB {h} -> Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any",
             f"arrSwapPU{n}H b _ !a !i !j _ _ = hSwap b a (arrIx i) (arrIx j)", f"{{-# INLINE arrSwapPU{n}H #-}}", ""]
+    # A Bool array keeps one byte per element and hands its elements over boxed, as the ordinary operations do.
+    out += BOOL_HOISTED
     for n in ["8", "16", "32", "64", "W"]:
         out += [f"arrSwapU{n} :: Any -> Any -> ZNat -> ZNat -> Any",
                 f"arrSwapU{n} _ !a !i !j = arrIO (aSwapF{n} (zu a) (arrIx i) (arrIx j) >>= \\ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))",

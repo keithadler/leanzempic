@@ -579,6 +579,66 @@ arrSwapPU64H :: HB Word64 -> Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
 arrSwapPU64H b _ !a !i !j _ _ = hSwap b a (arrIx i) (arrIx j)
 {-# INLINE arrSwapPU64H #-}
 
+arrGetDWH :: HB Word -> Any -> Word -> Any -> ZNat -> Word
+arrGetDWH b _ d _ !i = hGetDW b (arrIx i) d
+{-# INLINE arrGetDWH #-}
+
+arrGetIWH :: HB Word -> Any -> Any -> ZNat -> Any -> Word
+arrGetIWH b _ _ !i _ = hGetDW b (arrIx i) idxErrW
+{-# INLINE arrGetIWH #-}
+
+arrUGetWH :: HB Word -> Any -> Any -> Word -> Any -> Word
+arrUGetWH b _ _ !i _ = hGetDW b (fromIntegral i) idxErrW
+{-# INLINE arrUGetWH #-}
+
+arrSetUWH :: HB Word -> Any -> Any -> ZNat -> Word -> Any
+arrSetUWH b _ !a !i !v = hSet b a (arrIx i) v
+{-# INLINE arrSetUWH #-}
+
+arrUSetUWH :: HB Word -> Any -> Any -> Word -> Word -> Any -> Any
+arrUSetUWH b _ !a !i !v _ = hSet b a (fromIntegral i) v
+{-# INLINE arrUSetUWH #-}
+
+arrSwapUWH :: HB Word -> Any -> Any -> ZNat -> ZNat -> Any
+arrSwapUWH b _ !a !i !j = hSwap b a (arrIx i) (arrIx j)
+{-# INLINE arrSwapUWH #-}
+
+arrSwapPUWH :: HB Word -> Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
+arrSwapPUWH b _ !a !i !j _ _ = hSwap b a (arrIx i) (arrIx j)
+{-# INLINE arrSwapPUWH #-}
+
+arrGetDBoolH :: HB Word8 -> Any -> Any -> Any -> ZNat -> Any
+arrGetDBoolH b _ !d _ !i = hGetBool b (arrIx i) d
+{-# INLINE arrGetDBoolH #-}
+
+arrGetIBoolH :: HB Word8 -> Any -> Any -> ZNat -> Any -> Any
+arrGetIBoolH b _ _ !i _ = hGetBool b (arrIx i) (error "leanzempic: array index out of range")
+{-# INLINE arrGetIBoolH #-}
+
+arrUGetBoolH :: HB Word8 -> Any -> Any -> Word -> Any -> Any
+arrUGetBoolH b _ _ !i _ = hGetBool b (fromIntegral i) (error "leanzempic: array index out of range")
+{-# INLINE arrUGetBoolH #-}
+
+arrSetUBoolH :: HB Word8 -> Any -> Any -> ZNat -> Any -> Any
+arrSetUBoolH b _ !a !i !v = hSet b a (arrIx i) (boolByte v)
+{-# INLINE arrSetUBoolH #-}
+
+arrUSetUBoolH :: HB Word8 -> Any -> Any -> Word -> Any -> Any -> Any
+arrUSetUBoolH b _ !a !i !v _ = hSet b a (fromIntegral i) (boolByte v)
+{-# INLINE arrUSetUBoolH #-}
+
+arrSwapUBoolH :: HB Word8 -> Any -> Any -> ZNat -> ZNat -> Any
+arrSwapUBoolH b _ !a !i !j = hSwap b a (arrIx i) (arrIx j)
+{-# INLINE arrSwapUBoolH #-}
+
+arrSwapPUBoolH :: HB Word8 -> Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
+arrSwapPUBoolH b _ !a !i !j _ _ = hSwap b a (arrIx i) (arrIx j)
+{-# INLINE arrSwapPUBoolH #-}
+
+boolByte :: Any -> Word8
+boolByte v = case (zu v :: Bool) of { True -> 1; False -> 0 }
+{-# INLINE boolByte #-}
+
 arrSwapU8 :: Any -> Any -> ZNat -> ZNat -> Any
 arrSwapU8 _ !a !i !j = arrIO (aSwapF8 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
 {-# INLINE arrSwapU8 #-}

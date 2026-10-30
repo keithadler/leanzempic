@@ -640,7 +640,7 @@ first. With it set correctly, best of 3, identical answers:
 
 The reason is what tenet-hs found about copying collectors: live data is the cost, not allocation.
 A fused pipeline never builds the intermediate list, so there is nothing for the collector to copy.
-All 109 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
+All 219 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
 
 **A GHC panic, found by fusion.** `list_funcs` with fusion made GHC 9.14.1 panic ("the 'impossible'
 happened", `StgToCmm.Env: variable not found co5_Xc`). It was deterministic for a given invocation but
@@ -785,16 +785,98 @@ What changed:
 Other real-world programs, instructions retired before and after (recommended settings): binarytrees 11.47 G /
 11.47 G, const_fold 26.35 G / 26.38 G, deriv 8.43 G / 8.40 G, rbmap 6.20 G / 6.20 G, rbmap_checkpoint 9.21 G /
 9.21 G (all within the 0.2% run-to-run noise), unionfind 29.81 G to 26.10 G (1.77 s to 1.35 s; native 1.54 s).
-The array rows of the chart (`examples/Arrays.lean`) are unchanged in instructions (3.01, 2.89, 0.92, 0.42,
-1.57 G): their arrays travel inside the loop-state tuple of a `for` loop, not as a parameter, so the hoist does not
-apply to them.
+The array rows of the chart (`examples/Arrays.lean`) were unchanged in instructions (3.01, 2.89, 0.92, 0.42,
+1.57 G): their arrays travel inside the loop-state tuple of a `for` loop, not as a parameter, so the hoist did not
+apply to them (it does now, see the next section).
 
 Limits and what is not done:
 
 * Only an array that is a direct parameter of a self-recursive function, of `UInt8/16/32/64` (or `Char`) elements.
-  `Nat`/`USize`/`Bool` arrays and arrays inside a loop's state tuple are not hoisted. `qsortAux`, whose array reaches
-  its helpers through join-point parameters and a pair component, is not either, and it is now a quarter of the time.
+  (Superseded by the next section: `Nat`, `USize` and `Bool` arrays, arrays in a loop's state tuple and `qsortAux`,
+  whose array reaches its helpers through join-point parameters, are hoisted now.)
 * `qsortAux` (16 bytes per call), `mkRandomArray` (23 per push) and `isSorted` (23 per step) still allocate (ticky, n = 100).
+
+## Hoisted buffers through loop-state cells, join points, `Nat`, `USize` and `Bool` arrays (2026-10-30)
+
+Hoisting (the section above) covered a direct parameter of `UInt8/16/32/64` elements. The array rows of the chart were
+untouched: their arrays travel in the `MProd` state of a `for` or `while` loop, their elements are `Nat` or `Bool`, or
+the array reaches its helpers through join points (`qsortAux`). Every shape below was extended only as far as a
+test could be made to fail when the scan was wrong (conditions and mutation results in `SOUNDNESS.md`).
+
+Same machine, A/B against a worktree of `main` (e30a39e), interleaved, best of 3, `/usr/bin/time -l`. Instructions
+retired are deterministic to about 0.2%; the times are best of 3 on a shared machine (load average 5 to 8), so a
+difference under about 10% is noise (`unionfind` shows +8% time on identical instructions).
+
+**The seven real-world programs** (recommended settings; default settings in parentheses are instructions only):
+
+| program | `main` | now | change | time `main` / now |
+|---|---|---|---|---|
+| binarytrees | 11.41 G (11.66 G) | 11.42 G (11.64 G) | +0.1% (-0.1%) | 0.87 s / 0.90 s |
+| const_fold | 19.44 G (19.63 G) | 19.46 G (19.62 G) | +0.1% (-0.0%) | 1.37 s / 1.37 s |
+| deriv | 8.35 G (9.41 G) | 8.35 G (9.41 G) | +0.0% (+0.1%) | 0.71 s / 0.72 s |
+| qsort | 14.63 G (14.59 G) | 11.43 G (11.39 G) | -21.8% (-22.0%) | 1.01 s / 0.82 s |
+| rbmap | 6.09 G (6.41 G) | 6.09 G (6.41 G) | +0.0% (+0.0%) | 0.48 s / 0.49 s |
+| rbmap_checkpoint | 9.08 G (10.44 G) | 9.08 G (10.44 G) | +0.0% (+0.1%) | 0.75 s / 0.73 s |
+| unionfind | 26.03 G (27.39 G) | 26.03 G (27.37 G) | -0.0% (-0.0%) | 1.67 s / 1.81 s |
+
+`qsort` now retires fewer instructions than native Lean's C (15.1 G): `qsortAux` (the median of three and its
+swaps, reached through join-point parameters) resolves its buffer once per call, and `partitionAux` already did.
+The other six did not change (within 0.2%, the run-to-run noise of instructions retired).
+
+**The array rows of the chart** (`examples/Arrays.lean`, `ArraysMainT`, recommended settings; default settings in
+parentheses; `garden/` rows with fusion on):
+
+| row | `main` | now | change | time `main` / now |
+|---|---|---|---|---|
+| Sieve (Bool array) | 3.10 G (3.07 G) | 1.71 G (1.67 G) | -44.8% (-45.5%) | 0.15 s / 0.09 s |
+| Prefix sums (Nat array) | 2.96 G (2.97 G) | 1.58 G (1.59 G) | -46.6% (-46.5%) | 0.16 s / 0.12 s |
+| Array map and fold | 1.02 G (0.98 G) | 1.02 G (0.98 G) | +0.0% (-0.1%) | 0.06 s / 0.06 s |
+| Reverse by swaps | 0.52 G (0.48 G) | 0.49 G (0.44 G) | -7.1% (-7.7%) | 0.05 s / 0.05 s |
+| Push and pop stack | 1.67 G (1.64 G) | 1.67 G (1.64 G) | -0.0% (-0.2%) | 0.11 s / 0.11 s |
+| Array map/filter/fold (`array_funcs`) | 2.08 G | 2.08 G | +0.0% | 0.12 s / 0.12 s |
+| Shared array, insertion sort (`array_misc`) | 0.53 G | 0.26 G | -50.6% | 0.03 s / 0.03 s |
+
+The sieve's inner `while` loop, the prefix-sum loop (a `Nat` array, which the earlier work did not hoist),
+the reversal and the insertion sort's `swapLoop` now run on the raw buffer. Not moved, and why:
+
+* *Array map and fold* and *Array map/filter/fold*: the `map` is Lean's in-place `Array.mapMUnsafe`, which
+  changes the element type of the buffer it writes (it is excluded from hoisting), and the fold is a read-only loop
+  over an array the caller uses again, so nothing proves it unshared. A read-only loop would need the analysis's
+  verdict on the parameter, which it does not export; that was not done.
+* *Push and pop stack*: a push or a pop changes the array's length, which a hoisted buffer cannot allow.
+* *Reverse by swaps* gains 7% because its second loop (a checksum over the array, read-only) is not hoisted for the
+  same reason as the fold.
+
+**Each shape on its own** (garden programs of `SOUNDNESS.md`, built by pushes, instructions retired at the given
+`n`, recommended settings):
+
+| shape | program, n | `main` | now | change |
+|---|---|---|---|---|
+| `Nat` array, direct parameter | `hoist_qsort_nat`, 30000 | 0.895 G | 0.495 G | -44.7% |
+| `USize` array, direct parameter | `hoist_qsort_usize`, 30000 | 0.875 G | 0.487 G | -44.4% |
+| `UInt32` array (control, hoisted before) | `hoist_qsort_uint32`, 30000 | 0.482 G | 0.482 G | -0.1% |
+| `Bool` array, direct parameter | `hoist_qsort_bool`, 1500 | 17.09 G | 13.84 G | -19.0% |
+| `Nat` array, prefix sum, swaps | `hoist_set_nat`, 400000 | 1.873 G | 1.507 G | -19.5% |
+| `USize` array, prefix sum, swaps | `hoist_set_usize`, 400000 | 2.650 G | 2.498 G | -5.8% |
+| `Bool` array, loops that mostly are not hoistable | `hoist_set_bool`, 6000 | 0.720 G | 0.728 G | +1.0% |
+| caller keeps the array (lazy copy) | `hoist_shared_nat`, 400000 | 0.817 G | 0.714 G | -12.7% |
+| array in the state of `while` and `for` loops | `hoist_cell_loop_uint8`, 1.5e6 | 2.755 G | 1.562 G | -43.3% |
+| the same, `Nat` | `hoist_cell_loop_nat`, 1.5e6 | 3.313 G | 1.733 G | -47.7% |
+| two arrays in the state, roles swapped | `hoist_cell_two_nat`, 1.5e6 | 3.734 G | 3.181 G | -14.8% |
+| hoisted array is the second field | `hoist_cell_second_nat`, 1.5e6 | 2.736 G | 2.197 G | -19.7% |
+| array moves between fields | `hoist_cell_move_nat`, 1.5e6 | 2.593 G | 2.185 G | -15.7% |
+| median of three through join points | `hoist_cell_jpok_nat`, 1.5e6 | 5.125 G | 2.130 G | -58.4% |
+
+`hoist_set_bool` is dominated by a loop that is correctly not hoisted (it reads a neighbor and sets in a branch,
+so its set is not marked in place and every step is a persistent update); its three hoisted loops are short, and
+the wrapper's check costs the 1.0%. It is the one program above that got worse.
+
+Limits and what is not done:
+
+* Read-only loops over an unshared array are not hoisted (no in-place update to show the array is unshared).
+* `Array.mapMUnsafe` (`Array.map`) is not hoisted; a loop that pushes or pops is not hoistable.
+* Only the cells `MProd` and `Prod` are followed; the array in a user structure is not.
+* The element kinds are those with an unboxed buffer. In exact mode (`Natural`) a `Nat` array is boxed and not hoisted.
 
 ## Peak memory: where it comes from, and what it costs to reduce (2026-10-29)
 

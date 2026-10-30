@@ -224,15 +224,21 @@ def builtinTypes : List Name :=
 
 /-! ## Emitter state -/
 
-/-- A loop whose array is resolved to its raw buffer once (see "Hoisted buffers" in `Zempic.Arr`):
-parameter `kidx` is the array, `kind` the element width (`"8"`, `"16"`, `"32"`, `"64"`), `hty` the
-Haskell element type, and `aliases` every variable of the function that is that array (the parameter
-and the results of its in-place updates). -/
+/-- A function whose array is resolved to its raw buffer once (see "Hoisted buffers" in `Zempic.Arr`):
+parameter `kidx` holds the array, either as the parameter itself or inside nested loop-state cells
+(`MProd`, `Prod`) at the field `path` (`cells` names the cell type at each step); `kind` is the buffer kind
+(`"8"`, `"16"`, `"32"`, `"64"`, `"W"` for a `Word` buffer, `"Bool"`), `sfx` the suffix the ordinary array
+primitives get at this element type (`""` for `Bool`), `hty` the Haskell element type of the raw buffer, and
+`amap` every variable of the function that is that array or a cell holding it, with the path to the array
+inside it (`[]` for the array itself). -/
 structure Hoist where
   kidx : Nat
+  path : List Nat
+  cells : List Name
   kind : String
+  sfx : String
   hty : String
-  aliases : Std.HashSet FVarId
+  amap : Std.HashMap FVarId (List Nat)
   deriving Inhabited
 
 /-- Emitter state: variable names and types, join points, the queue of constants still to
@@ -781,23 +787,28 @@ partial def usedAsWord (fast : Bool) (x : FVarId) : Code .pure → Bool
 
 /-! ### Hoisted array buffers
 
-A self-recursive function with an array parameter that the ownership analysis proved unshared, and that
-inside the function is only read and updated in place without changing its length, can resolve the
-array's buffer once instead of at every access (`Zempic.Arr`, "Hoisted buffers"). `hoistPlan` decides
-when. The conditions, all of which must hold:
+A function with an array parameter that the ownership analysis proved unshared, and that inside the function
+is only read and updated in place without changing its length, can resolve the array's buffer once instead of
+at every access (`Zempic.Arr`, "Hoisted buffers"). `hoistPlan` decides when. The array may be the parameter
+itself or lie inside the loop-state cells (`MProd`, `Prod`) that a `for` or `while` loop passes around. The
+conditions, all of which must hold:
 
-* the parameter is `Array e` with `e` a `UInt8/16/32/64` (or `Char`) and the function is not the in-place
-  `Array.map`, whose writes change the buffer's element type;
-* every use of the array (the parameter, and the result of each in-place update of it, which is the
-  same array) is a read (`size`, `get`, `uget`, `toList`), an in-place update that keeps its length
-  (`swap`, `set`, `uset`) that the analysis marked in place, or a use after which the array is not used
-  again on that path (passed to another function, stored, returned, jumped with). Nothing that changes
-  the node of the array (push, pop, a persistent update, a copy) is followed by a raw access;
-* at least one update is marked in place (so the analysis proved the parameter owned at entry) and the
-  function calls itself with the array in the same position (so there is a loop to speed up).
+* the array is `Array e` with `e` a `UInt8/16/32/64`, `Char`, `USize`, `Bool` or (in word mode) `Nat`, and the
+  function is not the in-place `Array.map`, whose writes change the buffer's element type;
+* every use of the array, and of every variable that is the array or a cell holding it (the parameter; the
+  result of each in-place update; the fields of a cell that is taken apart; a cell built from such a variable;
+  a join point's parameter that every jump fills with such a variable) is a read (`size`, `get`, `uget`,
+  `toList`), an in-place update that keeps its length (`swap`, `set`, `uset`) that the analysis marked in
+  place, building or taking apart a cell, a jump to a join point whose parameter is then the same kind of
+  variable, or a use after which no such variable is used again on that path (passed to another function,
+  stored, returned, jumped with). Nothing that changes the node of the array (push, pop, a persistent update,
+  a copy) is followed by a raw access;
+* at least one update is marked in place (so the analysis proved the array owned at entry), and either the
+  function calls itself passing the array in the same place (so there is a loop to speed up) or it reads or
+  updates the array in place at three or more places.
 
 The hoisted worker then runs only while the array stays a live buffer, which nothing can change: it is
-owned, so no other reference can reroot or copy it, and the loop does not push, pop or hand it on. -/
+owned, so no other reference can reroot or copy it, and the worker does not push, pop or hand it on. -/
 
 /-- Position of the array among the Lean arguments of an `Array.*` primitive that hoisting understands. -/
 def hoistArrIdx (c : Name) : Option Nat :=
@@ -814,87 +825,224 @@ def hoistIsRead (c : Name) : Bool :=
 def hoistIsSet (c : Name) : Bool :=
   [`Array.swapIfInBounds, `Array.swap, `Array.set!, `Array.set, `Array.uset].contains c
 
+/-- The constructors of the loop-state cells that hoisting looks through. Both have two type parameters. -/
+def hoistIsCell (c : Name) : Bool := c == `MProd.mk || c == `Prod.mk
+
 /-- What the scan found. -/
 structure HScan where
-  aliases : Std.HashSet FVarId := {}
+  amap : Std.HashMap FVarId (List Nat) := {}
+  /-- For each join point, the path of the array in each parameter (none: not the array or a cell holding it). -/
+  jpar : Std.HashMap FVarId (Array (Option (List Nat))) := {}
   ok : Bool := true
   destr : Bool := false
   loops : Bool := false
+  raws : Nat := 0
 
-/-- How many of the arguments are the array (or one of its aliases)? -/
-def hoistCount (a : Std.HashSet FVarId) (args : Array (Arg .pure)) : Nat :=
+/-- How many of the arguments are the array or a cell holding it? -/
+def hoistCount (a : Std.HashMap FVarId (List Nat)) (args : Array (Arg .pure)) : Nat :=
   args.foldl (fun n x => match x with | .fvar y => if a.contains y then n + 1 else n | _ => n) 0
 
-/-- Is the argument at position `i` an alias, and the only one? -/
-def hoistSimple (a : Std.HashSet FVarId) (args : Array (Arg .pure)) (i : Nat) : Bool :=
-  hoistCount a args == 1 && (match args[i]? with | some (.fvar y) => a.contains y | _ => false)
+/-- Is the argument at position `i` the array itself, and the only argument that is the array or holds it? -/
+def hoistSimple (a : Std.HashMap FVarId (List Nat)) (args : Array (Arg .pure)) (i : Nat) : Bool :=
+  hoistCount a args == 1 && (match args[i]? with | some (.fvar y) => a[y]? == some [] | _ => false)
 
-/-- Walk function `f`'s code for the conditions above. `kidx` is the array's parameter position. -/
-partial def hoistWalk (f : Name) (kidx : Nat) (destr : Std.HashSet (Name × FVarId))
-    (jf : Std.HashMap FVarId Own.FVS) (c : Code .pure) : StateM HScan Unit := do
-  let gone := fun (later : Own.FVS) => do
-    let st ← get
-    if st.aliases.toList.any later.contains then modify fun s => { s with ok := false }
+/-- Is the argument at position `i` a variable holding the array at `path`, and the only argument that is the
+array or holds it? -/
+def hoistSimpleAt (a : Std.HashMap FVarId (List Nat)) (path : List Nat) (args : Array (Arg .pure))
+    (i : Nat) : Bool :=
+  hoistCount a args == 1 && (match args[i]? with | some (.fvar y) => a[y]? == some path | _ => false)
+
+/-- All the jumps to each join point of `c`, with their arguments. -/
+partial def hoistJumps (c : Code .pure) (acc : Std.HashMap FVarId (Array (Array (Arg .pure)))) :
+    Std.HashMap FVarId (Array (Array (Arg .pure))) :=
+  match c with
+  | .let _ k => hoistJumps k acc
+  | .fun d k => hoistJumps k (hoistJumps d.value acc)
+  | .jp d k => hoistJumps k (hoistJumps d.value acc)
+  | .jmp j args => acc.insert j ((acc.getD j #[]).push args)
+  | .cases cs => cs.alts.foldl (fun a alt => match alt with
+      | .alt _ _ k => hoistJumps k a
+      | .default k => hoistJumps k a) acc
+  | _ => acc
+
+/-- Record that `x` is the array (or a cell holding it) at `path`. Two different paths for one variable is a
+case the scan does not understand. -/
+def hoistSet (x : FVarId) (path : List Nat) : StateM HScan Unit :=
+  modify fun s => match s.amap[x]? with
+    | none => { s with amap := s.amap.insert x path }
+    | some q => if q == path then s else { s with ok := false }
+
+/-- First pass: which variables are the array or a cell holding it? (Repeated until nothing new is found.) -/
+partial def hoistInfer (f : Name) (destr : Std.HashSet (Name × FVarId))
+    (jumps : Std.HashMap FVarId (Array (Array (Arg .pure)))) (c : Code .pure) : StateM HScan Unit := do
   match c with
   | .let d k =>
-    let st ← get
-    let a := st.aliases
+    let a := (← get).amap
     match d.value with
     | .const g _ args =>
       if hoistCount a args == 0 then pure ()
-      else if hoistIsRead g && (hoistArrIdx g).any (hoistSimple a args) then pure ()
       else if hoistIsSet g && (hoistArrIdx g).any (hoistSimple a args) && destr.contains (f, d.fvarId) then
-        modify fun s => { s with aliases := s.aliases.insert d.fvarId, destr := true }
+        hoistSet d.fvarId []
+      else if hoistIsCell g then
+        let fields := args.extract 2 args.size
+        if hoistCount a fields == 1 then
+          for fld in fields, j in [0:fields.size] do
+            if let .fvar y := fld then
+              if let some q := a[y]? then hoistSet d.fvarId (j :: q)
+      else pure ()
+    | .proj _ i x =>
+      if let some (j :: q) := a[x]? then
+        if i == j then hoistSet d.fvarId q
+    | _ => pure ()
+    hoistInfer f destr jumps k
+  | .fun d k =>
+    hoistInfer f destr jumps d.value
+    hoistInfer f destr jumps k
+  | .jp d k =>
+    -- A parameter is the array (or a cell holding it) if every jump fills it with that.
+    let js := jumps.getD d.fvarId #[]
+    let mut pars : Array (Option (List Nat)) := #[]
+    for _ in d.params, i in [0:d.params.size] do
+      let a := (← get).amap
+      let ps := js.map fun args => match args[i]? with
+        | some (.fvar y) => a[y]?
+        | _ => none
+      let first := (ps[0]?).getD none
+      let allSame := !ps.isEmpty && first.isSome && ps.all (· == first)
+      let par := if allSame then first else none
+      pars := pars.push par
+      if let some q := par then hoistSet (d.params[i]!).fvarId q
+    modify fun s => { s with jpar := s.jpar.insert d.fvarId pars }
+    hoistInfer f destr jumps d.value
+    hoistInfer f destr jumps k
+  | .cases cs =>
+    let a := (← get).amap
+    for alt in cs.alts do
+      match alt with
+      | .alt c ps k =>
+        if let some (j :: q) := a[cs.discr]? then
+          if hoistIsCell c && ps.size == 2 then
+            if let some pj := ps[j]? then hoistSet pj.fvarId q
+        hoistInfer f destr jumps k
+      | .default k => hoistInfer f destr jumps k
+  | _ => pure ()
+
+/-- Second pass, with every such variable known: do the uses allow the hoist? `path` is where the array lies in
+parameter `kidx`. -/
+partial def hoistCheck (f : Name) (kidx : Nat) (path : List Nat) (destr : Std.HashSet (Name × FVarId))
+    (jf : Std.HashMap FVarId Own.FVS) (c : Code .pure) : StateM HScan Unit := do
+  -- After this point none of the variables may be used: the array was handed on.
+  let gone := fun (later : Own.FVS) => do
+    let st ← get
+    if st.amap.toList.any (fun (x, _) => later.contains x) then modify fun s => { s with ok := false }
+  match c with
+  | .let d k =>
+    let a := (← get).amap
+    match d.value with
+    | .const g _ args =>
+      if hoistCount a args == 0 then pure ()
+      else if hoistIsRead g && (hoistArrIdx g).any (hoistSimple a args) then
+        modify fun s => { s with raws := s.raws + 1 }
+      else if hoistIsSet g && (hoistArrIdx g).any (hoistSimple a args) && destr.contains (f, d.fvarId) then
+        modify fun s => { s with destr := true, raws := s.raws + 1 }
+      else if hoistIsCell g && hoistCount a (args.extract 2 args.size) == 1 then pure ()
       else
-        if g == f && hoistSimple a args kidx then modify fun s => { s with loops := true }
+        if g == f && hoistSimpleAt a path args kidx then modify fun s => { s with loops := true }
         gone (Own.fvCode jf k)
     | .fvar g args =>
       if a.contains g || hoistCount a args > 0 then gone (Own.fvCode jf k)
-    | .proj _ _ x => if a.contains x then gone (Own.fvCode jf k)
     | _ => pure ()
-    hoistWalk f kidx destr jf k
+    hoistCheck f kidx path destr jf k
   | .fun d k =>
     let st ← get
-    if st.aliases.toList.any (Own.fvFun jf d).contains then modify fun s => { s with ok := false }
-    hoistWalk f kidx destr jf k
+    if st.amap.toList.any (fun (x, _) => (Own.fvFun jf d).contains x) then modify fun s => { s with ok := false }
+    hoistCheck f kidx path destr jf k
   | .jp d k =>
-    hoistWalk f kidx destr jf d.value
-    hoistWalk f kidx destr jf k
+    hoistCheck f kidx path destr jf d.value
+    hoistCheck f kidx path destr jf k
   | .jmp j args =>
-    if hoistCount (← get).aliases args > 0 then gone (jf.getD j {})
+    let st ← get
+    let pars := st.jpar.getD j #[]
+    -- an argument that is the array or holds it must land in a parameter that is the same
+    let mut bad := false
+    for x in args, i in [0:args.size] do
+      if let .fvar y := x then
+        if let some q := st.amap[y]? then
+          if (pars[i]?).getD none != some q then bad := true
+    if bad then gone (jf.getD j {})
   | .cases cs =>
-    if (← get).aliases.contains cs.discr then modify fun s => { s with ok := false }
+    if (← get).amap[cs.discr]? == some [] then modify fun s => { s with ok := false }
     for alt in cs.alts do
       match alt with
-      | .alt _ _ k => hoistWalk f kidx destr jf k
-      | .default k => hoistWalk f kidx destr jf k
+      | .alt _ _ k => hoistCheck f kidx path destr jf k
+      | .default k => hoistCheck f kidx path destr jf k
   | _ => pure ()
 
-/-- The element width of an `Array` parameter type, if the buffer is a narrow unboxed one. -/
-def hoistKind (ty : Expr) : EmitM (Option (String × String)) := do
+/-- The buffer kind of an `Array` element type, if the buffer is an unboxed one: the kind name, the suffix of
+the ordinary primitives, and the Haskell type of the raw buffer's elements. -/
+def hoistKind (e : Expr) : EmitM (Option (String × String × String)) := do
+  match ← elemKind e with
+  | 1 => return some ("8", "8", "Word8")
+  | 2 => return some ("16", "16", "Word16")
+  | 3 => return some ("32", "32", "Word32")
+  | 4 => return some ("64", "64", "Word64")
+  | 5 => return some ("W", "W", "Word")
+  | 6 => return some ("Bool", "", "Word8")
+  | _ => return none
+
+/-- Where in a parameter of this type an array with an unboxed buffer lies: the path of field indices, the
+cell types along it, and the buffer kind. -/
+partial def hoistSlots (ty : Expr) : EmitM (List (List Nat × List Name × String × String × String)) := do
   match ty with
   | .app (.const `Array _) e =>
-    if (← elemKind e) matches 1 | 2 | 3 | 4 then
-      match ← hsTyM e with
-      | "Word8" => return some ("8", "Word8")
-      | "Word16" => return some ("16", "Word16")
-      | "Word32" => return some ("32", "Word32")
-      | "Word64" => return some ("64", "Word64")
-      | _ => return none
-    else return none
-  | _ => return none
+    match ← hoistKind e with
+    | some (k, sfx, hty) => return [([], [], k, sfx, hty)]
+    | none => return []
+  | _ =>
+    match ty.getAppFn, ty.getAppArgs with
+    | .const c _, #[a, b] =>
+      if c == `MProd || c == `Prod then
+        let mut out := []
+        for (t, j) in [(a, 0), (b, 1)] do
+          for (path, cells, k, sfx, hty) in ← hoistSlots t do
+            out := out ++ [(j :: path, c :: cells, k, sfx, hty)]
+        return out
+      else return []
+    | _, _ => return []
 
 /-- Is function `d` a loop whose array parameter can be hoisted? (See above.) -/
 def hoistPlan (d : Decl .pure) (body : Code .pure) : EmitM (Option Hoist) := do
   if ((← get).cur.toString.splitOn "Array.mapMUnsafe").length > 1 then return none
   let jf := Own.jpFvs body
+  let jumps := hoistJumps body {}
+  let destr := (← get).destr
   for p in d.params, k in [0:d.params.size] do
-    if let some (kind, hty) ← hoistKind p.type then
-      let (_, sc) := (hoistWalk d.name k (← get).destr jf body).run
-        { aliases := ({} : Std.HashSet FVarId).insert p.fvarId }
-      if sc.ok && sc.destr && sc.loops then
-        return some { kidx := k, kind, hty, aliases := sc.aliases }
+    for (path, cells, kind, sfx, hty) in ← hoistSlots p.type do
+      -- the first pass is repeated until no new variable turns up
+      let mut sc : HScan := { amap := ({} : Std.HashMap FVarId (List Nat)).insert p.fvarId path }
+      let mut settled := false
+      for _ in [0:64] do
+        let n := sc.amap.size
+        let (_, sc') := (hoistInfer d.name destr jumps body).run sc
+        sc := sc'
+        if sc.amap.size == n then
+          settled := true
+          break
+      -- a variable that was not found would be used without being checked: give up if it is not settled
+      let (_, sc') := (hoistCheck d.name k path destr jf body).run { sc with ok := sc.ok && settled }
+      if sc'.ok && sc'.destr && (sc'.loops || sc'.raws ≥ 3) then
+        return some { kidx := k, path, cells, kind, sfx, hty, amap := sc'.amap }
   return none
+
+/-- The array of a hoisted function's parameter `x`, as a Haskell expression of type `Arr`: the parameter
+itself, or taken out of the loop-state cells (typed loosely: a cell has the same layout whatever its type
+arguments are). -/
+def hoistExtract (x : String) (path : List Nat) (cells : List Name) : String :=
+  let e := (path.zip cells).foldl (fun acc (i, c) =>
+    let ps := (List.range 2).map (s!"p{·}")
+    if c == `Prod then s!"(case (zu (zo {acc}) :: (Any, Any)) of \{ (p0, p1) -> p{i} })"
+    else s!"(case (zu (zo {acc}) :: {typeName c} Any Any) of \{ {ctorName (c ++ `mk)} {" ".intercalate ps} -> p{i} })") x
+  s!"(zu (zo {e}))"
 
 /-- Expression and its Haskell type. -/
 def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (String × String) :=
@@ -935,10 +1083,14 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
     let hoist? := (← get).hoist
     let cur := (← get).cur
     let selfH := match hoist? with
-      | some h => c == cur && hoistSimple h.aliases argsRaw h.kidx
+      | some h => c == cur && hoistSimpleAt h.amap h.path argsRaw h.kidx
       | none => false
-    let unrolled ← if selfH then pure none else tryUnroll c letId argsRaw
+    let unrolled ← tryUnroll c letId argsRaw
     if let some (hs, ptys, ret, free) := unrolled then
+      -- a copy of the loop fixed to literals: inside a hoisted worker, the copy's worker
+      if selfH then
+        let h := hoist?.get!
+        return apply (hs ++ "_h") (s!"HB {h.hty}" :: ptys) ret (#[("hb", s!"HB {h.hty}")] ++ free) false
       return apply hs ptys ret free false
     let mut args : Array (String × String) := #[]
     let mut j := 0
@@ -1029,10 +1181,11 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
       -- Inside a hoisted worker the array's accesses go to the raw buffer.
       if let some h := (← get).hoist then
         if let some i := hoistArrIdx c then
-          if (match argsRaw[i]? with | some (.fvar y) => h.aliases.contains y | _ => false)
-              && ["arrGetD", "arrGetI", "arrUGet", "arrSetU", "arrUSetU", "arrSwapU", "arrSwapPU"].any
-                   (fun b => hs == b ++ h.kind) then
-            return apply (hs ++ "H") (s!"HB {h.hty}" :: ptys) ret (#[("hb", s!"HB {h.hty}")] ++ args) false
+          let base? := ["arrGetD", "arrGetI", "arrUGet", "arrSetU", "arrUSetU", "arrSwapU", "arrSwapPU"].find?
+            (fun b => hs == b ++ h.sfx)
+          if let some b := base? then
+           if (match argsRaw[i]? with | some (.fvar y) => h.amap[y]? == some [] | _ => false) then
+            return apply (b ++ h.kind ++ "H") (s!"HB {h.hty}" :: ptys) ret (#[("hb", s!"HB {h.hty}")] ++ args) false
       return apply hs ptys ret args false
     | .decl hs ptys ret =>
       if selfH then
@@ -1276,40 +1429,64 @@ def hsDecl (d : Decl .pure) : EmitM String := do
   -- back to `n`, which checks again (a lazy handle becomes a live buffer at its first write).
   let hb := s!"HB {h.hty}"
   let args := " ".intercalate ps.toList
-  let arr := ps[h.kidx]!
+  let arr := hoistExtract ps[h.kidx]! h.path h.cells
   modify fun s => { s with hoist := some h }
   let ps2 ← d.params.mapM bindP
   let fast ← hsCode body 1 ret
   modify fun s => { s with hoist := none }
-  return s!"{n} :: {sig}\n{n} {args} =\n{pad 1}aHoist{h.kind} (zu {arr}) (\\hb -> {n}_h hb {args}) ({n}_slow {args})\n\n" ++
+  return s!"{n} :: {sig}\n{n} {args} =\n{pad 1}aHoist{h.kind} {arr} (\\hb -> {n}_h hb {args}) ({n}_slow {args})\n\n" ++
     s!"{n}_slow :: {sig}\n{n}_slow {args} =\n{pad 1}{text}\n\n" ++
     s!"{n}_h :: {hb} -> {sig}\n{n}_h !hb {" ".intercalate (ps2.toList.map ("!" ++ ·))} =\n{pad 1}{fast}\n"
 
 /-- Print the copy of `d` whose parameters `ks` are fixed to literals. It takes only the other
 parameters; `INLINE` lets GHC splice the chain of copies of an unrolled loop into straight-line
-code. -/
+code. A copy of a loop over an unshared array is hoisted like the loop itself (see `hsDecl`). -/
 def hsVariant (d : Decl .pure) (ks : Array (Option Nat)) : EmitM String := do
   let .code body := d.value | return ""
-  modify fun s => { s with known := {}, knownB := {} }
-  let ps ← d.params.mapM bindP
-  let tys ← d.params.toList.mapM (hsTyM ·.type)
+  -- Bind the parameters; the fixed ones become literals, the others the copy's arguments.
+  let prepare : EmitM (List String × Array String × String) := do
+    modify fun s => { s with known := {}, knownB := {} }
+    let ps ← d.params.mapM bindP
+    let tys ← d.params.toList.mapM (hsTyM ·.type)
+    let mut sig : List String := []
+    let mut names : Array String := #[]
+    let mut pre := ""
+    for p in d.params, k in ks, nm in ps, t in tys do
+      match k with
+      | some v =>
+        -- The fixed parameter is bound below as a `ZNat` whatever its declared type: a polymorphic
+        -- parameter is `Any`, and its uses would otherwise skip the cast (`zo`) to `Any`.
+        modify fun s => { s with known := s.known.insert p.fvarId v, tys := s.tys.insert p.fvarId "ZNat" }
+        pre := pre ++ s!"let \{ !{nm} = ({v} :: ZNat) } in\n{pad 1}"
+      | none =>
+        sig := sig ++ [t]
+        names := names.push nm
+    return (sig, names, pre)
+  let (sig, names, pre) ← prepare
   let ret ← declRetM d
-  let mut sig : List String := []
-  let mut names : Array String := #[]
-  let mut pre := ""
-  for p in d.params, k in ks, nm in ps, t in tys do
-    match k with
-    | some v =>
-      -- The fixed parameter is bound below as a `ZNat` whatever its declared type: a polymorphic
-      -- parameter is `Any`, and its uses would otherwise skip the cast (`zo`) to `Any`.
-      modify fun s => { s with known := s.known.insert p.fvarId v, tys := s.tys.insert p.fvarId "ZNat" }
-      pre := pre ++ s!"let \{ !{nm} = ({v} :: ZNat) } in\n{pad 1}"
-    | none =>
-      sig := sig ++ [t]
-      names := names.push nm
   let n := variantName d.name ks
-  let body ← hsCode body 1 ret
-  return s!"{n} :: {" -> ".intercalate (sig ++ [ret])}\n{n} {" ".intercalate names.toList} =\n{pad 1}{pre}{body}\n\{-# INLINABLE {n} #-}\n"
+  let args := " ".intercalate names.toList
+  let text ← hsCode body 1 ret
+  let some h ← hoistPlan d body
+    | return s!"{n} :: {" -> ".intercalate (sig ++ [ret])}\n{n} {args} =\n{pad 1}{pre}{text}\n\{-# INLINABLE {n} #-}\n"
+  let (_, names2, pre2) ← prepare
+  modify fun s => { s with hoist := some h }
+  let fast ← hsCode body 1 ret
+  modify fun s => { s with hoist := none }
+  let hb := s!"HB {h.hty}"
+  let full := " -> ".intercalate (sig ++ [ret])
+  -- the array is one of the copy's arguments (a fixed parameter is a number)
+  let mut arrArg : Option String := none
+  let mut idx := 0
+  for k in ks, i in [0:ks.size] do
+    if k.isNone then
+      if i == h.kidx then arrArg := names[idx]?
+      idx := idx + 1
+  let some arrName := arrArg | return s!"{n} :: {full}\n{n} {args} =\n{pad 1}{pre}{text}\n\{-# INLINABLE {n} #-}\n"
+  let arr := hoistExtract arrName h.path h.cells
+  return s!"{n} :: {full}\n{n} {args} =\n{pad 1}aHoist{h.kind} {arr} (\\hb -> {n}_h hb {args}) ({n}_slow {args})\n\{-# INLINABLE {n} #-}\n\n" ++
+    s!"{n}_slow :: {full}\n{n}_slow {args} =\n{pad 1}{pre}{text}\n\n" ++
+    s!"{n}_h :: {hb} -> {full}\n{n}_h !hb {" ".intercalate (names2.toList.map ("!" ++ ·))} =\n{pad 1}{pre2}{fast}\n"
 
 /-! ## Core-notation printer (for reading; GHC cannot ingest this) -/
 
@@ -1462,7 +1639,7 @@ def emitModule (modName : String) (roots : Array Name) (natMod : String := "Zemp
       s!"module {modName} where", "",
       "import Zempic.Runtime", s!"import {natMod}", "import Zempic.List", "import Zempic.UInt", "import Zempic.Prims",
       "import Data.Word (Word8, Word16, Word32, Word64)", "import Data.Kind (Type)",
-      "import Zempic.Arr (HB, aHoist8, aHoist16, aHoist32, aHoist64)", "", ""])
+      "import Zempic.Arr (HB, aHoist8, aHoist16, aHoist32, aHoist64, aHoistW, aHoistBool)", "", ""])
     let names := (← get).seen.toList.map (·.toString)
     let listy := ["List.map", "List.filter", "List.foldl", "List.foldr", "List.zip", "List.flatMap"]
     let fusible := names.any (fun n => listy.any fun l => n.startsWith l) && !names.any (·.startsWith "Zempic.Fuse")

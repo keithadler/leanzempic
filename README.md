@@ -7,7 +7,7 @@ list fusion, unboxing) decides how your Lean program runs, instead of Lean's C b
 * License: Apache-2.0, public
 * Status: pre-release (`v0.1.0-rc2` is the latest tag), single maintainer
 * Tested on: macOS arm64 (Apple M3, and macOS 15 in CI) and Linux x86_64 (Ubuntu, in CI); Lean 4.29.1
-  and GHC 9.14.1 only. CI runs the test suite on both, with a 36-program subset of the garden.
+  and GHC 9.14.1 only. CI runs the test suite on both, with a 52-program subset of the garden.
 * Honest one-line summary: up to 9x faster than Lean's C backend on numeric, `Int`, `Float`, record and
   fused-list code; with the recommended settings, between level and 3x slower on lists, tuples,
   strings and hash maps (up to 4x slower with defaults); 1.8x to 4.0x slower on arrays, which is the main
@@ -138,7 +138,7 @@ PATH=/opt/homebrew/bin:/usr/bin:/bin:$HOME/.elan/bin sh tests/run.sh
 It builds every example, compiles the generated Haskell, and checks each result against native
 Lean, then runs the garden, the AES check and the fuzzer. Each check prints `ok` (the plugin check only
 if Cabal is installed); any failure aborts with `FAIL`. The whole garden takes about 15 CPU-minutes;
-`GARDEN_SET=ci GARDEN_OPT=-O1 GARDEN_FUSE=1 sh tests/run.sh` runs the 36-program subset CI uses.
+`GARDEN_SET=ci GARDEN_OPT=-O1 GARDEN_FUSE=1 sh tests/run.sh` runs the 52-program subset CI uses.
 
 ## How it works
 
@@ -346,7 +346,7 @@ on.** Set the option before the definitions (the pass runs when Lean compiles th
 prints them). Measured on the garden with identical answers: a list pipeline over a `UInt8` hash 5x
 faster (0.15 s to 0.03 s), a tuple-state fold 3x (0.26 s to 0.08 s), `Int` list work 2x, `Option` and
 sum-type folds 2x to 3x. It is not free everywhere: a list merge sort got slower (0.09 s to 0.12 s).
-All 109 garden programs give the same answers with it on (`GARDEN_FUSE=1 python3 garden/run.py`).
+All 219 garden programs give the same answers with it on (`GARDEN_FUSE=1 python3 garden/run.py`).
 `#zempic` prints a warning when the code contains Lean's own list loops and the pass is off, so the
 speedup is not missed.
 
@@ -419,6 +419,19 @@ per variable; the analysis follows cells to depth 12, so arrays in loops with ma
 get in-place updates. Two arrays created by the same expression (two `#[]`) are one shared array after
 Lean's own common-subexpression elimination, so neither is updated in place. A fork of an array
 before or inside a loop makes the loop-carried array shared for the whole loop; fork after the loop.
+
+### Hoisted buffers
+
+A loop that updates an array the analysis proved unshared does not need to look up the array's buffer at
+every access. The emitter resolves the buffer once, when the loop is entered, and the loop then reads and
+writes it directly (`Emit.hoistPlan`, `Zempic.Arr` "Hoisted buffers"; the conditions are in
+[`SOUNDNESS.md`](SOUNDNESS.md)). It applies to `UInt8/16/32/64`, `Char`, `USize`, `Bool` and word-mode `Nat`
+arrays, whether the array is a parameter of the loop or travels in the `MProd`/`Prod` cells of a `for` or
+`while` loop, through join points, and in functions that read and update it in place at three or more places
+(a `qsort` step). A loop that pushes, pops, copies or hands the array to another function while it is still
+used, a shared array, and an array of boxed elements run the ordinary code. If the array is not a live
+buffer at the loop's entry (a lazy handle, an old version) the ordinary code runs one step and the check is
+made again.
 
 `set_option zempic.own false` turns the analysis off. [`SOUNDNESS.md`](SOUNDNESS.md) states exactly
 what is claimed, the assumptions it rests on, and what would make it stronger (it is tested and
@@ -618,9 +631,9 @@ An honest checklist, because "production" depends on what you need.
 
 | | |
 |---|---|
-| Continuous integration | GitHub Actions runs the suite on Ubuntu and macOS 15 for every push, including the Cabal package build and a 36-program garden subset at `-O1` with fusion on |
+| Continuous integration | GitHub Actions runs the suite on Ubuntu and macOS 15 for every push, including the Cabal package build and a 52-program garden subset at `-O1` with fusion on |
 | Fails fast | an unsupported Lean version or a mistyped mode is a clear error; an unsupported Lean constant is an error that lists it, never silently dropped code |
-| Tested against Lean itself | the examples, 155 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
+| Tested against Lean itself | the examples, 219 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
 | Runtime tested against models | random operation sequences on arrays, strings, integers and the `Word`/`Natural` fast path, with deliberately broken runtimes caught |
 | Differential fuzzing | random Lean programs run by Lean and through leanzempic must agree (`tools/fuzz.py`) |
 | Machine-checked facts | Tenet verifies 265 of 265 declarations, including name-mangling injectivity |
@@ -679,7 +692,7 @@ compiles it through leanzempic and GHC, and compares the outputs for several inp
 than `OK` names the stage that failed: `NATIVE` (the program itself does not run), `EMIT` (leanzempic
 cannot compile it, with the missing primitive), `GHC` (the generated Haskell does not typecheck),
 `RUNERR` (the Haskell crashed) or `DIFF` (different answers). `tests/run.sh` runs the whole garden
-(about 15 CPU-minutes); CI runs a 36-program subset that touches every area, at `-O1` (`GARDEN_SET=ci
+(about 15 CPU-minutes); CI runs a 52-program subset that touches every area, at `-O1` (`GARDEN_SET=ci
 GARDEN_OPT=-O1 GARDEN_FUSE=1`, the recommended configuration; `-O0` would hide the crash class the garden once found).
 
 The garden is how the features above were found: the first run compiled 27 of 48 programs, and every

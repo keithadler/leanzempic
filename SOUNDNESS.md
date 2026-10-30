@@ -104,66 +104,112 @@ versions, and `arrSwapU{8,16,32,64,W}` for swaps.
 
 ## Hoisted buffers
 
-A loop may resolve an array's buffer once instead of at every access (`Zempic.Arr`, "Hoisted buffers";
+A function may resolve an array's buffer once instead of at every access (`Zempic.Arr`, "Hoisted buffers";
 `Emit.hoistPlan`). The raw accesses assume that the array's node (`Direct buffer count`) does not change while
-the loop runs. The claim and why it should hold:
+the hoisted worker runs. The claim and why it should hold:
 
-* The emitter hoists parameter `P` of a self-recursive function only if: `P` is `Array e` with `e` of 8, 16, 32 or
-  64 bits; the function is not `Array.mapMUnsafe`; at least one in-place update of `P` or of the result of such an
-  update is marked in place by the analysis (so `P` is `own` at entry: the analysis gives a parameter that
-  ownership only if every call passes an owned, dead array); and every use of `P` and of those results is a read,
-  an in-place same-length update (`swap`, `set`, `uset`) marked in place, or a use after which no variable that
-  is that array is live (passed on, stored, returned, jumped with). A `push`, `pop` or persistent update is the
-  third kind, so it ends the raw accesses on that path; the next step goes back through the wrapper, which looks
-  again. A closure that captures the array, or a `cases` on it, disables hoisting for the function.
+* The emitter hoists an array of function `f` only if the array is `Array e` with `e` of 8, 16, 32 or 64 bits
+  (also `Char`), `USize`, `Bool` or, in word mode, `Nat` (each has an unboxed buffer kind); `f` is not
+  `Array.mapMUnsafe`; and the array is a parameter `P` of `f`, or lies at a fixed path of field indices inside the
+  loop-state cells (`MProd`, `Prod`) that `P` holds. The scan follows *aliases*: variables that are the array, or
+  a cell holding it at a known path. They are `P`; the result of an in-place same-length update (`swap`, `set`,
+  `uset`) of an alias that the analysis marked in place; the fields of an alias cell taken apart (`cases`, `proj`),
+  at the right index only; a cell built (`MProd.mk`, `Prod.mk`) with exactly one alias among its fields; and a join
+  point parameter that every jump fills with an alias at the same path. This is a fixpoint, repeated until nothing
+  is added (a function whose aliases do not settle in 64 rounds is not hoisted).
+* Every use of an alias is one of: a read (`size`, `get`, `uget`, `toList`) of the array itself; an in-place update
+  marked in place; building or taking apart a cell; a jump to a join point whose parameter is an alias at the same
+  path; or the last use on its path (passed to another function or a function value, stored, returned, jumped with
+  to a parameter that is not an alias), after which no alias is used again on that path. A `push`, `pop`, a
+  persistent update or a copy is the last kind, so it ends the raw accesses on that path; the next step goes back
+  through the wrapper, which looks again. A closure that captures an alias, or a `cases` on the array itself,
+  disables hoisting for the function.
+* At least one update is marked in place (so the array is `own` at entry: the analysis gives a parameter, or a field
+  of a cell parameter, that ownership only if every call passes an owned, dead array), and either the function
+  calls itself passing the array at the same path (a loop) or it reads or updates the array in place at three or
+  more places (a step such as `qsortAux`'s median of three). The worker calls itself, and the copies of the
+  function fixed to literals (`Emit.hsVariant`) call theirs, only when the call passes a cell holding the alias at
+  the hoisted path; any other self call goes through the wrapper.
 * Owned means no other reference exists, so no other code can reroot or copy the buffer, create a lazy handle on
-  it (`aShare`) or mark it stale (count -1) while the loop runs; and the loop itself only reads and updates in
-  place, which leave the node unchanged.
+  it (`aShare`) or mark it stale (count -1) while the worker runs; and the worker itself only reads and updates in
+  place, which leave the node unchanged. A cell that holds the array is an alias, so a use of the cell is a use
+  of the array; taking the cell apart yields aliases, never an untracked name for the array. An array held twice by
+  a cell, or passed twice to a call, is not understood and is rejected (it is also never marked in place, since
+  the analysis gives up ownership of a value used twice).
 * The wrapper checks at run time that the node is `Direct` of the expected kind with count >= 0. A lazy handle, an
   old version, the source of a copy and a boxed buffer all fail the check and run the ordinary code, so a wrong
   static verdict is caught for those states. It is not caught if two live owners share a live buffer, as for the
-  ordinary in-place primitives.
+  ordinary in-place primitives. A path in a cell is read with a loosely typed `case` (a cell has the same layout
+  whatever its type arguments are); a wrong path would read a field that is not an array and crash, never
+  silently use another array.
 * Only the in-place primitives are replaced by raw ones. A persistent operation on the array stays persistent.
 
-Testing: `tests/PropTests.hs` `arrHoisted` (all four widths): raw reads, sets and swaps against a list model at
-indices -1, length, `maxBound`, `minBound` and in range; a default that must not be forced in range; a lazy handle,
-an old version, the version a copy was taken from (one of 401 along a chain with copies) and a boxed buffer must
-not be hoisted. Five deliberate bugs in the runtime were all detected: hoisting ignores the stale mark, swap
-bound off by one, read without a range check, write without a range check (crash), hoisting a lazy handle.
+Testing: `tests/PropTests.hs` `arrHoisted` (all four widths and `Word`) and `arrHoistedBool`: raw reads, sets and
+swaps against a list model at indices -1, length, `maxBound`, `minBound` and in range; a default that must not be
+forced in range; a lazy handle, an old version, the version a copy was taken from (one of 401 along a chain with
+copies) and a boxed buffer must not be hoisted. Deliberate bugs in the runtime were all detected: for the four
+narrow widths, hoisting ignores the stale mark, swap bound off by one, read without a range check, write without a
+range check (crash), hoisting a lazy handle; for the `Word` and `Bool` buffers, an off-by-one in the read, an
+inverted or unchecked `Bool` read, the stale mark ignored for either, and a `Word` buffer accepted as `Bool`.
 
-Garden programs for the emitter's scan (`hoist_*`, UInt8/16/32/64 unless noted). Each one builds its array by
-pushes and starts its loops at a value that is not a literal. Both matter: an array made by `map` keeps its
-source's boxed buffer, so the wrapper's check fails and the hoisted loop never runs (the older `hoist_set_*`,
-`hoist_shared_*` and `hoist_escape_*` built their arrays that way and ran the ordinary code only, which was found
-by counting calls of the hoisted workers; they now push), and the unroller runs the first 16 iterations of a
-loop with a literal start on the ordinary code, after which the array is a lazy handle and the check fails.
-`hoist_qsort_*`, `hoist_set_*`, `hoist_shared_*` and `hoist_escape_*` (UInt8, UInt32) cover the loops that
-should hoist; the others are loops that look hoistable (they update in place) and also do one thing that must
+Garden programs for the emitter's scan (`hoist_*`). Each one builds its array by pushes and starts its loops at a
+value that is not a literal. Both matter: an array made by `map` keeps its source's boxed buffer, so the wrapper's
+check fails and the hoisted loop never runs (the older `hoist_set_*`, `hoist_shared_*` and `hoist_escape_*` built
+their arrays that way and ran the ordinary code only, which was found by counting calls of the hoisted workers;
+they now push), and the unroller runs the first 16 iterations of a loop with a literal start on the ordinary code,
+after which the array is a lazy handle and the check fails. A passing answer does not show that the hoisted
+worker ran, so `tools/hoist_count.py` wraps every `_h` worker in a counter, and `python3 tools/hoist_count.py
+--check` (part of `tests/run.sh`; `GARDEN_SET=ci` checks a subset) fails when a program meant to hoist reports
+zero calls or one meant to run as ordinary code reports any. Programs are `hoist_*_{uint8,uint16,uint32,uint64}`
+unless noted, plus `usize`, `nat` (word mode) and `bool` for the loops that apply to them.
+`hoist_qsort_*`, `hoist_set_*`, `hoist_shared_*` (all widths) and `hoist_cell_loop_*`, `hoist_cell_two_*`,
+`hoist_cell_second_*`, `hoist_cell_move_*`, `hoist_cell_movejp_*`, `hoist_cell_jpok_*` (UInt8, Nat) cover the loops
+that should hoist. The others are loops that look hoistable (they update in place) and also do one thing that must
 end the raw accesses, and each must run as the ordinary code:
 
-* `hoist_push_*`: push, then read the new last element and an index that exists only after the push; push in
-  one branch of an `if`.
-* `hoist_pop_*`: pop, then read just past the new end (must give the default).
-* `hoist_persist_*`: a persistent update of an array that is read afterwards, directly and through a helper.
-* `hoist_fnarg_*` (UInt8, UInt64): the helper is a function value.
-* `hoist_closure_*` (UInt8, UInt64): a closure captures the array, then it is updated.
-* `hoist_join_*` (UInt8, UInt64): the array reaches a join point as a free variable and as the argument its
-  parameter takes, and the parameter is updated while the array is read.
-* `hoist_twice_*` (UInt8): the loop hands the same array on as two of its parameters.
-* `hoist_misc_*` (UInt8, UInt32): append, extract and swap in the loop. `hoist_match_*` (UInt8): the array is
-  taken apart with a pattern.
+* `hoist_push_*`, `hoist_cell_push_*`: push, then read the new last element and an index that exists only after
+  the push; push in one branch of an `if`.
+* `hoist_pop_*`, `hoist_cell_pop_*`: pop, then read just past the new end (must give the default).
+* `hoist_persist_*`, `hoist_cell_persist_*`: a persistent update of an array that is read afterwards, directly and
+  through a helper.
+* `hoist_fnarg_*`, `hoist_closure_*`: the helper is a function value; a closure captures the array, then it is
+  updated. `hoist_cell_call_*`: the state's array is handed to a helper, and the loop goes on with the result.
+* `hoist_join_*`, `hoist_cell_join_*`, `hoist_cell_jpshare_*`: the array, or a cell holding it, reaches a join
+  point as a free variable and as the argument its parameter takes, and the parameter is updated while the array is
+  read; one jump passes a different array.
+* `hoist_twice_*`, `hoist_cell_twice_*`: the loop hands the same array on as two of its parameters, or twice in
+  one cell. (`hoist_twice_*` does hoist its first iteration: the self call is the only place the array is passed
+  twice, and it goes through the wrapper, which sees a lazy handle.)
+* `hoist_misc_*`: append, extract and swap in the loop. `hoist_match_*`: the array is taken apart with a pattern.
+* `hoist_escape_*`: the loop is also used as a value.
+* Programs where two arrays of the same type travel together and a mistake about which field is the hoisted one
+  reads or writes the wrong buffer: `hoist_cell_two_*` (their roles swap), `hoist_cell_second_*` (the hoisted array
+  is the second field), `hoist_cell_move_*` and `hoist_cell_movejp_*` (the array moves to the other field between
+  iterations, unconditionally and through a join point), `hoist_cell_jppath_*`.
 
-Mutation testing of the scan (`Emit.hoistWalk`, `hoistPlan`), 11 deliberate edits, each built and run against
-every `hoist_*` program, then reverted. Killed (a program gives a wrong answer):
+Mutation testing of the scan (`Emit.hoistInfer`, `hoistCheck`, `hoistPlan` and the emitter's use of them), 22
+deliberate edits, each built and run against every `hoist_*` program (UInt8, `Nat`, `Bool` variants and the
+programs `tools/hoist_count.py` lists) at `-O1`, then reverted. Killed by a wrong answer:
 
 | Mutation | Killed by |
 |---|---|
-| `push` treated as length-preserving (listed with the in-place updates) | `hoist_push_*`, `hoist_shared_*` (stale buffer and length after the push) |
-| the in-place requirement dropped (a persistent update joins the aliases) | `hoist_persist_*`, `hoist_match_*` (a raw read of the old version sees the new value) |
-| `pop` treated as length-preserving | `hoist_pop_*` |
+| `push` treated as length-preserving (listed with the in-place updates) | `hoist_push_*`, `hoist_cell_push_*`, `hoist_shared_*`, `hoist_cell_second_*` |
+| `pop` treated as length-preserving | `hoist_pop_*`, `hoist_cell_pop_*` |
+| the in-place requirement dropped (a persistent update joins the aliases; both passes) | `hoist_persist_*`, `hoist_cell_persist_*`, `hoist_cell_jpshare_*`, `hoist_match_*` |
 | a jump that hands the array on no longer ends the raw accesses | `hoist_join_*` |
-| the `ok` flag ignored (all of the refusals at once) | `hoist_join_*` |
-| the array allowed twice in one call (`both a a`) | `hoist_twice_*` |
+| the `ok` flag ignored (all of the refusals at once) | `hoist_join_*`, `hoist_cell_jpshare_*` |
+| the array allowed twice in the loop's own call (`both a a`) | `hoist_twice_*` |
+| the loop's own call taken as a loop call whatever field of the cell holds the array | `hoist_cell_move_*` |
+| a join point parameter is an alias if any jump fills it with one (instead of all) | `hoist_push_*`, `hoist_cell_push_*`, `hoist_cell_jppath_*` |
+| a join point parameter is an alias whatever field of a cell its jumps put the array in | `hoist_cell_movejp_*` |
+
+Killed because a loop stopped hoisting (every answer stayed right; `tools/hoist_count.py --check` fails):
+
+| Mutation | Found by |
+|---|---|
+| the field of a cell taken apart is taken from the wrong place | `hoist_cell_second_*` report zero hoisted calls |
+| the aliases are computed in one pass, not to a fixpoint (with the guard that refuses an unsettled function) | `hoist_qsort_*`, `hoist_set_*`, ... report zero calls |
+| the `loops or three accesses` guard dropped (a performance guard; nothing wrong is hoisted) | the programs that must run as ordinary code report calls |
 
 Survived, and why they cannot be observed:
 
@@ -176,12 +222,25 @@ Survived, and why they cannot be observed:
 * A closure that captures the array (`.fun`) no longer disables hoisting. Not reachable: local functions are
   lambda-lifted before the emitter runs, so a capture is a partial application of a lifted function (a call
   that receives the array, the case above), and no garden program emits a local function. The `.fun` branch
-  of `hoistWalk` is dead code kept for the other pipeline stages.
-* A `cases` on the array no longer disables hoisting, and the `proj` check. Not reachable: a pattern on an
-  array compiles to `Array.toList`, a read (`hoist_match_*`); `Array` has no constructor case or projection in
-  the code that reaches the emitter. Dead guards.
-* The `loops` requirement dropped. A function without a self-call hoisted anyway is correct and only wastes
-  the wrapper; the guard is a performance one, so no output can differ.
+  of `hoistCheck` is dead code kept for the other pipeline stages.
+* A `cases` on the array itself no longer disables hoisting. Not reachable: a pattern on an array compiles to
+  `Array.toList`, a read (`hoist_match_*`); `Array` has no constructor case in the code that reaches the emitter.
+* The projection rule: any field of a cell taken apart with a projection (`proj`), not only the array's, is an
+  alias. Not reachable: Lean turns the projections of structures into `cases` before the code reaches the
+  emitter (no `proj` of a structure appears in the generated code of any of the 219 garden programs). The rule is
+  kept because ignoring a projection would leave an untracked name for the array.
+* A cell built with the array in two fields is accepted: by the field count alone, by the conflict check of the
+  alias map alone, or by both together. Not observable: an array held twice is never marked in place by the
+  analysis (it gives up ownership of a value used twice), and a hoist needs one in-place update of an alias.
+  Each of these is a second line of defense; removing all three still gives no wrong answer.
+* The array allowed twice among the arguments of a read or an update (`hoistSimple`). Not observable: no
+  `Array.*` primitive takes the array twice.
+* The aliases computed in one pass with the guard removed. Not observable: a variable is only missed when it
+  derives from a join point parameter that a later jump fills, and any such variable is dead where a second name
+  of the array is live (the analysis does not update in place an array that has two live names).
+* The `loops` requirement dropped (and the three-accesses alternative with it). A function without a loop,
+  hoisted anyway, is correct and only wastes the wrapper; the guard is a performance one, so no output can
+  differ. It is checked by the programs `tools/hoist_count.py` expects to run as ordinary code.
 
 The earlier note here that two emitter mutations (`push` as length-preserving, and the in-place requirement
 dropped) went undetected is superseded: the first was not caught because the old garden programs never ran a

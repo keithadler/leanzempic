@@ -149,3 +149,10 @@ if command -v python3 >/dev/null 2>&1; then
   tail -1 /tmp/garden.out | grep -q "^{'OK': [0-9]*}$" || { grep -v "^OK" /tmp/garden.out | head -20; echo "FAIL garden"; exit 1; }
   echo "ok garden ($(tail -1 /tmp/garden.out))"
 fi
+
+# Hoisted array buffers: the loops that should resolve their buffer once do (a scan that silently stops finding them
+# keeps every answer right and loses the speedup), and the ones that must not (push, pop, a persistent update,
+# a shared array, a join point that hands the array on) run the ordinary code. See SOUNDNESS.md, "Hoisted buffers".
+if command -v python3 >/dev/null 2>&1; then
+  python3 tools/hoist_count.py --check || { echo "FAIL hoisting"; exit 1; }
+fi

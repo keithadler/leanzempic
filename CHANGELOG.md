@@ -5,6 +5,20 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* Hoisted buffers now cover `Nat` (word mode), `USize` and `Bool` arrays, arrays inside the `MProd`/`Prod` state of
+  `for` and `while` loops, arrays that reach a join point as a parameter, the copies of a loop fixed to literals, and
+  functions without a loop that read or update the array in place at three or more places (`qsortAux`). Instructions
+  retired against `main`: `qsort` 14.63 G to 11.43 G (-21.8%; native Lean's C 15.1 G), chart rows Sieve (Bool array)
+  3.10 G to 1.71 G, Prefix sums (Nat array) 2.96 G to 1.58 G, Reverse by swaps 0.52 G to 0.49 G, Shared-array
+  insertion sort 0.53 G to 0.26 G; the other real-world programs and rows change by at most 0.1%. See `BENCH.md`.
+* The scan is tested: 22 deliberate edits of it were tried against the new `hoist_*` garden programs (`Nat`, `USize`
+  and `Bool` variants of the old ones, and `hoist_cell_*` for arrays in loop-state cells and join points); nine give a
+  wrong answer, three make a loop stop hoisting, which the new `tools/hoist_count.py --check` (in `tests/run.sh`)
+  reports, and ten cannot change an answer (second lines of defense, dead code, a performance guard); see
+  `SOUNDNESS.md`. New property tests `arrHoisted` for `Word` buffers and `arrHoistedBool`; six deliberate bugs in the
+  new runtime functions were all detected.
+* Garden: 219 programs (64 new), 52 run in CI; with fusion on (`GARDEN_FUSE=1`) all 219 agree. The README and `BENCH.md`
+  said 109 for the fusion run and 36 for the CI subset; both were out of date.
 * Hoisted buffers: the emitter's scan is now covered by tests that fail when it is wrong. Eleven deliberate
   edits to `hoistWalk` and `hoistPlan` were tried; six are killed by new garden programs (`hoist_push_*`,
   `hoist_pop_*`, `hoist_persist_*`, `hoist_join_*`, `hoist_twice_*`, with `hoist_shared_*`) and five cannot

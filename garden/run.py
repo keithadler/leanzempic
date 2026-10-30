@@ -74,7 +74,7 @@ def one(name):
 CI_SET = ["shared_rare_write", "shared_twice", "int_arith", "int_match", "float_math", "string_split", "string_chars", "string_pos", "str_ops",
           "str_map_any", "hashmap", "hashmap_str", "hashset", "array_funcs", "array_word_paths", "array_same_cap", "array_narrow_paths", "array_misc", "array_qsort",
           "subarray", "bytearray", "list_mergesort", "list_funcs", "state_monad", "except_monad",
-          "state_except_stack", "hoist_set_uint8", "hoist_push_uint8", "hoist_pop_uint8", "hoist_persist_uint8",
+          "state_except_stack", "hoist_set_uint8", "hoist_set_nat", "hoist_set_bool", "hoist_cell_loop_uint8", "hoist_cell_move_uint8", "hoist_push_uint8", "hoist_pop_uint8", "hoist_persist_uint8",
           "hoist_join_uint8", "hoist_twice_uint8", "struct_update", "typeclass", "expr_tree", "functor_tree", "vec_indexed",
           "mutual_rec", "partial_def", "deriving", "thunk_lazy", "bignum", "uint_conv", "closures",
           "variant_poly_const", "parser_monad", "early_return", "nested_loops_break"]
