@@ -1000,6 +1000,13 @@ def entry (n : Nat) : Nat :=
   a.foldl (fun acc x => (acc * 31 + x.toNat) % 1000003) 0
 ''')
     add(f"hoist_set_{_T.lower()}", f'''
+-- built by pushes, so the buffer is a narrow unboxed one (an array made by `map` keeps the boxed buffer of its
+-- source, and the hoisted loops would never run on it)
+def fromFn (k : Nat) (f : Nat → {_T}) : Array {_T} := Id.run do
+  let mut a : Array {_T} := Array.mkEmpty 4
+  for i in [0:k] do a := a.push (f i)
+  return a
+
 -- a prefix sum written in place, a reversal by swaps, and a loop that stops early and returns the array
 partial def pfx (a : Array {_T}) (i : Nat) (acc : {_T}) : Array {_T} :=
   if i < a.size then
@@ -1017,12 +1024,20 @@ partial def firstBig (a : Array {_T}) (i : Nat) (lim : {_T}) : Nat × Array {_T}
 
 def entry (n : Nat) : Nat :=
   let k := n * 7 + 3
-  let a : Array {_T} := (List.range k).toArray.map (fun i => {_T}.ofNat (i * 37 + 11))
-  let b := rev (pfx a 0 0) 0 (k - 1)
-  let (p, c) := firstBig b 0 ({_M} / 2)
+  let z := n / 1000 -- 0, but not a literal, so the loops are not unrolled
+  let a : Array {_T} := fromFn k (fun i => {_T}.ofNat (i * 37 + 11))
+  let b := rev (pfx a z ({_T}.ofNat z)) z (k - 1)
+  let (p, c) := firstBig b z ({_M} / 2)
   b.foldl (fun acc x => acc * 7 + x.toNat) 0 % 1000003 + p + c.foldl (fun acc x => acc + x.toNat) 0 % 1000003
 ''')
     add(f"hoist_shared_{_T.lower()}", f'''
+-- built by pushes, so the buffer is a narrow unboxed one (an array made by `map` keeps the boxed buffer of its
+-- source, and the hoisted loops would never run on it)
+def fromFn (k : Nat) (f : Nat → {_T}) : Array {_T} := Id.run do
+  let mut a : Array {_T} := Array.mkEmpty 4
+  for i in [0:k] do a := a.push (f i)
+  return a
+
 -- the caller keeps the array it passes to the loop (a lazy copy is made), and one loop also pushes
 partial def bump (a : Array {_T}) (i : Nat) : Array {_T} :=
   if i < a.size then bump (a.set! i (a[i]! + 1)) (i + 1) else a
@@ -1040,15 +1055,23 @@ partial def swapAll (a : Array {_T}) (i : Nat) : Array {_T} :=
   if i + 1 < a.size then swapAll (a.swapIfInBounds i (i + 1)) (i + 2) else a
 
 def entry (n : Nat) : Nat :=
-  let a : Array {_T} := (List.range (n * 2 + 2)).toArray.map (fun i => {_T}.ofNat (i + 1))
-  let b := bump a 0
-  let c := bumpGrow a 0 1000
-  let d := swapAll b 0
+  let z := n / 1000 -- 0, but not a literal, so the loops are not unrolled
+  let a : Array {_T} := fromFn (n * 2 + 2) (fun i => {_T}.ofNat (i + 1))
+  let b := bump a z
+  let c := bumpGrow a z 1000
+  let d := swapAll b z
   let sum := fun (x : Array {_T}) => x.foldl (fun acc v => (acc * 13 + v.toNat) % 1000003) 0
   sum a + sum b * 3 + sum c * 5 + sum d * 7
 ''')
 for _T in ["UInt8", "UInt32"]:
     add(f"hoist_escape_{_T.lower()}", f'''
+-- built by pushes, so the buffer is a narrow unboxed one (an array made by `map` keeps the boxed buffer of its
+-- source, and the hoisted loops would never run on it)
+def fromFn (k : Nat) (f : Nat → {_T}) : Array {_T} := Id.run do
+  let mut a : Array {_T} := Array.mkEmpty 4
+  for i in [0:k] do a := a.push (f i)
+  return a
+
 -- the loop is also used as a value, so nothing is known about its array: it must stay persistent
 partial def bumpV (a : Array {_T}) (i : Nat) : Array {_T} :=
   if i < a.size then bumpV (a.set! i (a[i]! + 1)) (i + 1) else a
@@ -1059,9 +1082,202 @@ partial def swapV (a : Array {_T}) (i : Nat) : Array {_T} :=
 def twice (f : Array {_T} → Nat → Array {_T}) (a : Array {_T}) : Array {_T} × Array {_T} := (f a 0, f a 0)
 
 def entry (n : Nat) : Nat :=
-  let a : Array {_T} := (List.range (n * 3 + 2)).toArray.map (fun i => {_T}.ofNat (i + 1))
+  let a : Array {_T} := fromFn (n * 3 + 2) (fun i => {_T}.ofNat (i + 1))
   let (b, c) := twice bumpV a
   let (d, e) := twice swapV a
   let sum := fun (x : Array {_T}) => x.foldl (fun acc v => (acc * 13 + v.toNat) % 1000003) 0
   sum a + sum b * 3 + sum c * 5 + sum d * 7 + sum e * 11
 ''')
+
+# Mutation killers for the hoist scan (SOUNDNESS.md, "Hoisted buffers"). Every program builds its array by pushes
+# (a narrow unboxed buffer; an array made by `map` keeps its source's boxed buffer, so the hoisted loop would
+# never run on it) and starts its loops at a value that is not a literal (the unroller would otherwise run the
+# first 16 iterations on the ordinary code, and the hoisting check would then fail on a lazy handle). Each loop
+# is hoistable on its own terms (it updates in place) and also does one thing that must end the raw accesses.
+_HOIST_PRE = '''
+def mk (k : Nat) (off : Nat) : Array {T} := Id.run do
+  let mut a : Array {T} := Array.mkEmpty 4
+  for i in [0:k] do a := a.push ({T}.ofNat (i + off))
+  return a
+
+def sum (v : Array {T}) : Nat := v.foldl (fun acc w => (acc * 13 + w.toNat) % 1000003) 0
+'''
+def _hoist(name, body, widths=("UInt8", "UInt16", "UInt32", "UInt64")):
+    for T in widths:
+        add(f"{name}_{T.lower()}", (_HOIST_PRE + body).replace("{T}", T))
+
+# push: the buffer is replaced when it grows and the length changes
+_hoist("hoist_push", '''
+-- push, then read the new last element and an index that exists only after the push
+partial def grow (a : Array {T}) (i fuel : Nat) : Array {T} :=
+  if i < fuel then
+    let a := a.push ({T}.ofNat (i * 7 + 1))
+    let last := a[a.size - 1]!
+    let a := a.set! 0 (a[0]! + last + a[i]!)
+    grow a (i + 1) fuel
+  else a
+
+-- push in one branch only, set in the other, read after the join
+partial def growIf (a : Array {T}) (i fuel : Nat) : Array {T} :=
+  if i < fuel then
+    let a := if i % 3 == 0 then a.push ({T}.ofNat (i + 5)) else a.set! (i % a.size) ({T}.ofNat (i * 3))
+    let a := a.set! 0 (a[0]! + a[a.size - 1]!)
+    growIf a (i + 1) fuel
+  else a
+
+def entry (n : Nat) : Nat :=
+  let z := n / 1000
+  let b := grow (mk 2 3) z (n * 5 + 4)
+  let d := growIf (mk 2 1) z (n * 6 + 5)
+  sum b + sum d * 3 + b.size + d.size
+''')
+
+# pop: the length shrinks, so a read just past the new end must give the default, not the old last element
+_hoist("hoist_pop", '''
+partial def shrink (a : Array {T}) (i : Nat) (acc : Nat) : Nat × Array {T} :=
+  if a.size > 2 then
+    let a := a.pop
+    let past := a[a.size]!
+    let a := a.set! 0 (a[0]! + past + 1)
+    shrink a (i + 1) (acc + past.toNat * 5 + a[a.size - 1]!.toNat)
+  else (acc, a)
+
+def entry (n : Nat) : Nat :=
+  let z := n / 1000
+  let (x, b) := shrink (mk (n * 3 + 4) 2) z z
+  x + sum b + b.size
+''')
+
+# a persistent update of an array that is still used: the old version must keep its contents
+_hoist("hoist_persist", '''
+def poke (a : Array {T}) (i : Nat) : Array {T} := a.set! i 99
+
+-- the update of `a` has the old version read after it (the read index depends on the new array, so the
+-- compiler cannot move the read in front)
+partial def keep (a : Array {T}) (i : Nat) (acc : Nat) : Nat × Array {T} :=
+  if i < a.size then
+    let b := a.set! i (a[i]! + 1)
+    let j := i + (b.size - a.size)
+    keep b (i + 1) (acc + a[j]!.toNat * 3 + b[i]!.toNat)
+  else (acc, a)
+
+-- a helper updates the array persistently (the array is read afterwards), then the loop updates it in place
+partial def viaHelper (a : Array {T}) (i : Nat) (acc : Nat) : Nat × Array {T} :=
+  if i < a.size then
+    let b := poke a i
+    let j := i + (b.size - a.size)
+    let v := a[j]!
+    let c := a.set! i (v + 2)
+    viaHelper c (i + 1) (acc + v.toNat * 5 + b[i]!.toNat)
+  else (acc, a)
+
+def entry (n : Nat) : Nat :=
+  let k := n * 2 + 3
+  let z := n / 1000
+  let (x, b) := keep (mk k 1) z z
+  let (y, c) := viaHelper (mk k 5) z z
+  x + y * 3 + sum b * 3 + sum c * 5
+''')
+
+# the helper is a function value: nothing is known about what it does with the array
+_hoist("hoist_fnarg", '''
+partial def viaFn (f : Array {T} → Nat → Array {T}) (a : Array {T}) (i : Nat) (acc : Nat) : Nat × Array {T} :=
+  if i < a.size then
+    let b := f a i
+    let j := i + (b.size - a.size)
+    let v := a[j]!
+    let c := a.set! i (v + 3)
+    viaFn f c (i + 1) (acc + v.toNat * 7 + b[i]!.toNat)
+  else (acc, a)
+
+def entry (n : Nat) : Nat :=
+  let z := n / 1000
+  let (x, b) := viaFn (fun a i => a.set! i 99) (mk (n * 2 + 3) 1) z z
+  x + sum b
+''', ("UInt8", "UInt64"))
+
+# a closure captures the array, then the array is updated
+_hoist("hoist_closure", '''
+-- not inlined, so the closure survives in the code
+@[noinline] def callIt (f : Nat → {T}) (j : Nat) : {T} := f j
+
+partial def viaClosure (a : Array {T}) (i : Nat) (acc : Nat) : Nat × Array {T} :=
+  if i < a.size then
+    let a := a.set! i (a[i]! + 1)
+    let f := fun (j : Nat) => a[j]!
+    let c := a.set! i 7
+    viaClosure c (i + 1) (acc + (callIt f i).toNat * 3 + c[i]!.toNat)
+  else (acc, a)
+
+def entry (n : Nat) : Nat :=
+  let z := n / 1000
+  let (x, b) := viaClosure (mk (n * 2 + 3) 1) z z
+  x + sum b
+''', ("UInt8", "UInt64"))
+
+# the array reaches a join point as a free variable and, in one branch, as the argument the point's parameter
+# takes; the parameter is then updated while the array is still read
+_hoist("hoist_join", '''
+partial def viaJoin (a other : Array {T}) (i : Nat) (acc : Nat) : Nat × Array {T} :=
+  if i < a.size then
+    let a := a.set! i (a[i]! + 1)
+    let c := if i % 2 == 0 then a else other
+    let d := c.set! 0 99
+    viaJoin a other (i + 1) (acc + a[0]!.toNat * 3 + d[0]!.toNat + a[i]!.toNat)
+  else (acc, a)
+
+def entry (n : Nat) : Nat :=
+  let z := n / 1000
+  let (x, b) := viaJoin (mk (n * 2 + 3) 1) (mk 4 50) z z
+  x + sum b
+''', ("UInt8", "UInt64"))
+
+# append, extract and swap in a loop that is otherwise hoistable
+_hoist("hoist_misc", '''
+partial def mixed (a : Array {T}) (i fuel : Nat) : Array {T} :=
+  if i < fuel then
+    let a := if i % 4 == 1 then a ++ #[{T}.ofNat i, {T}.ofNat (i + 1)]
+      else if i % 4 == 2 then (a.extract 1 a.size).push (a[0]!)
+      else a.swapIfInBounds 0 (a.size - 1)
+    let a := a.set! (i % a.size) (a[a.size - 1]! + a[0]!)
+    mixed a (i + 1) fuel
+  else a
+
+def entry (n : Nat) : Nat :=
+  let z := n / 1000
+  let b := mixed (mk 3 7) z (n * 4 + 3)
+  sum b + b.size
+''', ("UInt8", "UInt32"))
+
+# the array is taken apart with a pattern (its list of elements), then the loop updates it in place
+_hoist("hoist_match", '''
+partial def viaMatch (a : Array {T}) (i : Nat) (acc : Nat) : Nat × Array {T} :=
+  if i < a.size then
+    let a := a.set! i (a[i]! + 1)
+    match a with
+    | ⟨l⟩ =>
+      let c := a.set! i (l.headD 0 + 5)
+      viaMatch c (i + 1) (acc + l.length + (l.getD i 0).toNat)
+  else (acc, a)
+
+def entry (n : Nat) : Nat :=
+  let z := n / 1000
+  let (x, b) := viaMatch (mk (n * 2 + 3) 1) z z
+  x + sum b
+''', ("UInt8",))
+
+# the loop hands the same array on twice (as both of its array parameters): the array is not unshared, so its
+# in-place updates must stay persistent
+_hoist("hoist_twice", '''
+partial def both (a b : Array {T}) (i : Nat) (acc : Nat) : Nat × Array {T} :=
+  if i < a.size then
+    let a := a.set! i (a[i]! + 1)
+    both a a (i + 1) (acc + a[i]!.toNat + b[i]!.toNat * 3)
+  else (acc, a)
+
+def entry (n : Nat) : Nat :=
+  let z := n / 1000
+  let a := mk (n * 2 + 3) 1
+  let (x, b) := both a (mk 2 4) z z
+  x + sum b
+''', ("UInt8",))

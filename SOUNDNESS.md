@@ -129,13 +129,63 @@ Testing: `tests/PropTests.hs` `arrHoisted` (all four widths): raw reads, sets an
 indices -1, length, `maxBound`, `minBound` and in range; a default that must not be forced in range; a lazy handle,
 an old version, the version a copy was taken from (one of 401 along a chain with copies) and a boxed buffer must
 not be hoisted. Five deliberate bugs in the runtime were all detected: hoisting ignores the stale mark, swap
-bound off by one, read without a range check, write without a range check (crash), hoisting a lazy handle. Garden:
-`hoist_qsort_*`, `hoist_set_*`, `hoist_shared_*` (the caller keeps the array; one loop also pushes) and
-`hoist_escape_*` (the loop is also a value) for UInt8/16/32/64. **Not detected:** two deliberate bugs in the
-emitter's rule (treating `push` as length-preserving, and dropping the in-place requirement). The first
-produced hoisted code that kept a stale buffer after a push, yet no garden program differed; I did not find out
-why. The second changes nothing observable because only in-place primitives are made raw. Treat the emitter's
-scan as covered by the review above and by the runtime guard, not by a test that fails when it is wrong.
+bound off by one, read without a range check, write without a range check (crash), hoisting a lazy handle.
+
+Garden programs for the emitter's scan (`hoist_*`, UInt8/16/32/64 unless noted). Each one builds its array by
+pushes and starts its loops at a value that is not a literal. Both matter: an array made by `map` keeps its
+source's boxed buffer, so the wrapper's check fails and the hoisted loop never runs (the older `hoist_set_*`,
+`hoist_shared_*` and `hoist_escape_*` built their arrays that way and ran the ordinary code only, which was found
+by counting calls of the hoisted workers; they now push), and the unroller runs the first 16 iterations of a
+loop with a literal start on the ordinary code, after which the array is a lazy handle and the check fails.
+`hoist_qsort_*`, `hoist_set_*`, `hoist_shared_*` and `hoist_escape_*` (UInt8, UInt32) cover the loops that
+should hoist; the others are loops that look hoistable (they update in place) and also do one thing that must
+end the raw accesses, and each must run as the ordinary code:
+
+* `hoist_push_*`: push, then read the new last element and an index that exists only after the push; push in
+  one branch of an `if`.
+* `hoist_pop_*`: pop, then read just past the new end (must give the default).
+* `hoist_persist_*`: a persistent update of an array that is read afterwards, directly and through a helper.
+* `hoist_fnarg_*` (UInt8, UInt64): the helper is a function value.
+* `hoist_closure_*` (UInt8, UInt64): a closure captures the array, then it is updated.
+* `hoist_join_*` (UInt8, UInt64): the array reaches a join point as a free variable and as the argument its
+  parameter takes, and the parameter is updated while the array is read.
+* `hoist_twice_*` (UInt8): the loop hands the same array on as two of its parameters.
+* `hoist_misc_*` (UInt8, UInt32): append, extract and swap in the loop. `hoist_match_*` (UInt8): the array is
+  taken apart with a pattern.
+
+Mutation testing of the scan (`Emit.hoistWalk`, `hoistPlan`), 11 deliberate edits, each built and run against
+every `hoist_*` program, then reverted. Killed (a program gives a wrong answer):
+
+| Mutation | Killed by |
+|---|---|
+| `push` treated as length-preserving (listed with the in-place updates) | `hoist_push_*`, `hoist_shared_*` (stale buffer and length after the push) |
+| the in-place requirement dropped (a persistent update joins the aliases) | `hoist_persist_*`, `hoist_match_*` (a raw read of the old version sees the new value) |
+| `pop` treated as length-preserving | `hoist_pop_*` |
+| a jump that hands the array on no longer ends the raw accesses | `hoist_join_*` |
+| the `ok` flag ignored (all of the refusals at once) | `hoist_join_*` |
+| the array allowed twice in one call (`both a a`) | `hoist_twice_*` |
+
+Survived, and why they cannot be observed:
+
+* A call that receives the array, or a call of a function value with it (`g a`), no longer ends the raw accesses.
+  Not observable: the call site makes the array a lazy handle (`arrShare`) whenever the array is used again
+  after the call, and a lazy handle copies on its first write, so the callee cannot change the buffer the
+  worker reads; and when the call is the array's last use, nothing reads it afterwards. After such a call the
+  analysis also cannot mark a later update of that array in place, so no raw write follows. The check is a
+  second line of defense behind the call-site sharing.
+* A closure that captures the array (`.fun`) no longer disables hoisting. Not reachable: local functions are
+  lambda-lifted before the emitter runs, so a capture is a partial application of a lifted function (a call
+  that receives the array, the case above), and no garden program emits a local function. The `.fun` branch
+  of `hoistWalk` is dead code kept for the other pipeline stages.
+* A `cases` on the array no longer disables hoisting, and the `proj` check. Not reachable: a pattern on an
+  array compiles to `Array.toList`, a read (`hoist_match_*`); `Array` has no constructor case or projection in
+  the code that reaches the emitter. Dead guards.
+* The `loops` requirement dropped. A function without a self-call hoisted anyway is correct and only wastes
+  the wrapper; the guard is a performance one, so no output can differ.
+
+The earlier note here that two emitter mutations (`push` as length-preserving, and the in-place requirement
+dropped) went undetected is superseded: the first was not caught because the old garden programs never ran a
+hoisted loop at all, and no old program pushed in a loop whose array stayed hoistable. Both are now killed.
 
 ## Assumptions the claim depends on
 

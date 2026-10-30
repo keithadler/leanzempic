@@ -5,6 +5,14 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* Hoisted buffers: the emitter's scan is now covered by tests that fail when it is wrong. Eleven deliberate
+  edits to `hoistWalk` and `hoistPlan` were tried; six are killed by new garden programs (`hoist_push_*`,
+  `hoist_pop_*`, `hoist_persist_*`, `hoist_join_*`, `hoist_twice_*`, with `hoist_shared_*`) and five cannot
+  change an answer (a second line of defense, dead code, or a performance guard); see `SOUNDNESS.md`. Also
+  found: `hoist_set_*`, `hoist_shared_*` and `hoist_escape_*` built their arrays with `map`, which keeps a boxed
+  buffer, so the hoisted loops never ran on them; they now build by pushes and run hoisted. The garden is
+  155 programs (22 new) and 48 run in CI.
+
 ## 0.1.0-rc3 (2026-10-29)
 
 * The exact (`Natural`) path inlines its small-operand cases (`natAdd/Sub/Mul/Div/Mod/Eq/Lt/Le` match

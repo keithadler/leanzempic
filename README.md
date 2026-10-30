@@ -620,7 +620,7 @@ An honest checklist, because "production" depends on what you need.
 |---|---|
 | Continuous integration | GitHub Actions runs the suite on Ubuntu and macOS 15 for every push, including the Cabal package build and a 36-program garden subset at `-O1` with fusion on |
 | Fails fast | an unsupported Lean version or a mistyped mode is a clear error; an unsupported Lean constant is an error that lists it, never silently dropped code |
-| Tested against Lean itself | the examples, 116 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
+| Tested against Lean itself | the examples, 155 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
 | Runtime tested against models | random operation sequences on arrays, strings, integers and the `Word`/`Natural` fast path, with deliberately broken runtimes caught |
 | Differential fuzzing | random Lean programs run by Lean and through leanzempic must agree (`tools/fuzz.py`) |
 | Machine-checked facts | Tenet verifies 265 of 265 declarations, including name-mangling injectivity |
@@ -667,7 +667,7 @@ compile generated Haskell and compare it, value by value, with native Lean at se
 | `proptests` | random operation sequences on arrays, strings, fixed-width integers and the `Word`/`Natural` fast path, each step compared with a pure model |
 | `fuzz` | a short differential-fuzzing run: random Lean programs must give the same answers under Lean and leanzempic |
 | `aes` | AES-256 from the proved [lean-aes](https://github.com/keithadler/lean-aes) (`bench/aes`): Lean's C, the Haskell and OpenSSL (`tools/aes_oracle.py`) give the same ciphertext |
-| `garden` | the [garden](#the-garden): 116 programs locally, 39 in CI |
+| `garden` | the [garden](#the-garden): 155 programs locally, 48 in CI |
 
 ### The garden
 
@@ -793,7 +793,7 @@ runtime/Zempic/         the Haskell runtime (about 1,800 lines)
 examples/               Lean programs used as tests and benchmarks
 bench/                  Haskell drivers and bench/build.sh
 bench/aes/              AES-256 from lean-aes, built both ways and timed (run.sh)
-garden/                 109 small programs, one per feature: run.py (correctness), perf.py (timing)
+garden/                 155 small programs, one per feature: run.py (correctness), perf.py (timing)
 docs/                   the benchmark chart (make_chart.py draws it from chart-data.json)
 tests/run.sh            the test suite
 tests/PropTests.hs      model-based randomized tests of the runtime
