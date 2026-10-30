@@ -5,6 +5,14 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* The exact (`Natural`) path inlines its small-operand cases (`natAdd/Sub/Mul/Div/Mod/Eq/Lt/Le` match
+  `NS` and keep the big-number work out of line) instead of calling `naturalAdd` and friends, and generated
+  modules carry `-fworker-wrapper-cbv` (strict arguments arrive evaluated and tagged) unless a function
+  signature mentions a fixed-width integer, where it defeats SpecConstr's unboxing (qsort +15%).
+  `const_fold` 26.5 G to 19.7 G instructions retired (1.59x to 1.19x of native's 16.5 G), `unionfind` 31.2 G
+  to 29.0 G; the other real-world programs are unchanged within 1%. New property test `natExactBig`.
+  Cause of the 1.59x: `const_fold`'s packed answer exceeds 2^64, so the whole word run (10.5 G) is thrown
+  away at the last multiply and the exact run repeats it; see `BENCH.md`.
 * Array reads and writes of a `Nat` (word mode) or `USize` element are done with no box (`arrUGetW`,
   `arrPushUW`, `arrUSetBUW`, ...), `Array.range` fills a word buffer in one pass, swaps and
   append/extract element moves no longer box, and the in-place primitives take unboxed arguments.

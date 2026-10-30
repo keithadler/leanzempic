@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, MagicHash, UnboxedTuples #-}
 -- Copyright 2026 Keith Adler. Licensed under the Apache License, Version 2.0.
 --
 -- Exact Lean Nat as Haskell Natural (arbitrary precision).
@@ -12,7 +12,8 @@ import Zempic.Str
 import qualified Data.Text as T
 import Data.Char (chr, ord)
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
-import GHC.Exts (build)
+import GHC.Exts (build, addWordC#, timesWord2#, minusWord#, geWord#, gtWord#, eqWord#, ltWord#, leWord#, quotWord#, remWord#, isTrue#)
+import GHC.Num.Natural (Natural (NS))
 import Numeric.Natural (Natural)
 import Data.List (foldl')
 import Zempic.Runtime (Any, zo, zu)
@@ -24,10 +25,15 @@ natZero = 0
 
 natAdd, natSub, natMul, natDiv, natMod, natPow, natShr, natShl, natAnd, natOr, natXor, natGcd
   :: ZNat -> ZNat -> ZNat
-natAdd = (+)
+natAdd (NS a) (NS b) = case addWordC# a b of (# r, 0# #) -> NS r; _ -> slowAdd (NS a) (NS b)
+natAdd x y = x + y
+natSub (NS a) (NS b) = if isTrue# (geWord# a b) then NS (minusWord# a b) else natZero
 natSub x y = if x >= y then x - y else 0
-natMul = (*)
+natMul (NS a) (NS b) = case timesWord2# a b of (# 0##, lo #) -> NS lo; _ -> slowMul (NS a) (NS b)
+natMul x y = x * y
+natDiv (NS a) (NS b) = if isTrue# (eqWord# b 0##) then natZero else NS (quotWord# a b)
 natDiv x y = if y == 0 then 0 else quot x y
+natMod (NS a) (NS b) = if isTrue# (eqWord# b 0##) then NS a else NS (remWord# a b)
 natMod x y = if y == 0 then x else rem x y
 natPow = (^)
 natShr x y = shiftR x (fromIntegral y)
@@ -38,9 +44,19 @@ natXor = xor
 natGcd = gcd
 
 natEq, natLt, natLe :: ZNat -> ZNat -> Bool
-natEq = (==)
-natLt = (<)
-natLe = (<=)
+natEq (NS a) (NS b) = isTrue# (eqWord# a b)
+natEq x y = x == y
+natLt (NS a) (NS b) = isTrue# (ltWord# a b)
+natLt x y = x < y
+natLe (NS a) (NS b) = isTrue# (leWord# a b)
+natLe x y = x <= y
+
+-- Both operands are small but the result is not: the big-number path, kept out of line so the fast path inlines.
+slowAdd, slowMul :: ZNat -> ZNat -> ZNat
+slowAdd x y = x + y
+slowMul x y = x * y
+{-# NOINLINE slowAdd #-}
+{-# NOINLINE slowMul #-}
 
 natSucc :: ZNat -> ZNat
 natSucc = (+ 1)
