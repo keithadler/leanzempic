@@ -10,7 +10,7 @@ list fusion, unboxing) decides how your Lean program runs, instead of Lean's C b
   and GHC 9.14.1 only. CI runs the test suite on both, with a 36-program subset of the garden.
 * Honest one-line summary: up to 9x faster than Lean's C backend on numeric, `Int`, `Float`, record and
   fused-list code; with the recommended settings, between level and 3x slower on lists, tuples,
-  strings and hash maps (up to 4x slower with defaults); 1.7x to 5.4x slower on arrays, which is the main
+  strings and hash maps (up to 4x slower with defaults); 1.8x to 4.0x slower on arrays, which is the main
   open problem. See [Benchmarks](#benchmarks) for every number, including the losses.
 
 ![Run time of the Haskell output relative to compiled Lean, with default settings and with list fusion on and -A256m -O1g](docs/bench-chart.png)
