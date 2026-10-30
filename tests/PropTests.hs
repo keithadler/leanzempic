@@ -615,6 +615,35 @@ natCompare c g = do
           failWith c ("word." ++ name ++ " threw although the true result " ++ show truth
                       ++ " fits: " ++ show (e :: SomeException))
 
+-- | The exact path's inlined small-operand cases (Natural's NS constructor) against Integer, with operands
+-- on both sides of 2^64 (NS and NB mixed) and results that cross it, comparisons included.
+natExactBig :: Check -> Gen -> IO ()
+natExactBig c g = do
+  let two64 = 2 ^ (64 :: Int) :: Integer
+      pts = concat [[k - 1, k, k + 1] | k <- [0, 1, two64 - 1, two64, two64 * two64 - 1, two64 * two64]]
+      ops :: [(String, Natural -> Natural -> Natural, Integer -> Integer -> Integer)]
+      ops = [ ("add", E.natAdd, (+)), ("mul", E.natMul, (*)), ("sub", E.natSub, \a b -> max 0 (a - b))
+            , ("div", E.natDiv, \a b -> if b == 0 then 0 else a `div` b)
+            , ("mod", E.natMod, \a b -> if b == 0 then a else a `mod` b) ]
+      rel :: [(String, Natural -> Natural -> Bool, Integer -> Integer -> Bool)]
+      rel = [("eq", E.natEq, (==)), ("lt", E.natLt, (<)), ("le", E.natLe, (<=))]
+      pickBig = do
+        k <- below g 4
+        if k == 0 then pick g (filter (>= 0) pts)
+        else if k == 1 then (`mod` two64) . toInteger <$> next g
+        else do x <- next g; y <- next g; z <- next g
+                return ((toInteger x * two64 + toInteger y) * (if k == 2 then 1 else two64) + toInteger z `mod` 7)
+  forM_ [1 .. 4000 :: Int] $ \_ -> do
+    a <- pickBig
+    b <- pickBig
+    forM_ ops $ \(name, ef, ref) ->
+      expect c ("exactbig." ++ name ++ " " ++ show a ++ " " ++ show b) (toInteger (ef (fromInteger a) (fromInteger b))) (ref a b)
+    forM_ rel $ \(name, ef, ref) ->
+      expect c ("exactbig." ++ name ++ " " ++ show a ++ " " ++ show b) (fromEnum (ef (fromInteger a) (fromInteger b))) (fromEnum (ref a b))
+    -- A result that crosses 2^64 must still compare equal to the same value built another way.
+    let s = E.natAdd (fromInteger a) (fromInteger b)
+    expect c "exactbig.norm" (fromEnum (E.natEq s (fromInteger (a + b)))) 1
+
 -- * Driver
 
 main :: IO ()
@@ -634,6 +663,7 @@ main = do
       when (kind == 0 || kind == 5) $ arrWord check gen kind 400
       when (kind /= 0) $ arrPlaceholderRaw check gen kind
     arrRangeMove check gen
+    natExactBig check gen
     forM_ [(0, 8), (1, 8), (0, 16), (2, 16), (0, 32), (3, 32), (0, 64), (4, 64)] $ \(kind, bits) ->
       case bits :: Int of
         8 -> arrNarrow check gen (NOps A.aPushU8 A.aSetU8 A.aGetP8 A.aGetPS8 A.aSwapU8) kind bits 300

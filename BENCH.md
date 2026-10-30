@@ -696,3 +696,49 @@ measurements) so the columns are comparable. All answers match native Lean.
 Two rows get worse and are in the chart: list merge sort (fusion makes it slower) and, within noise,
 the `Float` loop. The remaining large gaps are all arrays (a persistent array on every access) and
 the boxed values in lists.
+
+## const_fold: where 26.5 G instructions went (and why wall time was level)
+
+`bench/realworld` `const_fold` retired 26.5 G instructions against native Lean's 16.5 G (1.59x) while wall time
+was about level, because cycles were equal (5.1 G vs 4.9 G): the extra instructions were cheap, high-IPC ones.
+Measured with `/usr/bin/time -l` (instructions retired, deterministic) and by running `Out.Fast` and
+`Out.Exact` separately (a throwaway `Main` that calls `F.z_entry` or `E.z_entry`):
+
+| part | instructions retired |
+|---|---|
+| word run (`Out.Fast`), overflows at the last step | 10.5 G |
+| exact rerun (`Out.Exact`), before | 16.1 G |
+| total (the two add up) | 26.5 G |
+
+1. **The answer does not fit in a word, so the work ran twice (10.5 G of 26.5 G).** `entry` returns
+   `a * 2^40 + b` and with 500 repetitions `a` exceeds 2^24, so the final `natMul` throws `ZOverflow` after the
+   whole word run is done and auto mode reruns everything exactly. This is the documented "auto mode may run a
+   call twice"; nothing here is specific to the loop. It is NOT fixed: avoiding it needs either a per-value
+   word-or-big representation (taxes every operation and every constructor field) or splitting the root so only
+   its final arithmetic is exact. Cheap to avoid in the program itself (return the pair, or smaller digits).
+2. **The exact path called out of line for every operation (3.5 G saved).** `Out.Exact` compiled `natAdd`
+   to a call of `GHC.Internal.Bignum.Natural.naturalAdd` (and `naturalSubThrow`, `naturalMul`, ...), each
+   re-testing both operands. Now `Zempic.Nat.Exact` matches `NS` in line (add/mul with the overflow flag, sub
+   with a compare, quot/rem, eq/lt/le) and sends only the big case to a `NOINLINE` function. Exact run 16.1 G
+   to 12.6 G, and 1.04 s to 0.66 s user. This helps every program that falls back to the exact path.
+   The exact run is now below native (16.5 G) on this program.
+3. **Tag tests and enters at every function entry (1.4 G saved on the word run, 10.5 G to 9.1 G).** A
+   recursive function over `data Expr` (`appendAdd`, `eval`, `reassoc`) tested the pointer tag of its argument
+   on entry although the caller always passes an evaluated value. GHC's `-fworker-wrapper-cbv` makes the
+   strict-argument contract part of the worker, so the test is gone. It also helped `unionfind` (31.2 G to
+   29.0 G). It is on for every generated module except when a function signature mentions
+   `Word8/16/32/64/Word`: there it made `qsort` 15% worse (21.9 G to 25.3 G), because the worker keeps the
+   boxed `Word32` arguments and SpecConstr no longer produces the all-unboxed loop. `deriv` (which has one
+   `Word32` return type) loses its 3.7% for that reason.
+
+Not the cause: allocation of `ZNat` (the fields are unpacked `Word#`; the word run's 10.6 GB are the
+`appendAdd` copies, where native Lean reuses cells in place), GC (0.03 s), thunks (none: every binding is
+strict), dictionary calls (none).
+
+| `const_fold` (n = 500) | before | after |
+|---|---|---|
+| instructions retired (native: 16.5 G) | 26.5 G, 1.59x (recommended: 26.3 G) | 19.7 G, 1.19x (recommended: 19.5 G) |
+| cycles elapsed (native 4.9 G) | 5.7 G | 4.4 G |
+
+Same A/B method as above (`main` worktree vs this branch; instructions are the primary metric, wall time on
+this machine was noisy: load from other jobs moved native itself between 1.3 s and 2.5 s).

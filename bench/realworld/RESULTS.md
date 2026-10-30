@@ -45,6 +45,8 @@ benchmark suite, compiled both ways and timed. Includes the failures.
 | [unionfind](https://github.com/leanprover/lean4/blob/f72c35b3f637c8c6571d353742168ab66cc22c00/tests/bench/unionfind.lean) | 3000000 | 1.55 (1.54) | 1.82 (1.80), 1.17x | 1.80 (1.79), 1.16x | 134 / 390 / 759 | yes |
 | [nat_repr](https://github.com/leanprover/lean4/blob/f72c35b3f637c8c6571d353742168ab66cc22c00/tests/bench/nat_repr.lean) | 10000 | 1.06 (1.05) | 1.35 (1.33), 1.27x | 1.37 (1.35), 1.29x | 3 / 164 / 321 | yes |
 
+Update (2026-10-29, branch `agent-cf`): `const_fold` retires 19.7 G instructions instead of 26.5 G (native 16.5 G, so 1.19x instead of 1.59x); `unionfind` 29.0 G instead of 31.2 G; the other rows are within 1% in instructions. The reason `const_fold` was high: its packed answer overflows `Word` at the last multiply, so auto mode runs the whole word version (10.5 G) and then the exact one; see `BENCH.md`, section "const_fold".
+
 Update (2026-10-29): after the narrow-integer array work on branch `agent-perf2`, `qsort` is 1.58x (default) and 1.61x (recommended) of native instead of 2.84x and 2.82x; see `BENCH.md`. The other rows are unchanged within noise. The table above is the earlier measurement.
 
 load averages at the start of each program's runs (1/5/15 min): binarytrees 4.7/4.8/6.7; const_fold 5.7/5.1/6.8; deriv 5.5/5.0/6.7; qsort 5.6/5.1/6.7; unionfind 5.2/5.1/6.6; nat_repr 7.2/5.5/6.8
