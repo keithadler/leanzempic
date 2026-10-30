@@ -19,104 +19,103 @@
 <line x1="1482.8" y1="238" x2="1482.8" y2="1552" stroke="#334155" stroke-width="1.5"/>
 <text x="1482.8" y="226" font-size="20" text-anchor="middle" fill="#94a3b8">30x</text>
 <text x="660" y="289.0" font-size="26" text-anchor="end" fill="#e2e8f0">Float loop</text>
-<rect x="751.1" y="259.0" width="292.4" height="14" rx="3" fill="#2dd4bf55"/>
-<rect x="767.5" y="276.0" width="276.0" height="22" rx="3" fill="#2dd4bf"/>
-<text x="1031.5" y="293.0" font-size="21" font-weight="700" text-anchor="end" fill="#0f172a">8.5x faster</text>
+<rect x="736.7" y="259.0" width="306.8" height="14" rx="3" fill="#2dd4bf55"/>
+<text x="726.7" y="271.0" font-size="16" text-anchor="end" fill="#94a3b8">10.8x faster</text>
+<rect x="774.9" y="276.0" width="268.6" height="22" rx="3" fill="#2dd4bf"/>
+<text x="1031.5" y="293.0" font-size="21" font-weight="700" text-anchor="end" fill="#0f172a">8.0x faster</text>
 <text x="660" y="351.0" font-size="26" text-anchor="end" fill="#e2e8f0">Int arithmetic</text>
-<rect x="855.3" y="321.0" width="188.2" height="14" rx="3" fill="#2dd4bf55"/>
-<text x="845.3" y="333.0" font-size="16" text-anchor="end" fill="#94a3b8">4.3x faster</text>
-<rect x="801.0" y="338.0" width="242.5" height="22" rx="3" fill="#2dd4bf"/>
-<text x="1031.5" y="355.0" font-size="21" font-weight="700" text-anchor="end" fill="#0f172a">6.5x faster</text>
+<rect x="841.9" y="321.0" width="201.6" height="14" rx="3" fill="#2dd4bf55"/>
+<text x="831.9" y="333.0" font-size="16" text-anchor="end" fill="#94a3b8">4.8x faster</text>
+<rect x="785.8" y="338.0" width="257.7" height="22" rx="3" fill="#2dd4bf"/>
+<text x="1031.5" y="355.0" font-size="21" font-weight="700" text-anchor="end" fill="#0f172a">7.4x faster</text>
 <text x="660" y="413.0" font-size="26" text-anchor="end" fill="#e2e8f0">Fused list pipeline</text>
-<rect x="791.4" y="383.0" width="252.1" height="14" rx="3" fill="#2dd4bf55"/>
-<text x="781.4" y="395.0" font-size="16" text-anchor="end" fill="#94a3b8">7.0x faster</text>
-<rect x="824.1" y="400.0" width="219.4" height="22" rx="3" fill="#2dd4bf"/>
-<text x="1031.5" y="417.0" font-size="21" font-weight="700" text-anchor="end" fill="#0f172a">5.5x faster</text>
+<rect x="803.5" y="383.0" width="240.0" height="14" rx="3" fill="#2dd4bf55"/>
+<rect x="801.8" y="400.0" width="241.7" height="22" rx="3" fill="#2dd4bf"/>
+<text x="1031.5" y="417.0" font-size="21" font-weight="700" text-anchor="end" fill="#0f172a">6.5x faster</text>
 <text x="660" y="475.0" font-size="26" text-anchor="end" fill="#e2e8f0">Option chain</text>
-<rect x="1011.4" y="445.0" width="32.1" height="14" rx="3" fill="#2dd4bf55"/>
-<text x="1001.4" y="457.0" font-size="16" text-anchor="end" fill="#94a3b8">1.3x faster</text>
-<rect x="888.4" y="462.0" width="155.1" height="22" rx="3" fill="#2dd4bf"/>
-<text x="878.4" y="479.0" font-size="21" font-weight="700" text-anchor="end" fill="#2dd4bf">3.3x faster</text>
-<text x="660" y="537.0" font-size="26" text-anchor="end" fill="#e2e8f0">Record update loop</text>
-<rect x="1034.3" y="507.0" width="9.2" height="14" rx="3" fill="#2dd4bf55"/>
-<text x="1024.3" y="519.0" font-size="16" text-anchor="end" fill="#94a3b8">1.1x faster</text>
-<rect x="934.8" y="524.0" width="108.7" height="22" rx="3" fill="#2dd4bf"/>
-<text x="924.8" y="541.0" font-size="21" font-weight="700" text-anchor="end" fill="#2dd4bf">2.3x faster</text>
+<rect x="1005.3" y="445.0" width="38.2" height="14" rx="3" fill="#2dd4bf55"/>
+<text x="995.3" y="457.0" font-size="16" text-anchor="end" fill="#94a3b8">1.3x faster</text>
+<rect x="893.9" y="462.0" width="149.6" height="22" rx="3" fill="#2dd4bf"/>
+<text x="883.9" y="479.0" font-size="21" font-weight="700" text-anchor="end" fill="#2dd4bf">3.2x faster</text>
+<text x="660" y="537.0" font-size="26" text-anchor="end" fill="#e2e8f0">Tree map and sum</text>
+<rect x="941.2" y="507.0" width="102.3" height="14" rx="3" fill="#2dd4bf55"/>
+<rect x="935.7" y="524.0" width="107.8" height="22" rx="3" fill="#2dd4bf"/>
+<text x="925.7" y="541.0" font-size="21" font-weight="700" text-anchor="end" fill="#2dd4bf">2.3x faster</text>
 <text x="660" y="599.0" font-size="26" text-anchor="end" fill="#e2e8f0">Nat sum loop</text>
-<rect x="929.0" y="569.0" width="114.5" height="14" rx="3" fill="#2dd4bf55"/>
-<rect x="938.6" y="586.0" width="104.9" height="22" rx="3" fill="#2dd4bf"/>
-<text x="928.6" y="603.0" font-size="21" font-weight="700" text-anchor="end" fill="#2dd4bf">2.3x faster</text>
-<text x="660" y="661.0" font-size="26" text-anchor="end" fill="#e2e8f0">Tree map and sum</text>
-<rect x="947.1" y="631.0" width="96.4" height="14" rx="3" fill="#2dd4bf55"/>
-<rect x="940.4" y="648.0" width="103.1" height="22" rx="3" fill="#2dd4bf"/>
-<text x="930.4" y="665.0" font-size="21" font-weight="700" text-anchor="end" fill="#2dd4bf">2.2x faster</text>
+<rect x="935.1" y="569.0" width="108.4" height="14" rx="3" fill="#2dd4bf55"/>
+<rect x="939.2" y="586.0" width="104.3" height="22" rx="3" fill="#2dd4bf"/>
+<text x="929.2" y="603.0" font-size="21" font-weight="700" text-anchor="end" fill="#2dd4bf">2.2x faster</text>
+<text x="660" y="661.0" font-size="26" text-anchor="end" fill="#e2e8f0">Record update loop</text>
+<rect x="1039.5" y="631.0" width="8" height="14" fill="#e2e8f0"/>
+<text x="1061.5" y="643.0" font-size="16" text-anchor="start" fill="#94a3b8">level</text>
+<rect x="965.1" y="648.0" width="78.4" height="22" rx="3" fill="#2dd4bf"/>
+<text x="955.1" y="665.0" font-size="21" font-weight="700" text-anchor="end" fill="#2dd4bf">1.8x faster</text>
 <text x="660" y="723.0" font-size="26" text-anchor="end" fill="#e2e8f0">Tuple-state fold</text>
 <rect x="1039.5" y="693.0" width="8" height="14" fill="#e2e8f0"/>
 <text x="1061.5" y="705.0" font-size="16" text-anchor="start" fill="#94a3b8">level</text>
-<rect x="950.0" y="710.0" width="93.5" height="22" rx="3" fill="#2dd4bf"/>
-<text x="940.0" y="727.0" font-size="21" font-weight="700" text-anchor="end" fill="#2dd4bf">2.1x faster</text>
+<rect x="965.6" y="710.0" width="77.9" height="22" rx="3" fill="#2dd4bf"/>
+<text x="955.6" y="727.0" font-size="21" font-weight="700" text-anchor="end" fill="#2dd4bf">1.8x faster</text>
 <text x="660" y="785.0" font-size="26" text-anchor="end" fill="#e2e8f0">Reverse by swaps</text>
-<rect x="1022.7" y="755.0" width="20.8" height="14" rx="3" fill="#2dd4bf55"/>
-<rect x="1029.6" y="772.0" width="13.9" height="22" rx="3" fill="#2dd4bf"/>
-<text x="1019.6" y="789.0" font-size="21" font-weight="700" text-anchor="end" fill="#2dd4bf">1.1x faster</text>
+<rect x="1015.2" y="755.0" width="28.3" height="14" rx="3" fill="#2dd4bf55"/>
+<rect x="1026.4" y="772.0" width="17.1" height="22" rx="3" fill="#2dd4bf"/>
+<text x="1016.4" y="789.0" font-size="21" font-weight="700" text-anchor="end" fill="#2dd4bf">1.1x faster</text>
 <text x="660" y="847.0" font-size="26" text-anchor="end" fill="#e2e8f0">Sieve (Bool array)</text>
-<rect x="1025.1" y="817.0" width="18.4" height="14" rx="3" fill="#2dd4bf55"/>
-<rect x="1031.3" y="834.0" width="12.2" height="22" rx="3" fill="#2dd4bf"/>
-<text x="1021.3" y="851.0" font-size="21" font-weight="700" text-anchor="end" fill="#2dd4bf">1.1x faster</text>
+<rect x="1030.3" y="817.0" width="13.2" height="14" rx="3" fill="#2dd4bf55"/>
+<rect x="1032.0" y="834.0" width="11.5" height="22" rx="3" fill="#2dd4bf"/>
+<text x="1022.0" y="851.0" font-size="21" font-weight="700" text-anchor="end" fill="#2dd4bf">1.1x faster</text>
 <text x="660" y="909.0" font-size="26" text-anchor="end" fill="#e2e8f0">List of UInt8, hashed</text>
-<rect x="1043.5" y="879.0" width="134.2" height="14" rx="3" fill="#fb923c55"/>
-<text x="1187.7" y="891.0" font-size="16" text-anchor="start" fill="#94a3b8">2.8x slower</text>
+<rect x="1043.5" y="879.0" width="146.9" height="14" rx="3" fill="#fb923c55"/>
+<text x="1200.4" y="891.0" font-size="16" text-anchor="start" fill="#94a3b8">3.1x slower</text>
 <rect x="1039.5" y="896.0" width="8" height="22" fill="#e2e8f0"/>
 <text x="1061.5" y="913.0" font-size="21" font-weight="700" text-anchor="start" fill="#e2e8f0">level</text>
-<text x="660" y="971.0" font-size="26" text-anchor="end" fill="#e2e8f0">Push and pop stack</text>
-<rect x="1043.5" y="941.0" width="10.8" height="14" rx="3" fill="#fb923c55"/>
-<rect x="1043.5" y="958.0" width="14.5" height="22" rx="3" fill="#fb923c"/>
-<text x="1068.0" y="975.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.1x slower</text>
-<text x="660" y="1033.0" font-size="26" text-anchor="end" fill="#e2e8f0">Array map and fold</text>
-<rect x="1043.5" y="1003.0" width="10.5" height="14" rx="3" fill="#fb923c55"/>
-<rect x="1043.5" y="1020.0" width="15.3" height="22" rx="3" fill="#fb923c"/>
-<text x="1068.8" y="1037.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.1x slower</text>
-<text x="660" y="1095.0" font-size="26" text-anchor="end" fill="#e2e8f0">List functions</text>
-<rect x="1043.5" y="1065.0" width="79.3" height="14" rx="3" fill="#fb923c55"/>
-<text x="1132.8" y="1077.0" font-size="16" text-anchor="start" fill="#94a3b8">1.8x slower</text>
-<rect x="1043.5" y="1082.0" width="31.0" height="22" rx="3" fill="#fb923c"/>
-<text x="1084.5" y="1099.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.3x slower</text>
-<text x="660" y="1157.0" font-size="26" text-anchor="end" fill="#e2e8f0">Prefix sums (Nat array)</text>
-<rect x="1043.5" y="1127.0" width="16.2" height="14" rx="3" fill="#fb923c55"/>
-<text x="1069.7" y="1139.0" font-size="16" text-anchor="start" fill="#94a3b8">1.1x slower</text>
-<rect x="1043.5" y="1144.0" width="33.6" height="22" rx="3" fill="#fb923c"/>
-<text x="1087.1" y="1161.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.3x slower</text>
-<text x="660" y="1219.0" font-size="26" text-anchor="end" fill="#e2e8f0">HashMap inserts</text>
-<rect x="1043.5" y="1189.0" width="130.5" height="14" rx="3" fill="#fb923c55"/>
-<text x="1184.0" y="1201.0" font-size="16" text-anchor="start" fill="#94a3b8">2.7x slower</text>
-<rect x="1043.5" y="1206.0" width="51.8" height="22" rx="3" fill="#fb923c"/>
-<text x="1105.3" y="1223.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.5x slower</text>
+<text x="660" y="971.0" font-size="26" text-anchor="end" fill="#e2e8f0">Array map and fold</text>
+<rect x="1043.5" y="941.0" width="11.5" height="14" rx="3" fill="#fb923c55"/>
+<rect x="1043.5" y="958.0" width="10.1" height="22" rx="3" fill="#fb923c"/>
+<text x="1063.6" y="975.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.1x slower</text>
+<text x="660" y="1033.0" font-size="26" text-anchor="end" fill="#e2e8f0">Push and pop stack</text>
+<rect x="1039.5" y="1003.0" width="8" height="14" fill="#e2e8f0"/>
+<text x="1061.5" y="1015.0" font-size="16" text-anchor="start" fill="#94a3b8">level</text>
+<rect x="1043.5" y="1020.0" width="28.9" height="22" rx="3" fill="#fb923c"/>
+<text x="1082.4" y="1037.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.3x slower</text>
+<text x="660" y="1095.0" font-size="26" text-anchor="end" fill="#e2e8f0">Prefix sums (Nat array)</text>
+<rect x="1043.5" y="1065.0" width="33.7" height="14" rx="3" fill="#fb923c55"/>
+<rect x="1043.5" y="1082.0" width="35.2" height="22" rx="3" fill="#fb923c"/>
+<text x="1088.7" y="1099.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.3x slower</text>
+<text x="660" y="1157.0" font-size="26" text-anchor="end" fill="#e2e8f0">List functions</text>
+<rect x="1043.5" y="1127.0" width="71.3" height="14" rx="3" fill="#fb923c55"/>
+<text x="1124.8" y="1139.0" font-size="16" text-anchor="start" fill="#94a3b8">1.7x slower</text>
+<rect x="1043.5" y="1144.0" width="54.6" height="22" rx="3" fill="#fb923c"/>
+<text x="1108.1" y="1161.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.5x slower</text>
+<text x="660" y="1219.0" font-size="26" text-anchor="end" fill="#e2e8f0">List merge sort</text>
+<rect x="1043.5" y="1189.0" width="15.0" height="14" rx="3" fill="#fb923c55"/>
+<text x="1068.5" y="1201.0" font-size="16" text-anchor="start" fill="#94a3b8">1.1x slower</text>
+<rect x="1043.5" y="1206.0" width="66.3" height="22" rx="3" fill="#fb923c"/>
+<text x="1119.8" y="1223.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.7x slower</text>
 <text x="660" y="1281.0" font-size="26" text-anchor="end" fill="#e2e8f0">String iteration</text>
-<rect x="1043.5" y="1251.0" width="173.9" height="14" rx="3" fill="#fb923c55"/>
-<text x="1227.4" y="1263.0" font-size="16" text-anchor="start" fill="#94a3b8">3.8x slower</text>
-<rect x="1043.5" y="1268.0" width="54.3" height="22" rx="3" fill="#fb923c"/>
-<text x="1107.8" y="1285.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.5x slower</text>
-<text x="660" y="1343.0" font-size="26" text-anchor="end" fill="#e2e8f0">List merge sort</text>
-<rect x="1043.5" y="1313.0" width="26.8" height="14" rx="3" fill="#fb923c55"/>
-<text x="1080.3" y="1325.0" font-size="16" text-anchor="start" fill="#94a3b8">1.2x slower</text>
-<rect x="1043.5" y="1330.0" width="59.9" height="22" rx="3" fill="#fb923c"/>
-<text x="1113.4" y="1347.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.6x slower</text>
+<rect x="1043.5" y="1251.0" width="170.5" height="14" rx="3" fill="#fb923c55"/>
+<text x="1224.0" y="1263.0" font-size="16" text-anchor="start" fill="#94a3b8">3.7x slower</text>
+<rect x="1043.5" y="1268.0" width="75.9" height="22" rx="3" fill="#fb923c"/>
+<text x="1129.4" y="1285.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.8x slower</text>
+<text x="660" y="1343.0" font-size="26" text-anchor="end" fill="#e2e8f0">HashMap inserts</text>
+<rect x="1043.5" y="1313.0" width="126.3" height="14" rx="3" fill="#fb923c55"/>
+<text x="1179.8" y="1325.0" font-size="16" text-anchor="start" fill="#94a3b8">2.7x slower</text>
+<rect x="1043.5" y="1330.0" width="78.5" height="22" rx="3" fill="#fb923c"/>
+<text x="1132.0" y="1347.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.8x slower</text>
 <text x="660" y="1405.0" font-size="26" text-anchor="end" fill="#e2e8f0">Proved AES-256</text>
-<rect x="1043.5" y="1375.0" width="85.1" height="14" rx="3" fill="#fb923c55"/>
-<rect x="1043.5" y="1392.0" width="85.1" height="22" rx="3" fill="#fb923c"/>
-<text x="1138.6" y="1409.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.9x slower</text>
+<rect x="1043.5" y="1375.0" width="85.3" height="14" rx="3" fill="#fb923c55"/>
+<rect x="1043.5" y="1392.0" width="85.3" height="22" rx="3" fill="#fb923c"/>
+<text x="1138.8" y="1409.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">1.9x slower</text>
 <text x="660" y="1467.0" font-size="26" text-anchor="end" fill="#e2e8f0">Array map/filter/fold</text>
-<rect x="1043.5" y="1437.0" width="136.1" height="14" rx="3" fill="#fb923c55"/>
-<text x="1189.6" y="1449.0" font-size="16" text-anchor="start" fill="#94a3b8">2.9x slower</text>
-<rect x="1043.5" y="1454.0" width="109.4" height="22" rx="3" fill="#fb923c"/>
-<text x="1162.9" y="1471.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">2.3x slower</text>
+<rect x="1043.5" y="1437.0" width="117.2" height="14" rx="3" fill="#fb923c55"/>
+<rect x="1043.5" y="1454.0" width="122.8" height="22" rx="3" fill="#fb923c"/>
+<text x="1176.3" y="1471.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">2.6x slower</text>
 <text x="660" y="1529.0" font-size="26" text-anchor="end" fill="#e2e8f0">Shared array, insertion sort</text>
-<rect x="1043.5" y="1499.0" width="118.4" height="14" rx="3" fill="#fb923c55"/>
-<text x="1171.9" y="1511.0" font-size="16" text-anchor="start" fill="#94a3b8">2.5x slower</text>
-<rect x="1043.5" y="1516.0" width="136.4" height="22" rx="3" fill="#fb923c"/>
-<text x="1189.9" y="1533.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">2.9x slower</text>
-<text x="80" y="1604" font-size="21" fill="#94a3b8">Apple M3, Lean 4.29.1, GHC 9.14.1 -O2, best of 3, pure programs only. Measured 2026-10-29 at commit fa71371, array rows 2026-10-30 at f46420a.</text>
-<text x="80" y="1634" font-size="21" fill="#94a3b8">Not everything improves: list merge sort slows with fusion, and a shared array mutated in a loop is still about 3x behind.</text>
+<rect x="1043.5" y="1499.0" width="121.2" height="14" rx="3" fill="#fb923c55"/>
+<text x="1174.7" y="1511.0" font-size="16" text-anchor="start" fill="#94a3b8">2.6x slower</text>
+<rect x="1043.5" y="1516.0" width="192.7" height="22" rx="3" fill="#fb923c"/>
+<text x="1246.2" y="1533.0" font-size="21" font-weight="700" text-anchor="start" fill="#fb923c">4.4x slower</text>
+<text x="80" y="1604" font-size="21" fill="#94a3b8">Apple M3, Lean 4.29.1, GHC 9.14.1 -O2, best of 3, pure programs only. Measured 2026-10-30 at commit f581c44.</text>
+<text x="80" y="1634" font-size="21" fill="#94a3b8">Not everything improves: list merge sort slows with fusion, and a shared array mutated in a loop is still 3x to 4x behind (a 9 ms run that times unevenly).</text>
 <text x="80" y="1682" font-size="26" font-weight="700" fill="#e2e8f0">leanzempic</text>
 <text x="262" y="1682" font-size="26" fill="#94a3b8">Apache-2.0  github.com/keithadler/leanzempic</text>
 </svg>

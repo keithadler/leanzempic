@@ -10,7 +10,7 @@ list fusion, unboxing) decides how your Lean program runs, instead of Lean's C b
   and GHC 9.14.1 only. CI runs the test suite on both, with a 52-program subset of the garden.
 * Honest one-line summary: up to 9x faster than Lean's C backend on numeric, `Int`, `Float`, record and
   fused-list code; with the recommended settings, between level and 3x slower on lists, tuples,
-  strings and hash maps (up to 4x slower with defaults); between 1.1x faster and 2.9x slower on arrays (loops that
+  strings and hash maps (up to 4x slower with defaults); between 1.1x faster and 4.4x slower on arrays (loops that
   update an unshared array in place are level or faster; the library `Array.map` and `filter`, and a shared array
   mutated in a loop, are what is left). See [Benchmarks](#benchmarks) for every number, including the losses.
 
