@@ -871,6 +871,29 @@ the reversal and the insertion sort's `swapLoop` now run on the raw buffer. Not 
 so its set is not marked in place and every step is a persistent update); its three hoisted loops are short, and
 the wrapper's check costs the 1.0%. It is the one program above that got worse.
 
+**The chart** (`docs/refresh_chart.py` at f46420a, run time against compiled Lean, so these are wall times of a
+shared machine, best of 3). Only the array rows were taken into `docs/chart-data.json`; the other rows keep their
+fa71371 measurement (a full refresh moved rows that have no arrays by up to 28% (Record update loop, 0.43 to 0.55), which is the
+noise of the method, and would have changed claims in the README that this change does not touch):
+
+| row | recommended before | now | default before | now |
+|---|---|---|---|---|
+| Sieve (Bool array) | 1.28 | 0.91 | 1.16 | 0.87 |
+| Prefix sums (Nat array) | 1.85 | 1.30 | 1.64 | 1.13 |
+| Reverse by swaps | 1.04 | 0.90 | 0.77 | 0.85 |
+| Array map and fold | 1.26 | 1.13 | 0.94 | 1.08 |
+| Push and pop stack | 1.21 | 1.12 | 1.06 | 1.09 |
+| Array map/filter/fold | 2.52 | 2.33 | 2.50 | 2.87 |
+| Shared array, insertion sort | 4.00 | 2.88 | 3.78 | 2.50 |
+
+Rows whose instructions did not change (Array map and fold, Push and pop, Array map/filter/fold) moved by up to 15%
+in either direction, so that is the size of the noise. The insertion sort row is a 8 ms native run; the Haskell
+program's own start-up with `-A256m -O1g` is about 20 ms, and its time is bimodal (0.023 s or 0.039 s for the same
+binary, five runs each), so the chart value is the best of 15 runs (0.023 s, against 0.036 s before), not the best
+of 3. The README's array table was re-measured separately (`arrays N i`, best of 5, default settings): sieve
+0.09 s against 0.07 s at 5e6 and 0.35 s against 0.24 s at 2e7, prefix sums 0.08 s against 0.09 s at 1e7,
+reversal 0.04 s against 0.03 s.
+
 Limits and what is not done:
 
 * Read-only loops over an unshared array are not hoisted (no in-place update to show the array is unshared).

@@ -3,7 +3,11 @@
   "commit": "fa71371",
   "date": "2026-10-29",
   "machine": "Apple M3",
-  "dirty": false
+  "dirty": false,
+  "array_rows": {
+   "commit": "f46420a",
+   "date": "2026-10-30"
+  }
  },
  "rows": [
   {
@@ -72,19 +76,19 @@
   },
   {
    "label": "Array map/filter/fold",
-   "native_s": 0.044,
-   "default_s": 0.11,
-   "tuned_s": 0.111,
-   "default": 2.5,
-   "tuned": 2.523
+   "native_s": 0.045,
+   "default_s": 0.129,
+   "tuned_s": 0.105,
+   "default": 2.867,
+   "tuned": 2.333
   },
   {
    "label": "Shared array, insertion sort",
-   "native_s": 0.009,
-   "default_s": 0.034,
-   "tuned_s": 0.036,
-   "default": 3.778,
-   "tuned": 4.0
+   "native_s": 0.008,
+   "default_s": 0.02,
+   "tuned_s": 0.023,
+   "default": 2.5,
+   "tuned": 2.875
   },
   {
    "label": "List of UInt8, hashed",
@@ -128,43 +132,43 @@
   },
   {
    "label": "Sieve (Bool array)",
-   "native_s": 0.10809993743896484,
-   "default_s": 0.12506318092346191,
-   "tuned_s": 0.13815593719482422,
-   "default": 1.157,
-   "tuned": 1.278
+   "native_s": 0.09727001190185547,
+   "default_s": 0.08429265022277832,
+   "tuned_s": 0.08850288391113281,
+   "default": 0.867,
+   "tuned": 0.91
   },
   {
    "label": "Prefix sums (Nat array)",
-   "native_s": 0.08256983757019043,
-   "default_s": 0.1352376937866211,
-   "tuned_s": 0.15235495567321777,
-   "default": 1.638,
-   "tuned": 1.845
+   "native_s": 0.07791996002197266,
+   "default_s": 0.08836507797241211,
+   "tuned_s": 0.10102605819702148,
+   "default": 1.134,
+   "tuned": 1.297
   },
   {
    "label": "Array map and fold",
-   "native_s": 0.050476789474487305,
-   "default_s": 0.0475001335144043,
-   "tuned_s": 0.06371569633483887,
-   "default": 0.941,
-   "tuned": 1.262
+   "native_s": 0.049027204513549805,
+   "default_s": 0.05319499969482422,
+   "tuned_s": 0.05521416664123535,
+   "default": 1.085,
+   "tuned": 1.126
   },
   {
    "label": "Reverse by swaps",
-   "native_s": 0.04858970642089844,
-   "default_s": 0.037261009216308594,
-   "tuned_s": 0.050634145736694336,
-   "default": 0.767,
-   "tuned": 1.042
+   "native_s": 0.046143293380737305,
+   "default_s": 0.03926801681518555,
+   "tuned_s": 0.041429996490478516,
+   "default": 0.851,
+   "tuned": 0.898
   },
   {
    "label": "Push and pop stack",
-   "native_s": 0.08272504806518555,
-   "default_s": 0.08740973472595215,
-   "tuned_s": 0.09989285469055176,
-   "default": 1.057,
-   "tuned": 1.208
+   "native_s": 0.07923698425292969,
+   "default_s": 0.08614516258239746,
+   "tuned_s": 0.08868670463562012,
+   "default": 1.087,
+   "tuned": 1.119
   },
   {
    "label": "Proved AES-256",

@@ -10,8 +10,9 @@ list fusion, unboxing) decides how your Lean program runs, instead of Lean's C b
   and GHC 9.14.1 only. CI runs the test suite on both, with a 52-program subset of the garden.
 * Honest one-line summary: up to 9x faster than Lean's C backend on numeric, `Int`, `Float`, record and
   fused-list code; with the recommended settings, between level and 3x slower on lists, tuples,
-  strings and hash maps (up to 4x slower with defaults); 1.8x to 4.0x slower on arrays, which is the main
-  open problem. See [Benchmarks](#benchmarks) for every number, including the losses.
+  strings and hash maps (up to 4x slower with defaults); between 1.1x faster and 2.9x slower on arrays (loops that
+  update an unshared array in place are level or faster; the library `Array.map` and `filter`, and a shared array
+  mutated in a loop, are what is left). See [Benchmarks](#benchmarks) for every number, including the losses.
 
 ![Run time of the Haskell output relative to compiled Lean, with default settings and with list fusion on and -A256m -O1g](docs/bench-chart.png)
 
@@ -552,6 +553,9 @@ output's run time divided by compiled Lean's, with default settings and with the
 | fold a 3-field record through a loop | 2e8 | 0.66 s | 0.31 s | 2.1x |
 | walk a segment of two nested 2-field records | 2e8 | 0.58 s | 0.28 s | 2.1x |
 | sum enum weights in a `for` loop | 2e8 | 0.42 s | 0.30 s | 1.4x |
+| sieve of Eratosthenes (`Bool` array) | 5e6 | 0.09 s | 0.07 s | 1.2x |
+| sieve of Eratosthenes (`Bool` array) | 2e7 | 0.35 s | 0.24 s | 1.5x |
+| reverse an array with swaps | 2e6 | 0.04 s | 0.03 s | 1.3x |
 | 64-bit FNV hash | 2e8 | 0.34 s | 0.32 s | 1.1x |
 | `UInt8` arithmetic, two mutable variables | 2e8 | 1.56 s | 0.57 s | 2.7x |
 | xorshift32, two mutable variables | 2e8 | 1.32 s | 0.85 s | 1.6x |
@@ -565,13 +569,10 @@ The record and multi-variable loops allocate 61 KB in total: the state lives in 
 
 | Workload | n | Lean | leanzempic | Ratio |
 |---|---|---|---|---|
-| sieve of Eratosthenes (array) | 5e6 | 0.10 s | 0.17 s | 1.7x slower |
-| sieve of Eratosthenes (array) | 2e7 | 0.38 s | 0.72 s | 1.9x slower |
-| push, then in-place prefix sums (array) | 3e6 | 0.04 s | 0.11 s | 2.8x slower |
-| prefix sums (array) | 1e7 | 0.08 s | 0.51 s | 6x slower |
-| array map and fold | 3e6 | 0.05 s | 0.12 s | 2.4x slower |
-| reverse an array with swaps | 2e6 | 0.04 s | 0.05 s | about level |
-| stack of pushes and pops (array) | 5e6 | 0.08 s | 0.13 s | 1.6x slower |
+| push, then in-place prefix sums (`Nat` array) | 3e6 | 0.04 s | 0.03 s | about level |
+| prefix sums (`Nat` array) | 1e7 | 0.08 s | 0.09 s | 1.2x slower |
+| array map and fold | 3e6 | 0.05 s | 0.05 s | 1.1x slower |
+| stack of pushes and pops (array) | 5e6 | 0.08 s | 0.08 s | about level |
 | append `toString i ++ ","` | 3e6 | 0.12 s | 0.23 s | 1.9x slower |
 | list, array and `Option` of pairs | 2e6 | 0.12 s | 0.35 s | 2.9x slower |
 | binary trees of pairs keyed by a closure | 3e5 | 0.79 s | 1.29 s | 1.6x slower |
@@ -580,9 +581,12 @@ The record and multi-variable loops allocate 61 KB in total: the state lives in 
 
 Reading these honestly:
 
-* Arrays are the weak spot. The ownership analysis took them from 3x to 10x slower down to about 1x
-  to 3x, but the gap widens again at large sizes. The remaining cost is boxed `Any` elements and
-  the persistent fallback wherever the analysis cannot prove uniqueness.
+* Arrays are slower only where a loop cannot resolve its buffer once. The ownership analysis took them from 3x to
+  10x slower down to about 1x, and hoisting the buffer of a loop that updates an unshared unboxed array in place
+  (see [Hoisted buffers](#hoisted-buffers)) made the sieve and the reversal faster than Lean's. What is left: the
+  library `Array.map`, `filter` and `zip` (the chart's 2.3x), loops that push or pop (1.1x), read-only loops over an
+  array the caller keeps, and a shared array mutated in a loop (2.9x in the chart, on an 8 ms native run that is mostly
+  start-up for the Haskell program too), where the persistent fallback runs.
 * Allocation-heavy code (trees, lists of pairs) is where GHC's copying collector and Lean's
   in-place reuse differ most.
 * Compile time was not optimized or compared with Lean's. GHC `-O2` on generated modules is
