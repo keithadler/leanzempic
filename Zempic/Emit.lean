@@ -224,6 +224,17 @@ def builtinTypes : List Name :=
 
 /-! ## Emitter state -/
 
+/-- A loop whose array is resolved to its raw buffer once (see "Hoisted buffers" in `Zempic.Arr`):
+parameter `kidx` is the array, `kind` the element width (`"8"`, `"16"`, `"32"`, `"64"`), `hty` the
+Haskell element type, and `aliases` every variable of the function that is that array (the parameter
+and the results of its in-place updates). -/
+structure Hoist where
+  kidx : Nat
+  kind : String
+  hty : String
+  aliases : Std.HashSet FVarId
+  deriving Inhabited
+
 /-- Emitter state: variable names and types, join points, the queue of constants still to
 compile, and what is unsupported. -/
 structure St where
@@ -275,6 +286,8 @@ structure St where
   typedArrays : Bool := true
   /-- Array reads whose value is later used as a `Word`: read without a box. -/
   wordGets : Std.HashSet FVarId := {}
+  /-- Set while printing the hoisted worker of a function (see `hoistPlan`). -/
+  hoist : Option Hoist := none
 
 /-- The emitter monad. -/
 abbrev EmitM := StateRefT St CoreM
@@ -313,6 +326,23 @@ def lookup (id : FVarId) : EmitM String := do
 /-- The Haskell type recorded for a variable (`Any` if unknown). -/
 def tyOf (id : FVarId) : EmitM String := do
   return (← get).tys[id]?.getD "Any"
+
+/-- The component types of a Haskell pair type `(A, B)`; `Any` for both when `t` is not a pair type
+(a value of unknown type, which has the layout of a pair of `Any`). -/
+def pairTys (t : String) : String × String := Id.run do
+  if !(t.startsWith "(" && t.endsWith ")") then return ("Any", "Any")
+  let cs := ((t.drop 1).dropEnd 1).toString.toList
+  let mut depth := 0
+  let mut i := 0
+  for c in cs do
+    if c == '(' then depth := depth + 1
+    else if c == ')' then depth := depth - 1
+    else if c == ',' && depth == 0 then
+      let a := String.ofList (cs.take i)
+      let b := String.ofList (cs.drop (i + 1))
+      return (a.trimAscii.toString, b.trimAscii.toString)
+    i := i + 1
+  return ("Any", "Any")
 
 /-- Cast `x` of Haskell type `have` to `want`. Casts between `Any` and a real type are free in
 Core. -/
@@ -379,7 +409,15 @@ partial def hsTyWith (env : List String) (e : Expr) : EmitM String := do
   | .const `Float _ => return "Double"
   | .const n _ =>
     if let some (_, _, h) := uintTypes.find? (·.1.toName == n) then return h
-    if n == `List || n == `Prod || builtinTypes.contains n then return "Any"
+    if n == `Prod then
+      -- A pair is a Haskell pair of its components' types. It has the layout of a pair of `Any`s (a
+      -- component is a pointer to its value either way), so the two are interchangeable by a free cast;
+      -- the typed one lets GHC return the components unboxed from a function that builds a pair.
+      let args := e.getAppArgs
+      if args.size == 2 then
+        return s!"({← hsTyWith env args[0]!}, {← hsTyWith env args[1]!})"
+      return "Any"
+    if n == `List || builtinTypes.contains n then return "Any"
     match (← getEnv).find? n with
     | some (.inductInfo v) =>
       if isPropInduct v then return "Any"
@@ -741,6 +779,123 @@ partial def usedAsWord (fast : Bool) (x : FVarId) : Code .pure → Bool
     | .default k => usedAsWord fast x k
   | _ => false
 
+/-! ### Hoisted array buffers
+
+A self-recursive function with an array parameter that the ownership analysis proved unshared, and that
+inside the function is only read and updated in place without changing its length, can resolve the
+array's buffer once instead of at every access (`Zempic.Arr`, "Hoisted buffers"). `hoistPlan` decides
+when. The conditions, all of which must hold:
+
+* the parameter is `Array e` with `e` a `UInt8/16/32/64` (or `Char`) and the function is not the in-place
+  `Array.map`, whose writes change the buffer's element type;
+* every use of the array (the parameter, and the result of each in-place update of it, which is the
+  same array) is a read (`size`, `get`, `uget`, `toList`), an in-place update that keeps its length
+  (`swap`, `set`, `uset`) that the analysis marked in place, or a use after which the array is not used
+  again on that path (passed to another function, stored, returned, jumped with). Nothing that changes
+  the node of the array (push, pop, a persistent update, a copy) is followed by a raw access;
+* at least one update is marked in place (so the analysis proved the parameter owned at entry) and the
+  function calls itself with the array in the same position (so there is a loop to speed up).
+
+The hoisted worker then runs only while the array stays a live buffer, which nothing can change: it is
+owned, so no other reference can reroot or copy it, and the loop does not push, pop or hand it on. -/
+
+/-- Position of the array among the Lean arguments of an `Array.*` primitive that hoisting understands. -/
+def hoistArrIdx (c : Name) : Option Nat :=
+  if c == `Array.get!Internal then some 2
+  else if [`Array.size, `Array.usize, `Array.getInternal, `Array.uget, `Array.toList,
+           `Array.swapIfInBounds, `Array.swap, `Array.set!, `Array.set, `Array.uset].contains c then some 1
+  else none
+
+/-- Primitives that only read the array. -/
+def hoistIsRead (c : Name) : Bool :=
+  [`Array.size, `Array.usize, `Array.get!Internal, `Array.getInternal, `Array.uget, `Array.toList].contains c
+
+/-- Primitives that update the array in place without changing its length. -/
+def hoistIsSet (c : Name) : Bool :=
+  [`Array.swapIfInBounds, `Array.swap, `Array.set!, `Array.set, `Array.uset].contains c
+
+/-- What the scan found. -/
+structure HScan where
+  aliases : Std.HashSet FVarId := {}
+  ok : Bool := true
+  destr : Bool := false
+  loops : Bool := false
+
+/-- How many of the arguments are the array (or one of its aliases)? -/
+def hoistCount (a : Std.HashSet FVarId) (args : Array (Arg .pure)) : Nat :=
+  args.foldl (fun n x => match x with | .fvar y => if a.contains y then n + 1 else n | _ => n) 0
+
+/-- Is the argument at position `i` an alias, and the only one? -/
+def hoistSimple (a : Std.HashSet FVarId) (args : Array (Arg .pure)) (i : Nat) : Bool :=
+  hoistCount a args == 1 && (match args[i]? with | some (.fvar y) => a.contains y | _ => false)
+
+/-- Walk function `f`'s code for the conditions above. `kidx` is the array's parameter position. -/
+partial def hoistWalk (f : Name) (kidx : Nat) (destr : Std.HashSet (Name × FVarId))
+    (jf : Std.HashMap FVarId Own.FVS) (c : Code .pure) : StateM HScan Unit := do
+  let gone := fun (later : Own.FVS) => do
+    let st ← get
+    if st.aliases.toList.any later.contains then modify fun s => { s with ok := false }
+  match c with
+  | .let d k =>
+    let st ← get
+    let a := st.aliases
+    match d.value with
+    | .const g _ args =>
+      if hoistCount a args == 0 then pure ()
+      else if hoistIsRead g && (hoistArrIdx g).any (hoistSimple a args) then pure ()
+      else if hoistIsSet g && (hoistArrIdx g).any (hoistSimple a args) && destr.contains (f, d.fvarId) then
+        modify fun s => { s with aliases := s.aliases.insert d.fvarId, destr := true }
+      else
+        if g == f && hoistSimple a args kidx then modify fun s => { s with loops := true }
+        gone (Own.fvCode jf k)
+    | .fvar g args =>
+      if a.contains g || hoistCount a args > 0 then gone (Own.fvCode jf k)
+    | .proj _ _ x => if a.contains x then gone (Own.fvCode jf k)
+    | _ => pure ()
+    hoistWalk f kidx destr jf k
+  | .fun d k =>
+    let st ← get
+    if st.aliases.toList.any (Own.fvFun jf d).contains then modify fun s => { s with ok := false }
+    hoistWalk f kidx destr jf k
+  | .jp d k =>
+    hoistWalk f kidx destr jf d.value
+    hoistWalk f kidx destr jf k
+  | .jmp j args =>
+    if hoistCount (← get).aliases args > 0 then gone (jf.getD j {})
+  | .cases cs =>
+    if (← get).aliases.contains cs.discr then modify fun s => { s with ok := false }
+    for alt in cs.alts do
+      match alt with
+      | .alt _ _ k => hoistWalk f kidx destr jf k
+      | .default k => hoistWalk f kidx destr jf k
+  | _ => pure ()
+
+/-- The element width of an `Array` parameter type, if the buffer is a narrow unboxed one. -/
+def hoistKind (ty : Expr) : EmitM (Option (String × String)) := do
+  match ty with
+  | .app (.const `Array _) e =>
+    if (← elemKind e) matches 1 | 2 | 3 | 4 then
+      match ← hsTyM e with
+      | "Word8" => return some ("8", "Word8")
+      | "Word16" => return some ("16", "Word16")
+      | "Word32" => return some ("32", "Word32")
+      | "Word64" => return some ("64", "Word64")
+      | _ => return none
+    else return none
+  | _ => return none
+
+/-- Is function `d` a loop whose array parameter can be hoisted? (See above.) -/
+def hoistPlan (d : Decl .pure) (body : Code .pure) : EmitM (Option Hoist) := do
+  if ((← get).cur.toString.splitOn "Array.mapMUnsafe").length > 1 then return none
+  let jf := Own.jpFvs body
+  for p in d.params, k in [0:d.params.size] do
+    if let some (kind, hty) ← hoistKind p.type then
+      let (_, sc) := (hoistWalk d.name k (← get).destr jf body).run
+        { aliases := ({} : Std.HashSet FVarId).insert p.fvarId }
+      if sc.ok && sc.destr && sc.loops then
+        return some { kidx := k, kind, hty, aliases := sc.aliases }
+  return none
+
 /-- Expression and its Haskell type. -/
 def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (String × String) :=
   match v with
@@ -759,8 +914,11 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
     let args ← args.mapM atomT
     return (args.foldl (fun acc a => s!"(zap {acc} {coerce a.1 a.2 "Any"})") f, "Any")
   | .proj `Prod i x => do
-    let x ← useAs x "(Any, Any)"
-    return (s!"(case {x} of \{ (p0, p1) -> p{i} })", "Any")
+    let xt ← tyOf x
+    let (t0, t1) := pairTys xt
+    let ty := if xt.startsWith "(" then xt else "(Any, Any)"
+    let x ← useAs x ty
+    return (s!"(case {x} of \{ (p0, p1) -> p{i} })", if i == 0 then t0 else t1)
   | .proj t i x => do
     let (targs, full) ← match (← get).exprTys[x]? with
       | some e => pure (← typeArgsOf e t, ← instTy e t)
@@ -773,7 +931,14 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
       return (s!"(case ({x} :: {full}) of \{ {pat} -> p{i} })", ftys.getD i "Any")
     | none => unsupported s!"projection on {t}"; return ("erased", "Any")
   | .const c _ argsRaw => do
-    if let some (hs, ptys, ret, free) ← tryUnroll c letId argsRaw then
+    -- A call to the function being printed that hands on the hoisted array: it stays in the hoisted worker.
+    let hoist? := (← get).hoist
+    let cur := (← get).cur
+    let selfH := match hoist? with
+      | some h => c == cur && hoistSimple h.aliases argsRaw h.kidx
+      | none => false
+    let unrolled ← if selfH then pure none else tryUnroll c letId argsRaw
+    if let some (hs, ptys, ret, free) := unrolled then
       return apply hs ptys ret free false
     let mut args : Array (String × String) := #[]
     let mut j := 0
@@ -782,6 +947,15 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
       j := j + 1
     match ← resolve c letTy with
     | .prim hs ptys ret =>
+      -- A pair is built at the component types of its Lean type.
+      let (ptys, ret) ← if hs == "zPair" then
+          match letTy.getAppFn, letTy.getAppArgs with
+          | .const `Prod _, #[a, b] =>
+            let ta ← hsTyM a
+            let tb ← hsTyM b
+            pure (["Any", "Any", ta, tb], s!"({ta}, {tb})")
+          | _, _ => pure (ptys, ret)
+        else pure (ptys, ret)
       let elem? : Option Expr := match letTy.getAppFn, letTy.getAppArgs with
         | .const `Array _, #[elem] => some elem
         | _, _ => none
@@ -852,8 +1026,19 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
           let k := if hs.startsWith "arrPush" then 2 else 3
           (hs ++ "W", ptys.set k (args[k]!).2, ret)
         else (hs, ptys, ret)
+      -- Inside a hoisted worker the array's accesses go to the raw buffer.
+      if let some h := (← get).hoist then
+        if let some i := hoistArrIdx c then
+          if (match argsRaw[i]? with | some (.fvar y) => h.aliases.contains y | _ => false)
+              && ["arrGetD", "arrGetI", "arrUGet", "arrSetU", "arrUSetU", "arrSwapU", "arrSwapPU"].any
+                   (fun b => hs == b ++ h.kind) then
+            return apply (hs ++ "H") (s!"HB {h.hty}" :: ptys) ret (#[("hb", s!"HB {h.hty}")] ++ args) false
       return apply hs ptys ret args false
-    | .decl hs ptys ret => return apply hs ptys ret args false
+    | .decl hs ptys ret =>
+      if selfH then
+        let h := (← get).hoist.get!
+        return apply (hs ++ "_h") (s!"HB {h.hty}" :: ptys) ret (#[("hb", s!"HB {h.hty}")] ++ args) false
+      else return apply hs ptys ret args false
     | .ctor hs ptys ret np => return apply hs ptys ret (args.extract np args.size) false
     | .bad => return ("erased", "Any")
 
@@ -1036,7 +1221,8 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
       | none => pure #[]
     let ty ← if cs.typeName == `Bool then pure "Bool"
       else if cs.typeName == `List then pure "[Any]"
-      else if cs.typeName == `Prod then pure "(Any, Any)"
+      else if cs.typeName == `Prod then
+        pure (let t := (← tyOf cs.discr); if t.startsWith "(" then t else "(Any, Any)")
       else match dty? with
         | some e => instTy e cs.typeName
         | none => genericTy cs.typeName
@@ -1049,8 +1235,11 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
           if n == `Bool.true then pure "True"
           else if n == `Bool.false then pure "False"
           else if n == `Prod.mk then do
-            let a ← bind ps[0]!.fvarId ps[0]!.binderName
-            let b ← bind ps[1]!.fvarId ps[1]!.binderName
+            let (t0, t1) := pairTys ty
+            noteExpr ps[0]!.fvarId ps[0]!.type
+            noteExpr ps[1]!.fvarId ps[1]!.type
+            let a ← bindT ps[0]!.fvarId ps[0]!.binderName t0
+            let b ← bindT ps[1]!.fvarId ps[1]!.binderName t1
             pure s!"({a}, {b})"
           else if n == `List.nil then pure "[]"
           else if n == `List.cons then do
@@ -1079,8 +1268,22 @@ def hsDecl (d : Decl .pure) : EmitM String := do
   let ret ← declRetM d
   let ptys ← d.params.toList.mapM (hsTyM ·.type)
   let sig := " -> ".intercalate (ptys ++ [ret])
-  let body ← hsCode body 1 ret
-  return s!"{n} :: {sig}\n{n} {" ".intercalate ps.toList} =\n{pad 1}{body}\n"
+  let text ← hsCode body 1 ret
+  let some h ← hoistPlan d body
+    | return s!"{n} :: {sig}\n{n} {" ".intercalate ps.toList} =\n{pad 1}{text}\n"
+  -- A loop over an unshared array: `n` checks once that the array is a live buffer and runs the worker on
+  -- the raw buffer; if it is not, the ordinary code `n_slow` runs one step, and its recursive calls come
+  -- back to `n`, which checks again (a lazy handle becomes a live buffer at its first write).
+  let hb := s!"HB {h.hty}"
+  let args := " ".intercalate ps.toList
+  let arr := ps[h.kidx]!
+  modify fun s => { s with hoist := some h }
+  let ps2 ← d.params.mapM bindP
+  let fast ← hsCode body 1 ret
+  modify fun s => { s with hoist := none }
+  return s!"{n} :: {sig}\n{n} {args} =\n{pad 1}aHoist{h.kind} (zu {arr}) (\\hb -> {n}_h hb {args}) ({n}_slow {args})\n\n" ++
+    s!"{n}_slow :: {sig}\n{n}_slow {args} =\n{pad 1}{text}\n\n" ++
+    s!"{n}_h :: {hb} -> {sig}\n{n}_h !hb {" ".intercalate (ps2.toList.map ("!" ++ ·))} =\n{pad 1}{fast}\n"
 
 /-- Print the copy of `d` whose parameters `ks` are fixed to literals. It takes only the other
 parameters; `INLINE` lets GHC splice the chain of copies of an unrolled loop into straight-line
@@ -1251,7 +1454,8 @@ def emitModule (modName : String) (roots : Array Name) (natMod : String := "Zemp
       "-- Generated by leanzempic. Do not edit.",
       s!"module {modName} where", "",
       "import Zempic.Runtime", s!"import {natMod}", "import Zempic.List", "import Zempic.UInt", "import Zempic.Prims",
-      "import Data.Word (Word8, Word16, Word32, Word64)", "import Data.Kind (Type)", "", ""])
+      "import Data.Word (Word8, Word16, Word32, Word64)", "import Data.Kind (Type)",
+      "import Zempic.Arr (HB, aHoist8, aHoist16, aHoist32, aHoist64)", "", ""])
     let names := (← get).seen.toList.map (·.toString)
     let listy := ["List.map", "List.filter", "List.foldl", "List.foldr", "List.zip", "List.flatMap"]
     let fusible := names.any (fun n => listy.any fun l => n.startsWith l) && !names.any (·.startsWith "Zempic.Fuse")

@@ -467,6 +467,118 @@ arrUSetU64 :: Any -> Any -> Word -> Word64 -> Any -> Any
 arrUSetU64 _ !a !i !v _ = arrIO (aSetF64 (zu a) (fromIntegral i) v >>= \ok -> if ok then return a else zo <$> aSetU64 (zu a) (fromIntegral i) v)
 {-# INLINE arrUSetU64 #-}
 
+arrGetD8H :: HB Word8 -> Any -> Word8 -> Any -> ZNat -> Word8
+arrGetD8H b _ d _ !i = hGetD8 b (arrIx i) d
+{-# INLINE arrGetD8H #-}
+
+arrGetI8H :: HB Word8 -> Any -> Any -> ZNat -> Any -> Word8
+arrGetI8H b _ _ !i _ = hGetD8 b (arrIx i) idxErr8
+{-# INLINE arrGetI8H #-}
+
+arrUGet8H :: HB Word8 -> Any -> Any -> Word -> Any -> Word8
+arrUGet8H b _ _ !i _ = hGetD8 b (fromIntegral i) idxErr8
+{-# INLINE arrUGet8H #-}
+
+arrSetU8H :: HB Word8 -> Any -> Any -> ZNat -> Word8 -> Any
+arrSetU8H b _ !a !i !v = hSet b a (arrIx i) v
+{-# INLINE arrSetU8H #-}
+
+arrUSetU8H :: HB Word8 -> Any -> Any -> Word -> Word8 -> Any -> Any
+arrUSetU8H b _ !a !i !v _ = hSet b a (fromIntegral i) v
+{-# INLINE arrUSetU8H #-}
+
+arrSwapU8H :: HB Word8 -> Any -> Any -> ZNat -> ZNat -> Any
+arrSwapU8H b _ !a !i !j = hSwap b a (arrIx i) (arrIx j)
+{-# INLINE arrSwapU8H #-}
+
+arrSwapPU8H :: HB Word8 -> Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
+arrSwapPU8H b _ !a !i !j _ _ = hSwap b a (arrIx i) (arrIx j)
+{-# INLINE arrSwapPU8H #-}
+
+arrGetD16H :: HB Word16 -> Any -> Word16 -> Any -> ZNat -> Word16
+arrGetD16H b _ d _ !i = hGetD16 b (arrIx i) d
+{-# INLINE arrGetD16H #-}
+
+arrGetI16H :: HB Word16 -> Any -> Any -> ZNat -> Any -> Word16
+arrGetI16H b _ _ !i _ = hGetD16 b (arrIx i) idxErr16
+{-# INLINE arrGetI16H #-}
+
+arrUGet16H :: HB Word16 -> Any -> Any -> Word -> Any -> Word16
+arrUGet16H b _ _ !i _ = hGetD16 b (fromIntegral i) idxErr16
+{-# INLINE arrUGet16H #-}
+
+arrSetU16H :: HB Word16 -> Any -> Any -> ZNat -> Word16 -> Any
+arrSetU16H b _ !a !i !v = hSet b a (arrIx i) v
+{-# INLINE arrSetU16H #-}
+
+arrUSetU16H :: HB Word16 -> Any -> Any -> Word -> Word16 -> Any -> Any
+arrUSetU16H b _ !a !i !v _ = hSet b a (fromIntegral i) v
+{-# INLINE arrUSetU16H #-}
+
+arrSwapU16H :: HB Word16 -> Any -> Any -> ZNat -> ZNat -> Any
+arrSwapU16H b _ !a !i !j = hSwap b a (arrIx i) (arrIx j)
+{-# INLINE arrSwapU16H #-}
+
+arrSwapPU16H :: HB Word16 -> Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
+arrSwapPU16H b _ !a !i !j _ _ = hSwap b a (arrIx i) (arrIx j)
+{-# INLINE arrSwapPU16H #-}
+
+arrGetD32H :: HB Word32 -> Any -> Word32 -> Any -> ZNat -> Word32
+arrGetD32H b _ d _ !i = hGetD32 b (arrIx i) d
+{-# INLINE arrGetD32H #-}
+
+arrGetI32H :: HB Word32 -> Any -> Any -> ZNat -> Any -> Word32
+arrGetI32H b _ _ !i _ = hGetD32 b (arrIx i) idxErr32
+{-# INLINE arrGetI32H #-}
+
+arrUGet32H :: HB Word32 -> Any -> Any -> Word -> Any -> Word32
+arrUGet32H b _ _ !i _ = hGetD32 b (fromIntegral i) idxErr32
+{-# INLINE arrUGet32H #-}
+
+arrSetU32H :: HB Word32 -> Any -> Any -> ZNat -> Word32 -> Any
+arrSetU32H b _ !a !i !v = hSet b a (arrIx i) v
+{-# INLINE arrSetU32H #-}
+
+arrUSetU32H :: HB Word32 -> Any -> Any -> Word -> Word32 -> Any -> Any
+arrUSetU32H b _ !a !i !v _ = hSet b a (fromIntegral i) v
+{-# INLINE arrUSetU32H #-}
+
+arrSwapU32H :: HB Word32 -> Any -> Any -> ZNat -> ZNat -> Any
+arrSwapU32H b _ !a !i !j = hSwap b a (arrIx i) (arrIx j)
+{-# INLINE arrSwapU32H #-}
+
+arrSwapPU32H :: HB Word32 -> Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
+arrSwapPU32H b _ !a !i !j _ _ = hSwap b a (arrIx i) (arrIx j)
+{-# INLINE arrSwapPU32H #-}
+
+arrGetD64H :: HB Word64 -> Any -> Word64 -> Any -> ZNat -> Word64
+arrGetD64H b _ d _ !i = hGetD64 b (arrIx i) d
+{-# INLINE arrGetD64H #-}
+
+arrGetI64H :: HB Word64 -> Any -> Any -> ZNat -> Any -> Word64
+arrGetI64H b _ _ !i _ = hGetD64 b (arrIx i) idxErr64
+{-# INLINE arrGetI64H #-}
+
+arrUGet64H :: HB Word64 -> Any -> Any -> Word -> Any -> Word64
+arrUGet64H b _ _ !i _ = hGetD64 b (fromIntegral i) idxErr64
+{-# INLINE arrUGet64H #-}
+
+arrSetU64H :: HB Word64 -> Any -> Any -> ZNat -> Word64 -> Any
+arrSetU64H b _ !a !i !v = hSet b a (arrIx i) v
+{-# INLINE arrSetU64H #-}
+
+arrUSetU64H :: HB Word64 -> Any -> Any -> Word -> Word64 -> Any -> Any
+arrUSetU64H b _ !a !i !v _ = hSet b a (fromIntegral i) v
+{-# INLINE arrUSetU64H #-}
+
+arrSwapU64H :: HB Word64 -> Any -> Any -> ZNat -> ZNat -> Any
+arrSwapU64H b _ !a !i !j = hSwap b a (arrIx i) (arrIx j)
+{-# INLINE arrSwapU64H #-}
+
+arrSwapPU64H :: HB Word64 -> Any -> Any -> ZNat -> ZNat -> Any -> Any -> Any
+arrSwapPU64H b _ !a !i !j _ _ = hSwap b a (arrIx i) (arrIx j)
+{-# INLINE arrSwapPU64H #-}
+
 arrSwapU8 :: Any -> Any -> ZNat -> ZNat -> Any
 arrSwapU8 _ !a !i !j = arrIO (aSwapF8 (zu a) (arrIx i) (arrIx j) >>= \ok -> if ok then return a else zo <$> aSwapU (zu a) (arrIx i) (arrIx j))
 {-# INLINE arrSwapU8 #-}

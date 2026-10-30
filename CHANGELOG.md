@@ -5,6 +5,9 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* Loops over an unshared `UInt8/16/32/64` array resolve its buffer once (hoisted buffers) and a pair has the
+  Haskell type of its components, so GHC returns pairs unboxed. `qsort` from 22.0 G to 14.7 G instructions
+  retired (native 15.1 G), 1.29 s to 0.89 s; unionfind 29.8 G to 26.1 G. See `BENCH.md` and `SOUNDNESS.md`.
 * Array reads and writes of a `Nat` (word mode) or `USize` element are done with no box (`arrUGetW`,
   `arrPushUW`, `arrUSetBUW`, ...), `Array.range` fills a word buffer in one pass, swaps and
   append/extract element moves no longer box, and the in-place primitives take unboxed arguments.

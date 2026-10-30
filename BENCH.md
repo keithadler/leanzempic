@@ -696,3 +696,57 @@ measurements) so the columns are comparable. All answers match native Lean.
 Two rows get worse and are in the chart: list merge sort (fusion makes it slower) and, within noise,
 the `Float` loop. The remaining large gaps are all arrays (a persistent array on every access) and
 the boxed values in lists.
+
+## Hoisted array buffers and typed pairs: `qsort` 22.0 G to 14.7 G instructions (2026-10-29)
+
+After the narrow-integer work `qsort` still retired 22.0 G instructions against native Lean's 15.1 G. Two
+causes were left. (1) Every array access in `partitionAux` read the array's `IORef`, tested the `Node` tag and the
+`Buf` tag, and then loaded; around the possible evaluation of the boxed arguments GHC also spilled every live
+variable to the stack at each access. (2) `partitionAux` returned its pair as `Any`, so GHC could not return the
+components unboxed.
+
+Same machine, A/B against a worktree of `main`, instructions from one run of each (they are deterministic to
+about 0.2%), time and cycles best of 5 interleaved, recommended settings:
+
+| `qsort` | `main` | now | native Lean C |
+|---|---|---|---|
+| instructions retired | 22.03 G | 14.69 G | 15.1 G |
+| cycles elapsed | 4.69 G | 3.29 G | 2.97 G |
+| time (best of 5) | 1.29 s | 0.89 s | 0.80 s |
+| allocated | 1835 MB | 1515 MB | |
+
+Default settings: 21.93 G to 14.63 G instructions. Where the instructions go now (sampling, share of time):
+the partition loop about 50%, `qsortAux` (the median-of-three reads and swaps, and the calls) about 25%,
+`mkRandomArray` about 7%, `isSorted` about 6%.
+
+What changed:
+
+* **Typed pairs.** A `Prod a b` now has the Haskell type `(A, B)` of its components, in function results,
+  variables and join points, instead of `Any`. The layout is the same as a pair of `Any`s (a component is a pointer
+  either way), so the two convert with the usual free casts; the typed one lets GHC's CPR return the components
+  unboxed. Alone this took `qsort` from 22.03 G to 21.7 G instructions and from 1835 MB to 1515 MB allocated.
+* **Hoisted buffers** (`Emit.hoistPlan`, `Zempic.Arr` "Hoisted buffers", conditions in `SOUNDNESS.md`). A
+  self-recursive function with an `Array UInt8/16/32/64` parameter that the ownership analysis proved unshared and
+  that only reads it and swaps or overwrites in place is emitted three ways: a wrapper `f` that resolves the buffer
+  once (`aHoist32`), `f_h` which runs on the raw buffer, and `f_slow`, the ordinary code, whose recursive calls
+  go back to `f` (so a lazy handle becomes a live buffer at its first write and is picked up from the next step on).
+  This took `qsort` from 21.7 G to 14.7 G instructions.
+* **Two things that cost a lot the first time.** The raw read was first written over the generic `MArray`
+  class and the result went through a `W32#` that GHC allocated and unpacked again at every read (allocation went
+  from 1.5 GB to 3.5 GB; fixed by writing `hGetD8/16/32/64` on `readWord32Array#` and friends). Then the hoisted
+  worker kept lazy, boxed arguments, so each iteration evaluated them with seven spilled variables; bang patterns on
+  the worker's parameters (Lean is strict, so this changes no answer) took it from 16.5 G to 14.7 G.
+
+Other real-world programs, instructions retired before and after (recommended settings): binarytrees 11.47 G /
+11.47 G, const_fold 26.35 G / 26.38 G, deriv 8.43 G / 8.40 G, rbmap 6.20 G / 6.20 G, rbmap_checkpoint 9.21 G /
+9.21 G (all within the 0.2% run-to-run noise), unionfind 29.81 G to 26.10 G (1.77 s to 1.35 s; native 1.54 s).
+The array rows of the chart (`examples/Arrays.lean`) are unchanged in instructions (3.01, 2.89, 0.92, 0.42,
+1.57 G): their arrays travel inside the loop-state tuple of a `for` loop, not as a parameter, so the hoist does not
+apply to them.
+
+Limits and what is not done:
+
+* Only an array that is a direct parameter of a self-recursive function, of `UInt8/16/32/64` (or `Char`) elements.
+  `Nat`/`USize`/`Bool` arrays and arrays inside a loop's state tuple are not hoisted. `qsortAux`, whose array reaches
+  its helpers through join-point parameters and a pair component, is not either, and it is now a quarter of the time.
+* `qsortAux` (16 bytes per call), `mkRandomArray` (23 per push) and `isSorted` (23 per step) still allocate (ticky, n = 100).

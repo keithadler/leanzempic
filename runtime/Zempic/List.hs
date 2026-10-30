@@ -46,6 +46,6 @@ zZip :: [Any] -> [Any] -> [Any]
 zZip = zipWith (\a b -> zo (a, b))
 {-# INLINE zZip #-}
 
-zPair :: Any -> Any -> Any -> Any -> (Any, Any)
+zPair :: Any -> Any -> a -> b -> (a, b)
 zPair _ _ a b = (a, b)
 {-# INLINE zPair #-}

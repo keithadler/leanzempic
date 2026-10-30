@@ -966,3 +966,102 @@ def entry (n : Nat) : Nat :=
     return arr
   r.foldl (fun acc x => acc * 5 + x) 0 + v.foldl (· + ·) 0
 ''')
+
+# Loops over an unshared array that read it and swap or overwrite elements in place: the emitter resolves the
+# raw buffer once (hoisted buffers). One program per element width; the aliasing variants share the array with
+# the caller, which has to see it unchanged.
+for _T, _M in [("UInt8", 251), ("UInt16", 65521), ("UInt32", 4294967291), ("UInt64", 18446744073709551557)]:
+    add(f"hoist_qsort_{_T.lower()}", f'''
+def mkArr (n : Nat) : Array {_T} := Id.run do
+  let mut a : Array {_T} := Array.mkEmpty 4
+  let mut s : {_T} := 12345
+  for _ in [0:n] do
+    a := a.push s
+    s := s * 1664525 + 1013904223
+  return a
+
+partial def part (hi : Nat) (pivot : {_T}) (as : Array {_T}) (i j : Nat) : Nat × Array {_T} :=
+  if j < hi then
+    if as[j]! < pivot then part hi pivot (as.swapIfInBounds i j) (i + 1) (j + 1)
+    else part hi pivot as i (j + 1)
+  else (i, as.swapIfInBounds i hi)
+
+partial def qs (as : Array {_T}) (lo hi : Nat) : Array {_T} :=
+  if lo < hi then
+    let r := part hi as[hi]! as lo lo
+    let as := r.2
+    let as := if r.1 > 0 then qs as lo (r.1 - 1) else as
+    qs as (r.1 + 1) hi
+  else as
+
+def entry (n : Nat) : Nat :=
+  let k := n * 9 + 1
+  let a := qs (mkArr k) 0 (k - 1)
+  a.foldl (fun acc x => (acc * 31 + x.toNat) % 1000003) 0
+''')
+    add(f"hoist_set_{_T.lower()}", f'''
+-- a prefix sum written in place, a reversal by swaps, and a loop that stops early and returns the array
+partial def pfx (a : Array {_T}) (i : Nat) (acc : {_T}) : Array {_T} :=
+  if i < a.size then
+    let acc := acc + a[i]!
+    pfx (a.set! i acc) (i + 1) acc
+  else a
+
+partial def rev (a : Array {_T}) (i j : Nat) : Array {_T} :=
+  if i < j then rev (a.swapIfInBounds i j) (i + 1) (j - 1) else a
+
+partial def firstBig (a : Array {_T}) (i : Nat) (lim : {_T}) : Nat × Array {_T} :=
+  if i < a.size then
+    if a[i]! > lim then (i, a.set! i 0) else firstBig a (i + 1) lim
+  else (a.size, a)
+
+def entry (n : Nat) : Nat :=
+  let k := n * 7 + 3
+  let a : Array {_T} := (List.range k).toArray.map (fun i => {_T}.ofNat (i * 37 + 11))
+  let b := rev (pfx a 0 0) 0 (k - 1)
+  let (p, c) := firstBig b 0 ({_M} / 2)
+  b.foldl (fun acc x => acc * 7 + x.toNat) 0 % 1000003 + p + c.foldl (fun acc x => acc + x.toNat) 0 % 1000003
+''')
+    add(f"hoist_shared_{_T.lower()}", f'''
+-- the caller keeps the array it passes to the loop (a lazy copy is made), and one loop also pushes
+partial def bump (a : Array {_T}) (i : Nat) : Array {_T} :=
+  if i < a.size then bump (a.set! i (a[i]! + 1)) (i + 1) else a
+
+partial def bumpGrow (a : Array {_T}) (i : Nat) (fuel : Nat) : Array {_T} :=
+  match fuel with
+  | 0 => a
+  | f + 1 =>
+    if i < a.size then
+      if a[i]! % 3 == 0 then bumpGrow (a.push a[i]!) (i + 1) f
+      else bumpGrow (a.set! i (a[i]! + 2)) (i + 1) f
+    else a
+
+partial def swapAll (a : Array {_T}) (i : Nat) : Array {_T} :=
+  if i + 1 < a.size then swapAll (a.swapIfInBounds i (i + 1)) (i + 2) else a
+
+def entry (n : Nat) : Nat :=
+  let a : Array {_T} := (List.range (n * 2 + 2)).toArray.map (fun i => {_T}.ofNat (i + 1))
+  let b := bump a 0
+  let c := bumpGrow a 0 1000
+  let d := swapAll b 0
+  let sum := fun (x : Array {_T}) => x.foldl (fun acc v => (acc * 13 + v.toNat) % 1000003) 0
+  sum a + sum b * 3 + sum c * 5 + sum d * 7
+''')
+for _T in ["UInt8", "UInt32"]:
+    add(f"hoist_escape_{_T.lower()}", f'''
+-- the loop is also used as a value, so nothing is known about its array: it must stay persistent
+partial def bumpV (a : Array {_T}) (i : Nat) : Array {_T} :=
+  if i < a.size then bumpV (a.set! i (a[i]! + 1)) (i + 1) else a
+
+partial def swapV (a : Array {_T}) (i : Nat) : Array {_T} :=
+  if i + 1 < a.size then swapV (a.swapIfInBounds i (i + 1)) (i + 2) else a
+
+def twice (f : Array {_T} → Nat → Array {_T}) (a : Array {_T}) : Array {_T} × Array {_T} := (f a 0, f a 0)
+
+def entry (n : Nat) : Nat :=
+  let a : Array {_T} := (List.range (n * 3 + 2)).toArray.map (fun i => {_T}.ofNat (i + 1))
+  let (b, c) := twice bumpV a
+  let (d, e) := twice swapV a
+  let sum := fun (x : Array {_T}) => x.foldl (fun acc v => (acc * 13 + v.toNat) % 1000003) 0
+  sum a + sum b * 3 + sum c * 5 + sum d * 7 + sum e * 11
+''')
