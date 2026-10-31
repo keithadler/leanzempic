@@ -386,3 +386,11 @@ at n = 2e6). `arrUSetBUW` therefore decides in line whether the write was done a
 
 Until then, treat in-place array updates as the one part of leanzempic whose correctness rests on
 testing rather than on construction, and keep `zempic.own false` in mind when debugging a wrong result.
+
+## `Nat.log2` beyond 2^64
+
+`natLog2` in `Zempic.Nat.Word` and `Zempic.Nat.Exact` is `integerLog2 (toInteger n)` (0 for 0), the floor of the base-2
+logarithm, as `Nat.log2`. The garden program `bignum_log2` checks it against native Lean at 2^k-1, 2^k and 2^k+1
+for k = 0, 1, 62, 63, 64, 65, 127, 128, 129 and on factorials. Two deliberate edits were tried in `Exact.hs`: an
+argument of `n + 1` (wrong at 2^k-1) and a `+ 1` above 2^64-1 (wrong across the word boundary); both make
+`bignum_log2` report DIFF, and both were reverted.

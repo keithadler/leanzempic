@@ -15,6 +15,7 @@ import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import GHC.Exts (build, addWordC#, timesWord2#, minusWord#, geWord#, gtWord#, eqWord#, ltWord#, leWord#, quotWord#, remWord#, isTrue#)
 import GHC.Num.Natural (Natural (NS))
 import Numeric.Natural (Natural)
+import GHC.Num.Integer (integerLog2)
 import Data.List (foldl')
 import Zempic.Runtime (Any, zo, zu)
 
@@ -800,8 +801,7 @@ strSetAtH :: Any -> ZNat -> Word32 -> Any -> Any
 strSetAtH s p c _ = strSetAt s p c
 
 natLog2 :: ZNat -> ZNat
-natLog2 n = if n == 0 then 0 else go 0 (toInteger n)
-  where go acc x = if x <= 1 then acc else go (acc + 1) (x `shiftR` 1)
+natLog2 n = if n == 0 then 0 else fromIntegral (integerLog2 (toInteger n))
 
 natPred :: ZNat -> ZNat
 natPred x = if x == 0 then 0 else x - 1

@@ -1874,3 +1874,19 @@ def entry (n : Nat) : Nat :=
   let s5 := sumWith (poke a1) a1 z z
   s1 + s2 * 3 + s3 * 5 + s4 * 7 + s5 * 11 + sumL a0 + sumL a1 * 9
 ''')
+add("bignum_log2", '''
+-- Nat.log2 beyond 2^64: around the word boundary and on factorials, with the results gathered in an array built
+-- by pushes from a non-literal start (the shift loop it replaced took one step per bit)
+def entry (n : Nat) : Nat :=
+  let z := n / 1000
+  let ks := [0, 1, 62, 63, 64, 65, 127, 128, 129, 1000 + n]
+  let a := ks.foldl (fun (a : Array Nat) k =>
+    a.push (Nat.log2 (2 ^ k - 1)) |>.push (Nat.log2 (2 ^ k)) |>.push (Nat.log2 (2 ^ k + 1))) #[]
+  let rec fact (k : Nat) (acc : Nat) : Nat := match k with | 0 => acc | j + 1 => fact j (acc * (j + 1))
+  let a2 := (List.range (n % 7 + 3)).foldl (fun (a : Array Nat) i => a.push (Nat.log2 (fact (z + i * 11 + 20) 1))) a
+  let rec sumFrom (i : Nat) (acc : Nat) (fuel : Nat) : Nat :=
+    match fuel with
+    | 0 => acc
+    | f + 1 => if i < a2.size then sumFrom (i + 1) ((acc * 31 + a2[i]!) % 1000003) f else acc
+  sumFrom z 0 (a2.size + 1) + Nat.log2 (2 ^ 200 * (n + 1)) + (a2.foldl (· + ·) 0)
+''')

@@ -739,7 +739,7 @@ first. With it set correctly, best of 3, identical answers:
 
 The reason is what tenet-hs found about copying collectors: live data is the cost, not allocation.
 A fused pipeline never builds the intermediate list, so there is nothing for the collector to copy.
-All 223 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
+All 224 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
 
 **A GHC panic, found by fusion.** `list_funcs` with fusion made GHC 9.14.1 panic ("the 'impossible'
 happened", `StgToCmm.Env: variable not found co5_Xc`). It was deterministic for a given invocation but
@@ -1132,3 +1132,53 @@ Garden, 23 programs, 3 runs each, instructions retired (the four combinations, `
 Reproduce: `python3 bench/realworld/rts.py 3 all rec=@/recommended/m 'low=@/recommended/m::-A64m'`.
 The garden half used `GARDEN_FUSE=0/1 python3 garden/run.py`, then the generated `Out.hs` compiled with
 `ghc -O2 -rtsopts` and run with `+RTS` options under `/usr/bin/time -l`.
+
+# Numbers beyond 2^64: `Nat` and `Int` against native Lean (2026-10-31, Linux x86_64)
+
+Question: once a `Nat` or `Int` no longer fits a word, is the exact path (`Out.Exact`, GHC `Natural`/`Integer` on
+ghc-bignum with GMP) slower than Lean's C backend (GMP through `lean_nat_*`)? Program: `examples/BigNum.lean`
+(13 workloads, one root `runBig which size`, output a residue so printing stays cheap), driver
+`bench/BigNumMain.hs`, native build `lake build bignum`. Outputs agree on every row.
+
+All numbers are **Ir (valgrind)**: guest instructions from `valgrind --tool=callgrind`, best of 3, a deterministic
+stand-in for instructions retired on this VM (no hardware counters). Native Lean spends about 162.1 M Ir in
+runtime start-up before any work (`which=0 size=0`: 162.1 M; the Haskell binary: 1.6 M), so the table also gives
+the work alone, Ir minus that start-up. Most of the work in both binaries is inside libgmp (for `gcd 60000`, 41%
+in `__gmpn_mul_basecase`), so a ratio near 1 means the wrapper adds nothing.
+
+| Workload (size) | Lean, total | leanzempic, total | Lean, work | leanzempic, work |
+|---|---|---|---|---|
+| `n!`, left fold (20000) | 577.3 M | 286.8 M | 415.1 M | 285.2 M |
+| modular exponentiation, 4423-bit modulus (exponent 2^4000) | 708.2 M | 475.9 M | 546.1 M | 474.3 M |
+| `Nat.gcd` of Fibonacci numbers and of `3^n-1`, `6^n-1` (60000) | 185.4 M | 26.9 M | 23.2 M | 25.3 M |
+| Euclid written in Lean, 4000-digit operands (20000) | 162.5 M | 1.8 M | 0.3 M | 0.2 M |
+| Lucas-Lehmer, 2^2203-1 | 217.5 M | 44.4 M | 55.3 M | 42.9 M |
+| Miller-Rabin, 12 bases, 2^1279-1 | 488.6 M | 234.1 M | 326.5 M | 232.5 M |
+| Fibonacci by fast doubling, **about 1.04 million digits** (n = 5,000,000) | 549.1 M | 291.6 M | 387.0 M | 290.0 M |
+| Fibonacci by 30000 additions | 259.1 M | 30.2 M | 97.0 M | 28.6 M |
+| `Int`: alternating product and extended gcd (3000) | 192.2 M | 14.1 M | 30.0 M | 12.6 M |
+| `toString` of a 4180-digit number (n = 20000) | 221.5 M | 28.5 M | 59.4 M | 26.9 M |
+| Newton integer square root (n = 200000) | 298.9 M | 153.2 M | 136.8 M | 151.6 M |
+| `Int` `/ % tdiv tmod fdiv fmod >>> gcd natAbs toNat` (100000) | 179.0 M | 18.5 M | 16.9 M | 16.9 M |
+| shifts, `&&&`, `|||`, `^^^`, `Nat.log2` (20000): before | 163.5 M | 16.5 M | 1.4 M | 14.9 M |
+| same, after the fix below | 163.5 M | 2.2 M | 1.4 M | 0.6 M |
+
+Reading it. Except for the last two rows (before and after the fix below) the exact path is level with Lean or below it: it executes the same
+GMP routines, and the generated code around them is a few percent of the total. Where it is slightly above
+(`gcd 60000`, 25.3 M against 23.2 M; Newton square root, 151.6 M against 136.8 M) the difference is inside GMP
+(the two binaries link different libgmp builds; not checked further) and not in code this project generates. The
+rows where leanzempic is far ahead in the total column mostly show Lean's start-up; the work columns are the comparison.
+Auto mode's double run is cheap here: the word run overflows within the first few operations (`n!` at 21!).
+
+**One loss found and fixed: `Nat.log2` was quadratic.** `natLog2` shifted its argument right one bit at a time
+(`go (acc + 1) (x >> 1)`), allocating a new big number per bit: bits x limbs work, 11.1 M Ir inside `__gmpn_rshift`
+for a 13,000-bit argument. It now calls `integerLog2` (a count of the top limb plus the limb count). The
+bit-operations row went from 16.5 M to 2.2 M Ir (valgrind) and its output is unchanged. Both `Word.hs` and
+`Exact.hs` carry the new definition. No bench/realworld program or chart row uses `Nat.log2`, so none changes.
+
+Rejected: nothing else needed work, so no other change was made. Every row above was within the noise of the
+native program except where noted, and a change would have had to beat GMP itself. Not measured: peak memory and big
+numbers inside arrays or structures.
+
+Reproduce: `lake build bignum`, `bench/build.sh BigNumMain`, then `/home/user/ir.sh build/BigNumMain 6 5000000`
+and `/home/user/ir.sh .lake/build/bin/bignum 6 5000000` (any callgrind wrapper that prints the best of three works).

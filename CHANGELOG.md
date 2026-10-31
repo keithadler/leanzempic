@@ -5,6 +5,13 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* `Nat.log2` on a number above 2^64 took one big-number shift per bit (quadratic); it now uses `integerLog2`. The
+  bit-operations workload in the new `examples/BigNum.lean` went from 16.5 M to 2.2 M Ir (valgrind; a stand-in for
+  instructions retired). A benchmark of `Nat` and `Int` beyond 2^64 (factorial, modular exponentiation, gcd,
+  Lucas-Lehmer and Miller-Rabin primality, Fibonacci up to a million digits, `Int` division and shifts) found the
+  exact path level with or below native Lean on the other twelve rows; see `BENCH.md`. New garden program
+  `bignum_log2` (224 in all); a wrong `+ 1` and a wrong word-boundary case in `natLog2` are both caught by it.
+
 * `Array.map` and read-only loops (`foldl`, `foldr`, `any`, `all`, `contains`, hand-written loops) read and write the
   raw buffer like the other hoisted loops. The map's write has an in-line fast path that returns its own argument (an
   inlined function that rebuilds `Arr` allocated 24 bytes per element under `-fno-cse`), and `ZNat` and `Word`
