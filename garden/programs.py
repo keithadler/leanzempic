@@ -1931,14 +1931,14 @@ partial def hl (a : Array {T}) (i fuel : Nat) : Array {T} :=
   else a
 
 -- an owned array that an append of nothing, or a reverse of fewer than two, returns as it is: a later in-place
--- push must not show through the result
+-- write must not show through the result
 def alias (k : Nat) (e : Array {T}) : Nat :=
   let a := mk k 3
   let r := a ++ e
-  let a2 := a.push (el 9)
+  let a2 := (a.set! 0 (el 9)).push (el 2)
   let q := mk k 5
   let s := q.reverse
-  let q2 := q.push (el 8)
+  let q2 := (q.set! 0 (el 8)).push (el 3)
   sumS r * 3 + sumS a2 + sumS s * 5 + sumS q2 * 7
 
 def edges (a : Array {T}) : Nat :=

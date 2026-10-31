@@ -10,9 +10,9 @@ everything is pre-release (`0.1.0`).
   work, for every buffer kind; the in-place forms (`arrAppendU`, `arrReverseU`) are chosen by the ownership analysis
   like `arrPushU`. `Array.extract` is clipped as Lean's is, and its result gets an unboxed buffer when the element type
   is known. Ir (valgrind, a stand-in for instructions retired) on `array_funcs` at n = 2e5, recommended settings:
-  101.1 M to 72.7 M (-28.2%). The generated Haskell of the seven real-world programs is byte-identical to `main`'s, and
+  101.1 M to 72.6 M (-28.2%). The generated Haskell of the seven real-world programs is byte-identical to `main`'s, and
   the chart's example sources do not use the three operations. 11 new garden programs `bulk_*` (234 in all); the
-  mutation results are in `SOUNDNESS.md`, the per-operation numbers in `BENCH.md`.
+  mutation results are in `SOUNDNESS.md`, the per-operation numbers in `BENCH.md`. New property test `arrBulk`. Note: `tools/gen_runtime.py` on `main` already differs from the committed `Nat/Word.hs` and `Nat/Exact.hs` (it would drop `arrUSetBUW`), so the new block was added to both the generator and the two files by hand.
 * `Array.map` and read-only loops (`foldl`, `foldr`, `any`, `all`, `contains`, hand-written loops) read and write the
   raw buffer like the other hoisted loops. The map's write has an in-line fast path that returns its own argument (an
   inlined function that rebuilds `Arr` allocated 24 bytes per element under `-fno-cse`), and `ZNat` and `Word`

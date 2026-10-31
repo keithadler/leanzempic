@@ -330,6 +330,66 @@ One more finding: with `-fno-cse` (which the generated modules use) an inlined f
 and returns it rebuilds the record, so an in-line write that returns its array allocated 24 bytes per element (48 MB
 at n = 2e6). `arrUSetBUW` therefore decides in line whether the write was done and returns its own argument.
 
+## Bulk array operations
+
+`Array.append`, `Array.extract` and `Array.reverse` (the `_redArg` forms the compiler emits) are runtime primitives
+(`aAppend`, `aAppendU`, `aExtract`, `aReverse`, `aReverseU` in `Zempic.Arr`) in place of the library's loop of one push or
+swap per element. The claim is that each behaves as the library function does on every buffer kind, on lazy handles and
+on stale versions, and that the in-place forms are used only where `arrPushU` would have been.
+
+* **Which form.** `Own.bulkOps` lists `append` and `reverse` with the position of the array they may update (argument 0);
+  `Own.step` treats them like `Array.push`: the `U` form is chosen only if that array is `own`, not used afterwards and
+  not passed twice. Whatever the verdict, the array's ownership is dropped from the environment afterwards, because the
+  result of a plain `append` of nothing (and of a `reverse` of fewer than two) is the argument itself: an owner that
+  survived would let a later in-place write show through the result. When the verdict is `own` the result is `own` (it
+  is the same buffer). `mutScan` counts the array as written, so a caller that passes a shared array gets a lazy handle
+  (`arrShare`) exactly as it did when the library loop was compiled.
+* **Extract.** `Array.extract` only reads its source (`Own.bulkFresh`), which therefore keeps its ownership, and always
+  returns a fresh array (own), also for an empty range. The range is Lean's: the count is `(min stop size) - start` as a
+  `Nat` subtraction (saturating), taken before any conversion to `Int`, so a start or stop of `2^64` or `2^70` clips as
+  in Lean. Only a positive count reaches a buffer, with `start < size`.
+* **Reading the operands.** `readBuf` returns the live buffer of a version (a lazy handle reads through to the version it
+  was made from without copying; an old version is rerooted). It is valid until another version of the same buffer is
+  rerooted, so every primitive copies out of it before touching any other version. `aAppend` copies the first array into
+  its new buffer and only then reads the second; `aAppendU` makes the first array private (`ownNode` copies a lazy
+  handle), reads the second, and then reads the first array's node *again*, because reading the second may have
+  rerooted a version of the same buffer (the second operand an older version of the first). If the node is no longer a
+  live `Direct` with count >= 0 it falls back to `aAppend`. Appending an array to itself needs no special case: the copy
+  runs from the old or the grown buffer and the two ranges do not overlap.
+* **Buffers.** A result takes the kind of the buffer it copies (of the first array, or of the second when the first is
+  empty); `Array.extract` takes the kind the compiler chose from the element type, so that an unboxed array stays
+  unboxed. Two buffers of one kind are copied as a block (`copyMutableByteArray#`, `copyMutableArray#`, non-overlapping);
+  two kinds go through `bufRead` and `bufWrite`, as `aPushFromU` already did. New buffers are allocated unfilled
+  (`bufAlloc`) except for the part past the copied elements, which is cleared as in `bufNew`; a boxed buffer is always
+  fully filled, so the collector never sees an uninitialized slot. The one slot not written when two kinds meet is a
+  `()` placeholder, which never occurs as an element.
+* **Reverse.** In place it swaps within the live buffer under the same test as `aSwapU` (`Direct` with count >= 0, else the
+  persistent form), and the persistent form writes a fresh buffer and leaves its argument alone.
+
+Testing: the garden programs `bulk_uint8`, `bulk_uint16`, `bulk_uint32`, `bulk_uint64`, `bulk_usize`, `bulk_nat`,
+`bulk_bool`, `bulk_char`, `bulk_string`, `bulk_arrnat` (every buffer kind and two boxed element types) and
+`bulk_bignat` (indices beyond a word, exact mode). Each builds its arrays by pushes, starts loops at a value that is not a
+literal, and covers an owned accumulator, a shared array handed to a callee that writes it on one branch and appends on the
+other (a lazy handle as either operand), older versions read after newer ones, edge ranges (start past stop, stop past the
+size, start past the size, the largest word), empty operands, an array appended to itself, and an owned array that an
+append of nothing returns as it is. The property test `arrBulk` runs the five primitives against a list model on a pool of
+versions, lazy handles, owners, a version that stopped being live, an older version of the first array as second operand,
+and versions in a write chain long enough for the buffer to be copied away (count -1).
+
+Mutation testing, each edit built and run against the garden programs (Lean-side edits) or `tests/PropTests.hs`
+(runtime edits), then reverted:
+
+| Mutation | Result |
+|---|---|
+| plain `reverse` reverses its argument in place | killed: `arrBulk` |
+| `extract` returns one element too few | killed: `arrBulk` |
+| `aAppendU` reuses the first array's node from before the second operand was read | killed: `arrBulk` |
+| `aReverseU` reverses a `Direct` node of count -1 in place | killed: `arrBulk` (a version in a long write chain) |
+| `aAppendU` appends in place to a `Direct` node of count -1 | survived: an equivalent mutant, because the appended elements lie past the length of every version that reads through the buffer |
+| `aAppendU` never grows the buffer | killed: `arrBulk` (a crash) |
+| Own: the in-place decision ignores later uses of the array | killed: garden `bulk_uint8` gives a wrong answer |
+| Own: the array stays owned after an append that may return it | killed: garden `bulk_uint8` (the `alias` function: an in-place write shows through the result) |
+
 ## Assumptions the claim depends on
 
 * **Single thread of use.** Arrays are mutable buffers behind `unsafeDupablePerformIO`; two threads

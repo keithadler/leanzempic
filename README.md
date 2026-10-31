@@ -444,8 +444,8 @@ instructions per element and the fold from 86 to 20, and the program from 2.16 G
 `Array.append`, `Array.extract` and `Array.reverse` are single runtime primitives, not loops of one push or swap per
 element: a block copy of whole runs (or one swap loop) for every buffer kind, and, where the analysis proved the first
 array unshared, an in-place append into the array's own buffer (grown once) or an in-place reversal. On `array_funcs`
-(n = 2e5, recommended settings) the program went from 101.1 M to 72.7 M Ir (valgrind, a stand-in for instructions
-retired), and the append, extract and reverse alone from 2x to 5x fewer; see [`BENCH.md`](BENCH.md).
+(n = 2e5, recommended settings) the program went from 101.1 M to 72.6 M Ir (valgrind, a stand-in for instructions
+retired), and the append, extract and reverse microbenchmarks (set-up included) took 1.8x to 5.2x fewer; see [`BENCH.md`](BENCH.md).
 
 `set_option zempic.own false` turns the analysis off. [`SOUNDNESS.md`](SOUNDNESS.md) states exactly
 what is claimed, the assumptions it rests on, and what would make it stronger (it is tested and

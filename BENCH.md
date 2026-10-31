@@ -706,11 +706,11 @@ branch; both with `ghc -O2` and `-A256m -O1g`, outputs equal.
 
 | program (`/tmp` microbenchmarks, `entry` built from `mkU8`/`mkN` pushes) | before | after |
 |---|---|---|
-| `array_funcs`, n = 2e5, `zempic.fuse true` | 101.1 M | 72.7 M |
+| `array_funcs`, n = 2e5, `zempic.fuse true` | 101.1 M | 72.6 M |
 | append 64-element chunks to an owned `Array UInt8` 300 times, then once more | 7.93 M | 4.27 M |
 | the same on `Array Nat` | 8.32 M | 4.71 M |
-| `extract` 2000 of 4096 `UInt8`, 200 times | 153.1 M | see below |
-| `extract` 2000 of 4096 `Nat`, 200 times | 161.7 M | see below |
+| `extract` 2000 of 4096 `UInt8`, 200 times | 153.1 M | 53.1 M |
+| `extract` 2000 of 4096 `Nat`, 200 times | 161.7 M | 64.8 M |
 | `reverse` an owned 4096-element `UInt8` array 101 times | 24.3 M | 5.3 M |
 | the same on `Nat` | 23.5 M | 4.5 M |
 
@@ -723,7 +723,7 @@ them calls the three operations, so their instruction counts cannot change from 
 (`examples/Arrays.lean` and the others `docs/refresh_chart.py` builds) do not call them either.
 
 Rejected: filling a fresh buffer with the generic `newArray` and then overwriting it (it writes every slot once more,
-about 7% of the extract; the new buffers are allocated unfilled except for the part past the copied elements).
+about 4% of the extract; the new buffers are allocated unfilled except for the part past the copied elements).
 
 ## Ideas from tenet-hs, tried (2026-10-29)
 
