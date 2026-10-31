@@ -700,6 +700,25 @@ arrBulk c g kind steps = do
         r2 <- A.aReverseU o0
         verify "stale in-place reverse" r2 (reverse vals)
         verify "stale in-place reverse leaves the newer version" newer2 (vals ++ [norm kind 8])
+        -- a chain of writes long enough that the buffer is copied away: the version it was copied at is marked stale
+        -- (count -1) and older versions still read through it, so reversing it in place would show in them
+        n1 <- (+ 3) <$> below g 4
+        vals1 <- replicateM n1 (below g (lim kind))
+        t0 <- build vals1
+        chain <- foldM (\(acc, m') j -> do
+                          let (x, mx) = case acc of { (h : _) -> h; [] -> (t0, vals1) }
+                          v <- below g (lim kind)
+                          x' <- A.aSet x (j `mod` n1) (enc kind v)
+                          return ((x', modelSet (j `mod` n1) v mx) : acc, m'))
+                       ([(t0, vals1)], ()) [1 .. 80 :: Int]
+        let versions = fst chain
+        -- (all but the newest, which is the live version and may be updated in place only by its sole owner)
+        forM_ (drop 1 versions) $ \(x, mx) -> do
+          r <- A.aReverseU x
+          verify "in-place reverse of a version in a long chain" r (reverse mx)
+          r2 <- A.aAppendU x x
+          verify "in-place append of a version in a long chain" r2 (mx ++ mx)
+        forM_ versions $ \(x, mx) -> verify "a version in a long chain is undisturbed" x mx
     vs <- readIORef pool
     forM_ vs $ \(x, mx) -> verify "an older version is undisturbed" x mx
 

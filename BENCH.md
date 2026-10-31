@@ -692,6 +692,39 @@ by the bang patterns on word parameters.
   step, so the wrapper only added instructions: `zip` then `map` took 1.191 G with the hoist and 1.150 G without it
   (adjacent runs), and 1.021 G once the in-line write also handled a boxed buffer. The read condition keeps it out.
 
+## Bulk `Array.append`, `Array.extract` and `Array.reverse` (2026-10-31)
+
+Lean's library writes these as loops of one push or swap per element, and leanzempic compiled the loops. They are now
+runtime primitives: a block copy (`copyMutableByteArray#` or `copyMutableArray#`) for two buffers of one kind, a per-element
+move for two kinds, and one swap loop for the reverse. The analysis chooses the in-place form (`arrAppendU`,
+`arrReverseU`) exactly where it chooses `arrPushU`; see `SOUNDNESS.md`, "Bulk array operations".
+
+All numbers are Ir from `valgrind --tool=callgrind` (guest instructions, best of 3, deterministic), a stand-in for
+instructions retired: this machine has no hardware counters. Each program includes the cost of starting the Haskell
+program, which is the same before and after. "Before" is `main` (1dd80a2) built in its own worktree, "after" is this
+branch; both with `ghc -O2` and `-A256m -O1g`, outputs equal.
+
+| program (`/tmp` microbenchmarks, `entry` built from `mkU8`/`mkN` pushes) | before | after |
+|---|---|---|
+| `array_funcs`, n = 2e5, `zempic.fuse true` | 101.1 M | 72.7 M |
+| append 64-element chunks to an owned `Array UInt8` 300 times, then once more | 7.93 M | 4.27 M |
+| the same on `Array Nat` | 8.32 M | 4.71 M |
+| `extract` 2000 of 4096 `UInt8`, 200 times | 153.1 M | see below |
+| `extract` 2000 of 4096 `Nat`, 200 times | 161.7 M | see below |
+| `reverse` an owned 4096-element `UInt8` array 101 times | 24.3 M | 5.3 M |
+| the same on `Nat` | 23.5 M | 4.5 M |
+
+Marginal cost per iteration (the difference between two sizes, which removes the start-up and the setup): `extract`
+of 2000 `UInt8` 753 k before, 252 k after (valgrind replaces `memcpy` with a slower routine, so the block copy looks
+dearer here than it is on a CPU); in-place `reverse` of 4096 `Nat` 16.5 k after, about 4 per element.
+
+The seven real-world programs: the generated Haskell is byte-identical to `main`'s (compared file by file), and none of
+them calls the three operations, so their instruction counts cannot change from this work. The chart's example sources
+(`examples/Arrays.lean` and the others `docs/refresh_chart.py` builds) do not call them either.
+
+Rejected: filling a fresh buffer with the generic `newArray` and then overwriting it (it writes every slot once more,
+about 7% of the extract; the new buffers are allocated unfilled except for the part past the copied elements).
+
 ## Ideas from tenet-hs, tried (2026-10-29)
 
 tenet-hs (an independent Lean kernel in Haskell, same author) got a 2.5x memory cut and large speed-ups
