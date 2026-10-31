@@ -618,7 +618,8 @@ arrBulk :: Check -> Gen -> Int -> Int -> IO ()
 arrBulk c g kind steps = do
   a0 <- A.aEmptyK kind 2
   pool <- newIORef [(a0, [] :: [Int])]
-  let build vals = foldM (\x v -> A.aPush x (enc kind v)) a0 vals
+  -- a fresh empty array each time: an owner shares its buffer with nothing else
+  let build vals = do e <- A.aEmptyK kind 2; foldM (\x v -> A.aPush x (enc kind v)) e vals
       clip st cnt m = let st' = max 0 st; k = max 0 (min cnt (length m - st')) in take k (drop st' m)
       keep a m = modifyIORef pool (take 12 . ((a, m) :))
       pick = do vs <- readIORef pool; i <- below g (length vs); return (vs !! i)
