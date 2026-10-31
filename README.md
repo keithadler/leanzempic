@@ -347,7 +347,7 @@ on.** Set the option before the definitions (the pass runs when Lean compiles th
 prints them). Measured on the garden with identical answers: a list pipeline over a `UInt8` hash 5x
 faster (0.15 s to 0.03 s), a tuple-state fold 3x (0.26 s to 0.08 s), `Int` list work 2x, `Option` and
 sum-type folds 2x to 3x. It is not free everywhere: a list merge sort got slower (0.09 s to 0.12 s).
-All 223 garden programs give the same answers with it on (`GARDEN_FUSE=1 python3 garden/run.py`).
+All 230 garden programs give the same answers with it on (`GARDEN_FUSE=1 python3 garden/run.py`).
 `#zempic` prints a warning when the code contains Lean's own list loops and the pass is off, so the
 speedup is not missed.
 
@@ -450,14 +450,17 @@ deliberately broken versions of the analysis.
 
 `runtime/Zempic/Str.hs` represents a string as a UTF-8 byte buffer shared by all versions of it.
 Strings are only ever appended to, so every version is a prefix of one buffer and a prefix never
-changes. The buffer header holds how many bytes any version has written:
+changes. The buffer is an unpinned mutable byte array (allocated by bumping the nursery pointer, which
+takes far fewer instructions than a pinned buffer) whose header holds how many bytes any version has written:
 
 * appending to the **newest** version writes after the end of the data in place (amortized O(1));
 * appending to an **older** version copies, so no version ever sees bytes it did not write.
 
 That one rule is the whole safety argument, and it is what the string tests attack (see
 [Testing](#testing)). The length in characters is stored with each version, so `String.length` is
-O(1). `toString` on a `Nat` writes digits directly into a fresh buffer.
+O(1). `toString` on a `Nat` writes digits directly into a fresh buffer. Reading a character at a byte position is
+one inlined byte read for ASCII and straight-line code for the longer forms; a position inside a character or past the
+end answers Lean's default character, as native Lean does.
 
 Supported: `length`, `utf8ByteSize`, `append`, `push`, `pushn`, `==`, `<`, `<=`, `toList`, `ofList`,
 string literals, `Nat.repr`, `hash` (Lean's MurmurHash64A, so hash maps iterate in the same order),
@@ -644,7 +647,7 @@ An honest checklist, because "production" depends on what you need.
 |---|---|
 | Continuous integration | GitHub Actions runs the suite on Ubuntu and macOS 15 for every push, including the Cabal package build and a 52-program garden subset at `-O1` with fusion on |
 | Fails fast | an unsupported Lean version or a mistyped mode is a clear error; an unsupported Lean constant is an error that lists it, never silently dropped code |
-| Tested against Lean itself | the examples, 223 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
+| Tested against Lean itself | the examples, 230 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
 | Runtime tested against models | random operation sequences on arrays, strings, integers and the `Word`/`Natural` fast path, with deliberately broken runtimes caught |
 | Differential fuzzing | random Lean programs run by Lean and through leanzempic must agree (`tools/fuzz.py`) |
 | Machine-checked facts | Tenet verifies 265 of 265 declarations, including name-mangling injectivity |
@@ -687,6 +690,7 @@ compile generated Haskell and compare it, value by value, with native Lean at se
 | `generics` | generic data through out-of-line generic functions at several instantiations |
 | `aliasing` | 15 programs that update arrays while other references are live |
 | `string aliasing` | 6 programs that make versions of a string share a buffer |
+| non-ASCII strings | garden programs `str_unicode_iter`, `str_unicode_hash`, `str_alias_unicode`, `string_midchar`, `string_midchar_w` (one- to four-byte characters, every byte position, hashing, ordering, pushes onto old versions) and `nat_repr_edge`, `nat_repr_big` (decimal strings at every digit count) |
 | `core plugin` | injected Core passes `-dcore-lint` and gives the same answers (needs Cabal) |
 | `proptests` | random operation sequences on arrays, strings, fixed-width integers and the `Word`/`Natural` fast path, each step compared with a pure model |
 | `fuzz` | a short differential-fuzzing run: random Lean programs must give the same answers under Lean and leanzempic |

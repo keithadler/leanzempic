@@ -5,6 +5,15 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* Strings: a buffer is an unpinned mutable byte array in a single constructor instead of a pinned `ForeignPtr` in three
+  boxes; characters are read with inline code (ASCII in one read, longer forms with no call); `toString` of a word counts
+  digits by comparison; `String` parameters of generated functions carry a bang; `aSet` on the newest version of a
+  buffer takes a short path. Ir (valgrind, a stand-in for instructions retired) against `main`: `string_chars` (n =
+  30000) 58.14 M to 35.63 M (-38.7%), `string_split` -36.1%, `hashmap_str` -26.5%, `string_build` -23.1%, `hashmap` -6.0%,
+  real-world `nat_repr` -44%, `unionfind` -6.9%; no real-world program or chart row rises by more than 0.05%. A
+  position inside a character or past the end behaves as native Lean in the new readers too (`string_midchar`).
+  New garden programs `str_unicode_iter`, `str_unicode_hash`, `str_alias_unicode`, `nat_repr_edge`, `nat_repr_big`,
+  `string_midchar_w` (230 in all, with `string_midchar`); see `BENCH.md`.
 * `Array.map` and read-only loops (`foldl`, `foldr`, `any`, `all`, `contains`, hand-written loops) read and write the
   raw buffer like the other hoisted loops. The map's write has an in-line fast path that returns its own argument (an
   inlined function that rebuilds `Arr` allocated 24 bytes per element under `-fno-cse`), and `ZNat` and `Word`

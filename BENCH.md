@@ -739,7 +739,7 @@ first. With it set correctly, best of 3, identical answers:
 
 The reason is what tenet-hs found about copying collectors: live data is the cost, not allocation.
 A fused pipeline never builds the intermediate list, so there is nothing for the collector to copy.
-All 223 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
+All 230 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
 
 **A GHC panic, found by fusion.** `list_funcs` with fusion made GHC 9.14.1 panic ("the 'impossible'
 happened", `StgToCmm.Env: variable not found co5_Xc`). It was deterministic for a given invocation but
@@ -1132,3 +1132,46 @@ Garden, 23 programs, 3 runs each, instructions retired (the four combinations, `
 Reproduce: `python3 bench/realworld/rts.py 3 all rec=@/recommended/m 'low=@/recommended/m::-A64m'`.
 The garden half used `GARDEN_FUSE=0/1 python3 garden/run.py`, then the generated `Out.hs` compiled with
 `ghc -O2 -rtsopts` and run with `+RTS` options under `/usr/bin/time -l`.
+
+
+## Strings and hash maps: unpinned buffers and inline character reads (2026-10-31)
+
+Measured on a VM with no hardware counters, so every number below is "Ir (valgrind)": guest instructions counted by
+callgrind (best of 3, deterministic), a stand-in for instructions retired. Baseline is `main`, branch is this change,
+default settings (`-A128m`, no fusion), n as given (small, because valgrind is about 50x slower than native). About
+1.59 M of every total is program start-up.
+
+What changed: a string buffer is an unpinned `MutableByteArray#` in one constructor (it was a pinned `ForeignPtr`
+inside two more boxes, and a pinned allocation costs several times the instructions of a nursery bump); a character is
+read with inline code (ASCII is one byte read, longer forms are straight-line code with no call, so the loop keeps its
+values in registers); `toString` of a word counts digits with comparisons; a `String` parameter of a generated function
+carries a bang, so a loop that tests its end before it reads the string no longer enters the string closure on every
+step; `aSet` on the newest version of a buffer skips `rerootN`.
+
+| Row | n | Ir before | Ir after | Change |
+|---|---|---|---|---|
+| `string_chars` (String iteration, chart row) | 20000 | 38.85 M | 24.87 M | -36.0% |
+| `string_chars` | 30000 | 58.14 M | 35.63 M | -38.7% |
+| `string_build` | 20000 | 14.07 M | 10.82 M | -23.1% |
+| `string_split` | 20000 | 81.31 M | 51.97 M | -36.1% |
+| `string_sort_unique` | 6000 | 17.19 M | 15.24 M | -11.3% |
+| `hashmap_str` | 30000 | 29.79 M | 21.90 M | -26.5% |
+| `hashmap` (HashMap inserts, chart row) | 60000 | 29.20 M | 27.44 M | -6.0% |
+| `nat_repr` (garden) | 10000 | 28.25 M | 21.12 M | -25.3% |
+
+Inside `string_chars` at n = 30000, the loop over the characters went from 26.3 M to about 12 M and the string building
+from 31.8 M to 23.6 M. Per character the loop is about 50 instructions; native Lean's is lower, so this row stays slower
+than Lean's C.
+
+Real-world programs (`bench/realworld`, same method, default / fuse, Ir before to after): `binarytrees` (n = 12)
+51.02 M to 51.02 M / 51.99 M to 51.99 M, `const_fold` (60) 1.897 G to 1.893 G / 1.867 G to 1.864 G, `deriv` (3)
+1.63 M to 1.62 M / 2.60 M to 2.59 M, `qsort` (300) 8.502 G to 8.501 G / 8.503 G to 8.503 G, `unionfind` (100000)
+421.8 M to 392.9 M / 416.3 M to 387.5 M (-6.9%), `rbmap` (50000) 75.08 M to 75.08 M / 76.06 M to 76.05 M,
+`rbmap_checkpoint` (50000) 76.73 M to 76.72 M / 77.70 M to 77.70 M, `nat_repr` (1000) 161.3 M to 90.4 M / 162.2 M to
+91.4 M (-44%). Chart rows that do not use strings change by at most 0.05% (`struct_update` +0.03%, `list_mergesort` +0.01%,
+`list_funcs` +0.04%, `uint64_hash` +0.05%, `hashset` +0.00%). Output is identical in every case.
+
+Tried and dropped: a compare-based overflow check in `natAdd` (-0.3% on the character loop, touches every program);
+a bang on every parameter of a generated data type (no change on `hashmap`); a non-inlined slow path for multi-byte
+characters (it forces the loop to spill its live values before every call; measured 2 M worse than the inline form).
+The wall-time gaps in the older tables above were not re-measured.

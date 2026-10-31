@@ -367,6 +367,39 @@ at n = 2e6). `arrUSetBUW` therefore decides in line whether the write was done a
   of seeds, and missed "ownership handed over though the caller still uses it" entirely. The targeted
   tests catch all three.
 
+## String buffers and character reads (unpinned byte arrays)
+
+A string is one mutable byte array shared by all its versions, plus a length per version. The rule is unchanged: an
+append writes in place only if the version is the newest one of its buffer (the count in the buffer header equals the
+version's length and there is room), otherwise it copies. What changed in this round is the representation (unpinned
+`MutableByteArray#`, not a pinned `ForeignPtr`) and how bytes are read.
+
+* A read of byte `i < length` is a pure `indexWord8Array#`. This is sound because bytes below a version's length are never
+  written again by any append (appends write at or beyond the count) and `sSetByte` writes a copy, so a pure read cannot
+  observe a change. The array is the object itself, so no `touch#` is needed (a raw address into a pinned buffer would).
+* A position at or past the end answers the default character `A` (width 1); a position on a continuation byte answers
+  `A` as well (as native Lean's `get`), and `set` there leaves the string unchanged, and `prev` past the end answers `i - 1`.
+  The word-sized readers compare the position as an unsigned word, so one test covers a negative-looking and an
+  out-of-range position.
+
+Tests: `str_unicode_iter` (one- to four-byte characters, `get`/`next`/`prev`/`extract`/`drop`/`take`, fold, ordering,
+reads at and past the end), `str_unicode_hash` (non-ASCII hash-map keys long enough for the 8-byte hash blocks),
+`str_alias_unicode` (pushes onto old versions, empty strings, non-literal starts, `ByteArray` push and set, hash),
+`string_midchar` and `string_midchar_w` (every byte position; the second keeps its arithmetic in a word so the
+word-sized code decides the answer instead of the exact-integer rerun), `nat_repr_edge` (decimal strings at each digit
+count up to 2^64 - 1 in word mode) and `nat_repr_big` (above 2^64). All equal native Lean.
+
+Mutation testing, each edit built and run against these programs: wrong 3-byte width (caught by `str_unicode_iter`), digit
+count capped at 19 (caught by `nat_repr_edge`), unsigned end test `>` instead of `>=` (caught by `str_unicode_iter`),
+continuation mask 0xFF instead of 0x3F (caught), lead-byte mask 0xFF instead of 0x1F (caught), no default character on a
+continuation byte (caught by `string_midchar`), `prev` past the end answering 0 (caught), `set` inside a character
+without the guard in the word-sized code (caught by `string_midchar_w`; `string_midchar` alone missed it, because it
+overflows a word and reruns in exact mode, which is why the second program exists). Two other edits (continuation mask
+0x7F, lead-2 mask 0x3F) are equivalent: the masked bit is always clear.
+
+The bang pattern on `String` parameters of generated functions is safe because a `String` value in generated code is
+always an evaluated value (every `let` is strict; only list producers of the fusion pass are lazy). It was not mutated.
+
 ## Known imprecision (safe, but costs speed)
 
 * Tracking of nested constructor cells stops at depth 12; beyond that an array is treated as shared.
