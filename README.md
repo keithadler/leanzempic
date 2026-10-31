@@ -269,7 +269,9 @@ overflows. Auto mode gets both:
    exact version.
 
 The result is always exact: `25!` and `3000!` both check against Python. The common case runs at
-word speed. The cost is that a call which overflows late does its work twice.
+word speed. The cost is that a call which overflows late does its work twice, except when only the last
+arithmetic of the root exceeds 2^64 (a loop's word sums packed into one answer): that step is done exactly
+and the call runs once.
 
 Details worth knowing:
 
@@ -499,7 +501,7 @@ Read this section before relying on the output.
 | Difference | Effect |
 |---|---|
 | **Fused stages are lazy.** The intermediate lists of a fused pipeline are never built, and they are emitted as lazy `let`s so GHC can fuse them | Results are identical for total functions. A `panic!` or non-termination inside a stage can happen in a different order, or not at all. |
-| **Auto mode may run a call twice** | If the fast `Word` run overflows, the same pure call is re-run exactly. Invisible semantically; costs time on programs that overflow late. |
+| **Auto mode may run a call twice** | If the fast `Word` run overflows, the same pure call is re-run exactly. Invisible semantically; costs time on programs that overflow late (not when only the root's final add/mul/sub overflows). |
 | **`panic!` is silent** | Returns the type's default value without printing Lean's message to stderr. |
 | **Not thread safe** | Arrays and strings use mutable buffers behind `unsafeDupablePerformIO`. Do not use one value from several Haskell threads at once. |
 | **Lean 4.29.x internals** | The backend reads LCNF and relies on compiler details (the `_redArg` suffix on specialized functions, private names such as `List.takeTR.go`, the pass names `specialize` and `eagerLambdaLifting`). Other Lean versions may break it, which is why `#zempic` refuses them unless told otherwise. |

@@ -1874,3 +1874,58 @@ def entry (n : Nat) : Nat :=
   let s5 := sumWith (poke a1) a1 z z
   s1 + s2 * 3 + s3 * 5 + s4 * 7 + s5 * 11 + sumL a0 + sumL a1 * 9
 ''')
+
+# Wide tail (Emit.hsWideDecl): the loop's word sums fit, the arithmetic after it exceeds 2^64.  The word run
+# must end in the exact answer, not be thrown away; branches, truncated subtraction, a comparison of the
+# wide value (not eligible) and an overflow inside the loop (falls back) must all agree with native Lean.
+add("wide_tail_push", '''
+def entry (n : Nat) : Nat := Id.run do
+  let mut a : Array Nat := #[]
+  for i in [0:n+1] do
+    a := a.push (i * 1000003 + 11)
+  let mut s := 0
+  let mut c := 0
+  for x in a do
+    s := s + x
+    c := c + 1
+  return s * 1125899906842624 + c * 3 - 7
+''')
+add("wide_tail_start", '''
+def entry (n : Nat) : Nat := Id.run do
+  let mut s := 0
+  let mut t := 1
+  for i in [n / 2 : n + 5] do
+    s := s + i * 99991
+    t := t + (i % 7)
+  return s * 18014398509481984 + t * 4503599627370496
+''')
+add("wide_tail_branch", '''
+def pick (n : Nat) : Nat :=
+  let s := (List.range (n + 1)).foldl (fun acc i => acc + i * 7919 + 5) 0
+  if s % 2 == 0 then s * 4294967296 * 4294967296 + 1 else s * 1099511627776 + s
+def entry (n : Nat) : Nat := pick n + pick (n + 1)
+''')
+add("wide_tail_sub", '''
+def entry (n : Nat) : Nat := Id.run do
+  let mut a := 3
+  let mut b := 5
+  for i in [n : n + 20] do
+    a := a + i * 12345
+    b := b + i
+  return (a * 1125899906842624 - b * 1125899906842624 * 1125899906842624) + (b * 1125899906842624 - a)
+''')
+add("wide_tail_cmp", '''
+def entry (n : Nat) : Nat := Id.run do
+  let mut a := 1
+  for i in [0:n+1] do
+    a := a + i * 1000003
+  let w := a * 1125899906842624
+  if w > 5 then return w % 1000000007 + a * 1125899906842624 else return w
+''')
+add("wide_tail_loop_overflow", '''
+def entry (n : Nat) : Nat := Id.run do
+  let mut a := 1
+  for i in [0:n+1] do
+    a := a * 1125899906842624 + i
+  return a * 3 + 1
+''')

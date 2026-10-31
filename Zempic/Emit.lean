@@ -299,6 +299,9 @@ structure St where
   wordGets : Std.HashSet FVarId := {}
   /-- Set while printing the hoisted worker of a function (see `hoistPlan`). -/
   hoist : Option Hoist := none
+  /-- Set while printing the wide-tail copy of a root (see `hsWideDecl`): `Nat` arithmetic whose result only
+  reaches the return is done on `Natural`. -/
+  wide : Bool := false
 
 /-- The emitter monad. -/
 abbrev EmitM := StateRefT St CoreM
@@ -359,6 +362,7 @@ def pairTys (t : String) : String × String := Id.run do
 Core. -/
 def coerce (x have_ want : String) : String :=
   if have_ == want then x
+  else if have_ == "ZNat" && want == "Natural" then s!"(wNat {x})"
   else if want == "Any" then s!"(zo {x})"
   else if have_ == "Any" then s!"(zu {x})"
   else s!"(zu (zo {x}))"
@@ -1341,11 +1345,65 @@ partial def useKinds (x : FVarId) : Code .pure → EmitM (List Nat)
   | _ => return []
 
 
+/-- Arithmetic that the wide-tail copy of a root does on `Natural`. -/
+def wideOp? (c : Name) : Option String :=
+  if c == ``Nat.add then some "wAdd" else if c == ``Nat.mul then some "wMul"
+  else if c == ``Nat.sub then some "wSub" else none
+
+/-- Is every use of `x` an operand of such arithmetic whose own result is likewise used, or the return? -/
+partial def wideOnly (x : FVarId) : Code .pure → Bool
+  | .let d k =>
+    let uses := match d.value with
+      | .const _ _ args => Own.occurrences args x
+      | .fvar f args => (if f == x then 1 else 0) + Own.occurrences args x
+      | .proj _ _ f => if f == x then 1 else 0
+      | _ => 0
+    let ok := uses == 0 || (match d.value with
+      | .const c _ #[_, _] => (wideOp? c).isSome && wideOnly d.fvarId k
+      | _ => false)
+    ok && wideOnly x k
+  | .fun d k => useCount x d.value == 0 && wideOnly x k
+  | .jp d k => wideOnly x d.value && wideOnly x k
+  | .jmp _ args => Own.occurrences args x == 0
+  | .return _ => true
+  | .cases cs => cs.discr != x && cs.alts.all fun
+      | .alt _ _ k => wideOnly x k
+      | .default k => wideOnly x k
+  | .unreach _ => true
+
+/-- Does the code (outside lambdas) have a `Nat` operation with two variable operands whose result only
+reaches the return? -/
+partial def hasWide : Code .pure → Bool
+  | .let d k =>
+    (match d.value with
+     | .const c _ #[.fvar _, .fvar _] => (wideOp? c).isSome && wideOnly d.fvarId k
+     | _ => false) || hasWide k
+  | .fun _ k => hasWide k
+  | .jp d k => hasWide d.value || hasWide k
+  | .cases cs => cs.alts.any fun
+      | .alt _ _ k => hasWide k
+      | .default k => hasWide k
+  | _ => false
+
 mutual
 /-- Print LCNF code as a Haskell expression whose result has type `ret`. -/
 partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String := do
   match c with
   | .let d k =>
+   if (← get).wide && (match d.value with
+        | .const c _ #[.fvar _, .fvar _] => (wideOp? c).isSome && wideOnly d.fvarId k
+        | _ => false) then
+    let .const c _ #[.fvar a, .fvar b] := d.value | return ""
+    let opnd := fun (v : FVarId) => do
+      let t ← tyOf v
+      let n ← lookup v
+      return if t == "Natural" then n else s!"(wNat {coerce n t "ZNat"})"
+    let oa ← opnd a
+    let ob ← opnd b
+    let rhs := s!"{(wideOp? c).getD ""} {oa} {ob}"
+    let x ← bindT d.fvarId d.binderName "Natural"
+    return s!"let \{ !{x} = {rhs} } in\n{pad ind}{← hsCode k ind ret}"
+   else
     -- A placeholder write that the loop overwrites at once (`Array.map`) is skipped: the array passes through.
     let d := match d.value with
       | .const `Array.uset _ #[_, .fvar a, .fvar i, _, _] =>
@@ -1397,7 +1455,10 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
     for p in d.params do noteExpr p.fvarId p.type
     let ps ← d.params.mapM fun p => bind p.fvarId p.binderName
     let f ← bind d.fvarId d.binderName
+    let w := (← get).wide
+    modify fun s => { s with wide := false }
     let body ← hsCode d.value (ind + 2) "Any"
+    modify fun s => { s with wide := w }
     let lam := " ".intercalate ps.toList
     let rest ← hsCode k ind ret
     return s!"let \{ {f} = zo (\\{lam} ->\n{pad (ind + 2)}{body}) } in\n{pad ind}{rest}"
@@ -1523,6 +1584,29 @@ def hsDecl (d : Decl .pure) : EmitM String := do
   return s!"{n} :: {sig}\n{n} {args} =\n{pad 1}aHoist{h.kind} {arr} (\\hb -> {n}{h.suffix} hb {args}) ({n}_slow {args})\n\n" ++
     s!"{n}_slow :: {sig}\n{n}_slow {" ".intercalate bps.toList} =\n{pad 1}{text}\n\n" ++
     s!"{n}{h.suffix} :: {hb} -> {sig}\n{n}{h.suffix} !hb {" ".intercalate (ps2.toList.map ("!" ++ ·))} =\n{pad 1}{fast}\n"
+
+/-- The wide-tail copy of a root `d` (word mode, signature of `Nat`s and `Bool`s, returns a `Nat`): the
+same code, but `Nat` arithmetic whose result only reaches the return is done on `Natural`. The word run
+then ends in the exact answer when only that last step exceeds 2^64, instead of being thrown away and run
+again. Everything else still raises `ZOverflow`, and the auto wrapper reruns it exactly. -/
+def hsWideDecl (d : Decl .pure) : EmitM String := do
+  let .code body := d.value | return ""
+  modify fun s => { s with known := {}, knownB := {}, wide := true, hoist := none }
+  let ps ← d.params.mapM bindP
+  let n := fnName d.name ++ "_w"
+  let ptys ← d.params.toList.mapM (hsTyM ·.type)
+  let sig := " -> ".intercalate (ptys ++ ["Natural"])
+  let text ← hsCode body 1 "Natural"
+  modify fun s => { s with wide := false }
+  return s!"{n} :: {sig}\n{n} {" ".intercalate (bangWords ptys ps).toList} =\n{pad 1}{text}\n"
+
+/-- Does the auto wrapper call the wide-tail copy of root `d`? -/
+def wideRoot (d : Decl .pure) : Bool :=
+  let ptys := d.params.toList.map (basicTy ·.type)
+  let ok := ptys.all fun t => t == "ZNat" || t == "Bool"
+  match d.value with
+  | .code body => ok && declRetBasic d == "ZNat" && hasWide body
+  | _ => false
 
 /-- Print the copy of `d` whose parameters `ks` are fixed to literals. It takes only the other
 parameters; `INLINE` lets GHC splice the chain of copies of an unrolled loop into straight-line
@@ -1687,6 +1771,7 @@ def emitModule (modName : String) (roots : Array Name) (natMod : String := "Zemp
         | some d =>
           modify fun st => { st with cur := n }
           hs := hs.push (← hsDecl d)
+          if fast && roots.contains n && wideRoot d then hs := hs.push (← hsWideDecl d)
           core := core.push (← coreDecl d)
         | none => unsupported s!"constant {n}"
       else
@@ -1723,7 +1808,7 @@ def emitModule (modName : String) (roots : Array Name) (natMod : String := "Zemp
       "{-# OPTIONS_GHC -fno-float-in #-}"] ++ cbvFlag ++ ownFlags ++ [
       "-- Generated by leanzempic. Do not edit.",
       s!"module {modName} where", "",
-      "import Zempic.Runtime", s!"import {natMod}", "import Zempic.List", "import Zempic.UInt", "import Zempic.Prims",
+      "import Zempic.Runtime", s!"import {natMod}", "import Numeric.Natural (Natural)", "import Zempic.List", "import Zempic.UInt", "import Zempic.Prims",
       "import Data.Word (Word8, Word16, Word32, Word64)", "import Data.Kind (Type)",
       "import Zempic.Arr (HB, aHoist8, aHoist16, aHoist32, aHoist64, aHoistW, aHoistBool)", "", ""])
     let names := (← get).seen.toList.map (·.toString)
@@ -1833,12 +1918,14 @@ def autoWrapper (modName : String) (roots : Array Name) : CoreM String := do
     let hs := fun (t : String) => if t == "ZNat" then "Natural" else "Bool"
     let names := (List.range ptys.length).map (s!"a{·}")
     let fastArgs := (names.zip ptys).map fun (a, t) => if t == "ZNat" then s!"(toW {a})" else a
-    let call := fun (q : String) (xs : List String) => " ".intercalate (s!"{q}.{fnName r}" :: xs)
-    let conv := if ret == "ZNat" then "fromIntegral" else "id"
+    let call := fun (q : String) (f : String) (xs : List String) => " ".intercalate (s!"{q}.{f}" :: xs)
+    let wide := wideRoot d
+    let conv := if ret == "ZNat" && !wide then "fromIntegral" else "id"
+    let fastFn := if wide then fnName r ++ "_w" else fnName r
     let sig := " -> ".intercalate ((ptys.map hs) ++ [hs ret])
     exports := exports.push (fnName r)
     let lhs := " ".intercalate (fnName r :: names)
-    let body := s!"tryFast {conv} ({call "F" fastArgs}) ({call "E" names})"
+    let body := s!"tryFast {conv} ({call "F" fastFn fastArgs}) ({call "E" (fnName r) names})"
     defs := defs.push s!"{fnName r} :: {sig}\n{lhs} =\n  {body}\n"
   let note := if skipped.isEmpty then "" else
     let who := ", ".intercalate skipped.toList

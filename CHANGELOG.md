@@ -5,6 +5,12 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* Auto mode no longer throws away a word run whose only overflow is the root's final arithmetic. A root with a
+  `Nat` result gets `<root>_w` in `Fast.hs`: `Nat.add/mul/sub` whose result only reaches the return are done on
+  `Natural`, so `bench/realworld` `const_fold` (answer `a * 2^40 + b` above 2^64) runs once. Ir (valgrind, a
+  stand-in for instructions retired), default settings, n = 100: 3.14 G to 1.44 G; an answer that fits (n = 20: 298.9 M
+  to 299.4 M) and any overflow inside the loop behave as before. Garden programs `wide_tail_*`; see `SOUNDNESS.md`.
+
 * `Array.map` and read-only loops (`foldl`, `foldr`, `any`, `all`, `contains`, hand-written loops) read and write the
   raw buffer like the other hoisted loops. The map's write has an in-line fast path that returns its own argument (an
   inlined function that rebuilds `Arr` allocated 24 bytes per element under `-fno-cse`), and `ZNat` and `Word`

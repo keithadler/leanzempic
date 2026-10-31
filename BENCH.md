@@ -796,6 +796,18 @@ Two rows get worse and are in the chart: list merge sort (fusion makes it slower
 the `Float` loop. The remaining large gaps are all arrays (a persistent array on every access) and
 the boxed values in lists.
 
+## const_fold: the wasted word run is gone (wide tail)
+
+Point 1 below (the word run thrown away when the answer exceeds 2^64) is fixed for the case where only the root's
+final arithmetic overflows: the root also gets a copy `z_entry_w` that does the `Nat.add/mul/sub` leading to the
+return on `Natural` (`SOUNDNESS.md`, "Wide tail"). Measured as Ir (valgrind; a stand-in for instructions retired,
+this VM has no hardware counters), best of 3, default settings, `bench/realworld` `const_fold`:
+
+| n | before | after |
+|---|---|---|
+| 20 (answer fits in a word) | 298.9 M | 299.4 M |
+| 100 (answer exceeds 2^64) | 3.14 G | 1.44 G |
+
 ## const_fold: where 26.5 G instructions went (and why wall time was level)
 
 `bench/realworld` `const_fold` retired 26.5 G instructions against native Lean's 16.5 G (1.59x) while wall time

@@ -19,6 +19,7 @@ import GHC.Exts
 import Data.List (foldl')
 import Zempic.Runtime (Any, zo, zu)
 import GHC.Word (Word(W#))
+import Numeric.Natural (Natural)
 
 type ZNat = Word
 
@@ -63,6 +64,19 @@ natEq, natLt, natLe :: ZNat -> ZNat -> Bool
 natEq = (==)
 natLt = (<)
 natLe = (<=)
+
+-- Exact arithmetic on the root's last steps (see `hsWideDecl` in Emit.lean): operands are words, the
+-- result is a `Natural`, and nothing here can overflow.
+wNat :: ZNat -> Natural
+wNat = fromIntegral
+wAdd, wMul, wSub :: Natural -> Natural -> Natural
+wAdd = (+)
+wMul = (*)
+wSub x y = if x >= y then x - y else 0
+{-# INLINE wNat #-}
+{-# INLINE wAdd #-}
+{-# INLINE wMul #-}
+{-# INLINE wSub #-}
 
 natSucc :: ZNat -> ZNat
 natSucc x = natAdd x 1

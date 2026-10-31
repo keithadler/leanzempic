@@ -367,6 +367,18 @@ at n = 2e6). `arrUSetBUW` therefore decides in line whether the write was done a
   of seeds, and missed "ownership handed over though the caller still uses it" entirely. The targeted
   tests catch all three.
 
+## Wide tail (auto mode)
+
+A root whose signature is only `Nat`/`Bool` and returns a `Nat` also gets `<root>_w` in `Fast.hs` (`hsWideDecl`).
+It is the same code except that a `Nat.add`, `Nat.mul` or `Nat.sub` whose result only reaches the return (directly
+or through more such operations) is computed on `Natural` (`wAdd`, `wMul`, `wSub` in `Zempic.Nat.Word`, with `wSub`
+truncating at 0 like `Nat.sub`). The condition (`Emit.wideOnly`) is that every use of the result is an operand of
+another such operation with the same property, or the return; a comparison, a call argument, a jump argument, a
+`cases` scrutinee or a lambda capture makes the operation an ordinary word one. Operands are exact words (any earlier
+overflow still raises `ZOverflow`, and the wrapper reruns the exact version), and the operations are exact, so the
+result equals the exact run's. Mutation tests: `wSub x y = x - y` makes `wide_tail_sub` crash; `wAdd = (*)` makes
+`wide_tail_push` differ. Garden programs: `wide_tail_*`.
+
 ## Known imprecision (safe, but costs speed)
 
 * Tracking of nested constructor cells stops at depth 12; beyond that an array is treated as shared.
