@@ -5,6 +5,36 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* `FloatArray` is supported (`emptyWithCapacity`, `push`, `size`, `usize`, `get!`, `get`, `uget`, `set!`, `set`, `uset`,
+  plus `UInt8/16/32/64.toFloat`, `USize.toFloat`, `Float.toBits`, `Float.ofBits`), and `ByteArray` moved from the string
+  buffer to the array machinery (`Zempic.Arr`, new unboxed `Double` buffer kind 7 for `FloatArray`; `Word8` kind 1 for
+  `ByteArray`). `ByteArray.set!` on an array the analysis owns is now in place (before: a full copy per write, so a
+  sieve was quadratic): `ba_sieve` n = 1000 741.0 M to 7.6 M Ir (valgrind), `ba_xor_buf` n = 20000 1253.1 M to 14.0 M,
+  `bytearray` n = 500000 85.5 M to 67.9 M. New `FloatArray` rows against native Lean's C (Ir (valgrind), ratio below 1 is
+  faster): matrix multiply 0.68, FFT 0.72, numerical integration 0.05. `BENCH.md` has the table.
+* `Float.ofScientific` (every decimal literal such as `0.5`) takes a correctly rounded fast path when the mantissa is at
+  most 2^53 and the exponent at most 22, and GHC folds it for literals; it used to build an arbitrary precision rational
+  per evaluation. A Simpson integration loop: 91.0 M to 8.7 M Ir (valgrind).
+* Ownership analysis: a join point body now keeps the ownership of the variables it captures (a slot per captured
+  variable in the join point's summary, met over all jumps). Before, an array used by the continuation of an `if` or
+  `match` lost its ownership there, so e.g. a nested-loop sieve updated it persistently. `array_qsort` Ir (valgrind) 87.0 M
+  to 86.7 M; the seven real-world programs and the chart examples generate identical Haskell.
+* **Bug fixed (hoisted buffers):** the scan for hoistable loops did not look at the parameters of a join point that
+  receives the array under two names, one hoisted and one not, so a persistent update through the second changed the
+  buffer under the hoisted reads (`hoist_join_bool` gave wrong answers once the ownership change above let its update
+  count as in place; the other element types were not hoisted for other reasons). A jump that does this now stops the
+  hoist.
+* **Bug fixed (found by a new garden program):** the ownership analysis treated the result of a constant (a declaration
+  without parameters, `def tbl : Array Nat := ...`) as a fresh, unshared array, so `let a := tbl; a.set! i v` changed
+  the constant for every later use. Native Lean copies; `main` printed different answers. A constant's result is now
+  never owned. Garden programs `const_array_set` and `jp_capture_global`.
+* New garden programs (241 in all): `fa_matmul`, `fa_fft`, `fa_integrate`, `fa_shared`, `fa_bounds`, `fa_oob`,
+  `fa_convert`, `fa_uset`, `ba_sieve`, `ba_xor_buf`, `u64_prng`, `u64_hash_loop`, `float_literals`, `jp_capture_inplace`,
+  `jp_capture_shared`, `jp_capture_arg`, `jp_capture_global`, `const_array_set`. New `tools/ir_pair.py` (Ir (valgrind) of
+  one garden program, native against Haskell). `tools/gen_runtime.py` and the generated region of `Nat/Word.hs` and
+  `Nat/Exact.hs` carry the new primitives; the generator was already out of step with `Nat/Word.hs` for `arrUSetBUW`
+  and `arrUSetBUWH`, so its output was merged by hand, not regenerated.
+
 * `Array.map` and read-only loops (`foldl`, `foldr`, `any`, `all`, `contains`, hand-written loops) read and write the
   raw buffer like the other hoisted loops. The map's write has an in-line fast path that returns its own argument (an
   inlined function that rebuilds `Arr` allocated 24 bytes per element under `-fno-cse`), and `ZNat` and `Word`

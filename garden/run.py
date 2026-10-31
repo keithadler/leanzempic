@@ -19,7 +19,7 @@ NS = [0, 1, 2, 5, 10, 25]
 # mismatch in a data declaration crashed at -O1 and above), so CI uses -O1, which compiles faster than -O2.
 OPT = os.environ.get("GARDEN_OPT", "-O2")
 
-def sh(cmd, env=None, cwd=ROOT, timeout=600):
+def sh(cmd, env=None, cwd=ROOT, timeout=int(os.environ.get("GARDEN_TIMEOUT", "600"))):
     r = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=cwd, env=env, timeout=timeout)
     return r.returncode, r.stdout + r.stderr
 

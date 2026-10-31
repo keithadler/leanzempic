@@ -1874,3 +1874,401 @@ def entry (n : Nat) : Nat :=
   let s5 := sumWith (poke a1) a1 z z
   s1 + s2 * 3 + s3 * 5 + s4 * 7 + s5 * 11 + sumL a0 + sumL a1 * 9
 ''')
+
+# ---- FloatArray, ByteArray and UInt64 loops ----
+add("fa_matmul", '''
+def fill (m s : Nat) : FloatArray := Id.run do
+  let mut a := FloatArray.emptyWithCapacity (m * m)
+  for i in [0:m * m] do a := a.push (((i * s + 3) % 17).toFloat * 0.25)
+  return a
+def zeros (k : Nat) : FloatArray := Id.run do
+  let mut a := FloatArray.emptyWithCapacity k
+  for _ in [0:k] do a := a.push 0.0
+  return a
+def mul (m : Nat) (a b : FloatArray) : FloatArray := Id.run do
+  let mut c := zeros (m * m)
+  for i in [0:m] do
+    for j in [0:m] do
+      let mut s := 0.0
+      for k in [0:m] do s := s + a[i * m + k]! * b[k * m + j]!
+      c := c.set! (i * m + j) s
+  return c
+def entry (n : Nat) : Nat :=
+  let m := n % 200 + 2
+  let c := mul m (fill m 3) (fill m 5)
+  let t := (List.range c.size).foldl (fun acc i => acc + c[i]!) 0.0
+  (t * 100.0).floor.toUInt64.toNat + c.size
+''')
+add("fa_fft", '''
+def bitrev (x bits : Nat) : Nat := Id.run do
+  let mut r := 0
+  let mut v := x
+  for _ in [0:bits] do
+    r := r * 2 + v % 2
+    v := v / 2
+  return r
+def fft (bits : Nat) (re0 im0 : FloatArray) : FloatArray × FloatArray := Id.run do
+  let sz := 2 ^ bits
+  let mut re := re0
+  let mut im := im0
+  for i in [0:sz] do
+    let j := bitrev i bits
+    if i < j then
+      let tr := re[i]!
+      let ti := im[i]!
+      re := (re.set! i re[j]!).set! j tr
+      im := (im.set! i im[j]!).set! j ti
+  let mut len := 2
+  while len <= sz do
+    let half := len / 2
+    let ang := -6.283185307179586 / len.toFloat
+    let mut s := 0
+    while s < sz do
+      for k in [0:half] do
+        let wr := Float.cos (ang * k.toFloat)
+        let wi := Float.sin (ang * k.toFloat)
+        let a := s + k
+        let b := a + half
+        let xr := re[b]! * wr - im[b]! * wi
+        let xi := re[b]! * wi + im[b]! * wr
+        re := (re.set! b (re[a]! - xr)).set! a (re[a]! + xr)
+        im := (im.set! b (im[a]! - xi)).set! a (im[a]! + xi)
+      s := s + len
+    len := len * 2
+  return (re, im)
+def entry (n : Nat) : Nat :=
+  let bits := n % 16 + 1
+  let sz := 2 ^ bits
+  let (re0, im0) := Id.run do
+    let mut re := FloatArray.emptyWithCapacity sz
+    let mut im := FloatArray.emptyWithCapacity sz
+    for i in [0:sz] do
+      re := re.push (((i * 7 + n) % 13).toFloat)
+      im := im.push 0.0
+    return (re, im)
+  let (re, im) := fft bits re0 im0
+  let t := (List.range sz).foldl (fun acc i => acc + re[i]! * re[i]! + im[i]! * 2.0) 0.0
+  (t.abs * 1000.0).floor.toUInt64.toNat % 1000000007
+''')
+add("fa_integrate", '''
+def f (x : Float) : Float := Float.sin x * Float.exp (-x * 0.1) + x * x * 0.01
+def simpson (a b : Float) (steps : Nat) : Float := Id.run do
+  let h := (b - a) / steps.toFloat
+  let mut s := f a + f b
+  for i in [1:steps] do
+    let x := a + i.toFloat * h
+    s := s + (if i % 2 == 1 then 4.0 else 2.0) * f x
+  return s * h / 3.0
+def samples (steps : Nat) : FloatArray := Id.run do
+  let mut a := FloatArray.emptyWithCapacity steps
+  for i in [0:steps] do a := a.push (f (i.toFloat * 0.001))
+  return a
+def trapz (a : FloatArray) (h : Float) : Float := Id.run do
+  let mut s := 0.0
+  for i in [1:a.size] do s := s + (a[i - 1]! + a[i]!) * 0.5 * h
+  return s
+def entry (n : Nat) : Nat :=
+  let steps := (n + 1) * 40 + 2
+  let steps := steps - steps % 2
+  let v := simpson 0.0 10.0 steps + trapz (samples steps) 0.001
+  (v * 1000000.0).floor.toUInt64.toNat
+''')
+add("ba_sieve", '''
+def sieve (m : Nat) : ByteArray := Id.run do
+  let mut b := ByteArray.emptyWithCapacity (m + 1)
+  for _ in [0:m + 1] do b := b.push 1
+  b := b.set! 0 0
+  b := b.set! 1 0
+  let mut i := 2
+  while i * i <= m do
+    if b[i]! == 1 then
+      let mut j := i * i
+      while j <= m do
+        b := b.set! j 0
+        j := j + i
+    i := i + 1
+  return b
+def entry (n : Nat) : Nat := Id.run do
+  let m := n * 20 + 30
+  let b := sieve m
+  let mut c := 0
+  for i in [0:b.size] do c := c + (b.get! i).toNat * (i % 7 + 1)
+  return c + b.size
+''')
+add("ba_xor_buf", '''
+def entry (n : Nat) : Nat := Id.run do
+  let m := n + 16
+  let mut b := ByteArray.empty
+  for i in [0:m] do b := b.push (i * 31 + 7).toUInt8
+  for r in [0:3] do
+    for i in [r:m] do
+      b := b.set! i (b.get! i ^^^ (b.get! ((i + 5) % m) + r.toUInt8))
+  let mut h : UInt64 := 14695981039346656037
+  for i in [0:b.size] do h := (h ^^^ (b.get! i).toUInt64) * 1099511628211
+  return h.toNat % 1000000007
+''')
+add("u64_prng", '''
+def splitmix (s : UInt64) : UInt64 × UInt64 :=
+  let s' := s + 0x9e3779b97f4a7c15
+  let z := (s' ^^^ (s' >>> 30)) * 0xbf58476d1ce4e5b9
+  let z := (z ^^^ (z >>> 27)) * 0x94d049bb133111eb
+  (s', z ^^^ (z >>> 31))
+def xorshift (x : UInt64) : UInt64 :=
+  let x := x ^^^ (x <<< 13)
+  let x := x ^^^ (x >>> 7)
+  x ^^^ (x <<< 17)
+def entry (n : Nat) : Nat := Id.run do
+  let mut s : UInt64 := n.toUInt64
+  let mut x : UInt64 := 88172645463325252
+  let mut acc : UInt64 := 0
+  for i in [0:n * 3 + 1] do
+    let (s', z) := splitmix s
+    s := s'
+    x := xorshift (x + z)
+    acc := (acc ^^^ x) * 1099511628211 + i.toUInt64
+  return acc.toNat % 1000000007
+''')
+add("u64_hash_loop", '''
+def fnvBytes (n : Nat) (seed : UInt64) : UInt64 := Id.run do
+  let mut h : UInt64 := 14695981039346656037 ^^^ seed
+  for i in [0:n] do
+    h := (h ^^^ ((i * 131 + 17) % 256).toUInt64) * 1099511628211
+  return h
+def murmurMix (k : UInt64) : UInt64 :=
+  let k := k * 0xc6a4a7935bd1e995
+  let k := k ^^^ (k >>> 47)
+  k * 0xc6a4a7935bd1e995
+def entry (n : Nat) : Nat := Id.run do
+  let mut h : UInt64 := 11
+  for i in [0:n * 2 + 1] do
+    h := (h ^^^ murmurMix i.toUInt64) * 0xc6a4a7935bd1e995
+    h := h ^^^ (h >>> 47)
+  return (h + fnvBytes (n + 1) h).toNat % 1000000007
+''')
+add("fa_shared", '''
+-- persistence: an older version of a FloatArray / ByteArray must not see later writes, in a loop or after
+def build (k : Nat) : FloatArray := Id.run do
+  let mut a := FloatArray.emptyWithCapacity 2
+  for i in [0:k] do a := a.push (i.toFloat * 1.5 + 0.25)
+  return a
+def bbuild (k : Nat) : ByteArray := Id.run do
+  let mut a := ByteArray.empty
+  for i in [0:k] do a := a.push (i * 37 + 5).toUInt8
+  return a
+@[noinline] def bump (a : FloatArray) (i : Nat) : FloatArray := a.set! i (a[i]! + 100.0)
+@[noinline] def bbump (a : ByteArray) (i : Nat) : ByteArray := a.set! i (a.get! i + 100)
+def sumF (a : FloatArray) : Float := Id.run do
+  let mut s := 0.0
+  for i in [0:a.size] do s := s + a[i]! * (i % 5).toFloat
+  return s
+def sumB (a : ByteArray) : Nat := Id.run do
+  let mut s := 0
+  for i in [0:a.size] do s := s + (a.get! i).toNat * (i % 5 + 1)
+  return s
+structure S where
+  arr : FloatArray
+  barr : ByteArray
+@[noinline] def touchS (s : S) (i : Nat) : FloatArray × ByteArray := (s.arr.set! i 77.0, s.barr.set! i 77)
+def gtab : FloatArray := build 9
+def gbtab : ByteArray := bbuild 9
+@[noinline] def touchG (i : Nat) : FloatArray × ByteArray := (gtab.set! i 55.0, gbtab.set! i 55)
+def entry (n : Nat) : Nat :=
+  let k := n % 17 + 3
+  let a := build k
+  let a1 := bump a (k / 2)
+  let a2 := bump a (k - 1)
+  let a3 := bump a1 0
+  let b := bbuild k
+  let b1 := bbump b (k / 2)
+  let b2 := bbump b (k - 1)
+  let b3 := bbump b1 0
+  let t := sumF a + sumF a1 * 3.0 + sumF a2 * 5.0 + sumF a3 * 7.0
+  let st : S := { arr := a, barr := b }
+  let (c1, d1) := touchS st (n % 5)
+  let (c2, d2) := touchS st (k - 1)
+  let (g1, h1) := touchG (n % 4)
+  let (g2, h2) := touchG (n % 3)
+  (t * 100.0).floor.toUInt64.toNat + sumB b + sumB b1 * 3 + sumB b2 * 5 + sumB b3 * 7
+    + (a.push 2.5).size + (b.push 9).size + a.size + b.size
+    + (sumF c1 + sumF c2 * 2.0 + sumF st.arr * 3.0 + sumF g1 + sumF g2 * 2.0 + sumF gtab * 3.0).floor.toUInt64.toNat
+    + sumB d1 + sumB d2 * 2 + sumB st.barr * 3 + sumB h1 + sumB h2 * 2 + sumB gbtab * 3
+''')
+add("fa_bounds", '''
+-- out of range reads give 0 and out of range writes change nothing
+def entry (n : Nat) : Nat := Id.run do
+  let k := n % 9 + 1
+  let mut a := FloatArray.emptyWithCapacity 0
+  let mut b := ByteArray.empty
+  for i in [0:k] do
+    a := a.push (i.toFloat + 0.5)
+    b := b.push (i + 200).toUInt8
+  let mut s := 0.0
+  let mut t := 0
+  for i in [0:k + 4] do
+    s := s + a.get! (i + k * 0) * 2.0 + a.get! (i + 1000)
+    t := t + (b.get! i).toNat + (b.get! (i + 1000)).toNat
+  a := a.set! (k + 3) 99.0
+  b := b.set! (k + 3) 99
+  a := a.set! (k + 100000000) 1.0
+  b := b.set! (k + 100000000) 1
+  a := a.set! k 7.0
+  b := b.set! k 7
+  return (s * 10.0).floor.toUInt64.toNat + t + a.size + b.size
+''')
+add("fa_convert", '''
+def entry (n : Nat) : Nat :=
+  let u8 : UInt8 := n.toUInt8
+  let u16 : UInt16 := (n * 300).toUInt16
+  let u32 : UInt32 := (n * 70000).toUInt32
+  let u64 : UInt64 := (n * 123456789012345).toUInt64
+  let us : USize := (n * 99).toUSize
+  let a := (FloatArray.emptyWithCapacity 0).push u8.toFloat |>.push u16.toFloat |>.push u32.toFloat |>.push u64.toFloat |>.push us.toFloat
+  let t := (List.range a.size).foldl (fun acc i => acc + a[i]!) 0.0
+  t.floor.toUInt64.toNat % 1000000007
+''')
+add("fa_uset", '''
+def fillU (a : FloatArray) : FloatArray := Id.run do
+  let mut a := a
+  for h : i in [0:a.size] do
+    a := a.set! i (i.toFloat * 0.5)
+  return a
+def sumU (a : FloatArray) (s : Nat) : Float := Id.run do
+  let mut t := 0.0
+  for i in [s:a.size] do t := t + a[i]!
+  return t
+def entry (n : Nat) : Nat :=
+  let k := n + 3
+  let z := (List.range k).foldl (fun (a : FloatArray) _ => a.push 0.0) FloatArray.empty
+  let z1 := fillU z
+  let z2 := (List.range k).foldl (fun (a : FloatArray) i => if i % 2 == 0 then a.set! i (a[i]! + 3.0) else a) z1
+  (sumU z2 (n % 3) * 100.0).floor.toUInt64.toNat + (sumU z (n % 4) * 100.0).floor.toUInt64.toNat
+''')
+add("float_literals", '''
+-- decimal literals: the fast path (mantissa <= 2^53, exponent <= 22) and the exact path must both round exactly as Lean does
+def lits : List Float :=
+  [0.1, 0.2, 0.3, 0.7, 1.1, 2.675, 4.35, 0.07, 1e22, 1e23, 1.5e300, 9007199254740992.0, 9007199254740993.0,
+   123456789012345678.0, 0.000001, 5e-324, 2.2250738585072014e-308, 1.7976931348623157e308, 3.141592653589793,
+   2.718281828459045, 100.0, 0.5, 0.25, 33.333333333333336, 8.5e-10, 7.0e15, 1.0e-22, 1.0e-23, 4503599627370497.5,
+   9007199254740.993, 9007199254740.995, 15000000000000.001, 13579246801357.911, 17999999999999.999]
+def entry (n : Nat) : Nat :=
+  let x := n.toFloat * 0.1 + 0.3
+  let h := lits.foldl (fun (h : UInt64) f => (h ^^^ f.toBits) * 1099511628211) 14695981039346656037
+  (h ^^^ (x * 0.01).toBits ^^^ (x + 2.5e-3).toBits ^^^ (Float.ofBits (n.toUInt64 + 4607182418800017408)).toBits).toNat % 1000000007
+''')
+add("jp_capture_inplace", '''
+-- the continuation after an `if` is a join point that captures the array: it may update it in place when every
+-- jump to it holds the only reference, and must not when some jump holds a shared one
+def sumA (a : Array Nat) : Nat := a.foldl (fun s x => (s * 31 + x) % 1000003) 7
+def build (n : Nat) : Array Nat := Id.run do
+  let mut a := Array.mkEmpty 4
+  for i in [0:n] do a := a.push (i * 7 % 11)
+  return a
+def step (a : Array Nat) (i : Nat) : Array Nat :=
+  let k := if a[i]! > 5 then 1 else 2
+  a.set! i (a[i]! + k + 10)
+def loop (a : Array Nat) (i n : Nat) : Array Nat :=
+  if i < n then loop (step a (i % a.size)) (i + 1) n else a
+termination_by n - i
+def entry (n : Nat) : Nat :=
+  let a := build (n + 3)
+  let b := loop a (n % 3) (n + 5)
+  -- the old version stays what it was
+  sumA a * 3 + sumA b + sumA (step a 1) * 5 + sumA (step b (n % 2))
+''')
+add("jp_capture_shared", '''
+def sumA (a : Array Nat) : Nat := a.foldl (fun s x => (s * 31 + x) % 1000003) 7
+def build (n : Nat) : Array Nat := Id.run do
+  let mut a := Array.mkEmpty 4
+  for i in [0:n] do a := a.push (i * 5 % 13)
+  return a
+-- the array is used again after the update, so the update must copy
+def twice (a : Array Nat) (i : Nat) : Array Nat × Array Nat :=
+  let k := if a[i]! > 5 then 1 else 2
+  let b := a.set! i (k + 100)
+  (b, a.set! (i + 1) (k + 200))
+-- one branch holds the only reference, the other a second one
+def mixed (a : Array Nat) (c : Bool) (i : Nat) : Array Nat × Array Nat :=
+  let (x, y) := if c then (a, a) else (a.push 1, #[])
+  let k := if x[i]! > 5 then 1 else 2
+  (x.set! i (k + 300), y)
+def entry (n : Nat) : Nat :=
+  let a := build (n + 4)
+  let (b, c) := twice a (n % 3)
+  let (d, e) := mixed a (n % 2 == 0) (n % 3)
+  let (f, g) := mixed (build (n + 4)) (n % 2 == 1) (n % 4)
+  sumA a + sumA b * 3 + sumA c * 5 + sumA d * 7 + sumA e * 11 + sumA f * 13 + sumA g * 17
+''')
+add("jp_capture_arg", '''
+def sumA (a : Array Nat) : Nat := a.foldl (fun s x => (s * 31 + x) % 1000003) 7
+def build (n : Nat) : Array Nat := Id.run do
+  let mut a := Array.mkEmpty 4
+  for i in [0:n] do a := a.push (i * 3 % 7)
+  return a
+-- the array is both captured by the join point and passed to it, so the two names are one reference counted twice
+@[noinline] def pick (a : Array Nat) (i : Nat) : Array Nat × Array Nat :=
+  let p := if a[i]! > 3 then (a, 1) else (a, 2)
+  let (x, k) := p
+  let y := x.set! i (a[i]! + k + 50)
+  (y, a)
+def entry (n : Nat) : Nat :=
+  let a := build (n + 3)
+  let (y, z) := pick a (n % 3)
+  let (y2, z2) := pick y (n % 2)
+  sumA a + sumA y * 3 + sumA z * 5 + sumA y2 * 7 + sumA z2 * 11
+''')
+add("jp_capture_global", '''
+-- a join point captures an array that is not owned (a shared constant): the update inside it must copy
+def sumA (a : Array Nat) : Nat := a.foldl (fun s x => (s * 31 + x) % 1000003) 7
+def tbl : Array Nat := Id.run do
+  let mut a := Array.mkEmpty 4
+  for i in [0:12] do a := a.push (i * 7 % 11)
+  return a
+@[noinline] def touch (i : Nat) : Array Nat :=
+  let a := tbl
+  let k := if a[i]! > 5 then 1 else 2
+  a.set! i (a[i]! + k + 10)
+def entry (n : Nat) : Nat :=
+  sumA (touch (n % 3)) + sumA tbl * 3 + sumA (touch ((n + 1) % 5)) * 5 + sumA tbl * 7 + sumA (touch (n % 7)) * 11
+''')
+add("const_array_set", '''
+-- a global constant array is shared by every use: updating "its copy" must not change the constant
+def sumA (a : Array Nat) : Nat := a.foldl (fun s x => (s * 31 + x) % 1000003) 7
+def tbl : Array Nat := Id.run do
+  let mut a := Array.mkEmpty 4
+  for i in [0:12] do a := a.push (i * 7 % 11)
+  return a
+def tblU8 : Array UInt8 := Id.run do
+  let mut a := Array.mkEmpty 4
+  for i in [0:12] do a := a.push (i * 7 % 11).toUInt8
+  return a
+@[noinline] def touch (i : Nat) : Array Nat :=
+  let a := tbl
+  a.set! i (a[i]! + 10)
+@[noinline] def touchP (i : Nat) : Array Nat :=
+  tbl.push i
+@[noinline] def touch8 (i : Nat) : Array UInt8 :=
+  let a := tblU8
+  (a.set! i (a[i]! + 10)).push 9
+def entry (n : Nat) : Nat :=
+  sumA (touch (n % 3)) + sumA tbl * 3 + sumA (touch ((n + 1) % 5)) * 5 + sumA tbl * 7 + sumA (touch (n % 7)) * 11
+    + sumA (touchP n) * 13 + sumA tbl * 17 + (touch8 (n % 4)).foldl (fun s x => s + x.toNat) 0 + tblU8.foldl (fun s x => s * 3 + x.toNat) 0
+''')
+add("fa_oob", '''
+-- an out of range write to an array the loop owns must change nothing and touch no memory
+def oobF (k : Nat) : FloatArray := Id.run do
+  let mut a := FloatArray.emptyWithCapacity 0
+  for i in [0:k] do a := a.push i.toFloat
+  a := a.set! (k + 100000000) 1.0
+  a := a.set! k 2.0
+  return a
+def oobB (k : Nat) : ByteArray := Id.run do
+  let mut a := ByteArray.empty
+  for i in [0:k] do a := a.push i.toUInt8
+  a := a.set! (k + 100000000) 1
+  a := a.set! k 2
+  return a
+def entry (n : Nat) : Nat :=
+  let a := oobF (n % 7 + 1)
+  let b := oobB (n % 5 + 1)
+  (List.range a.size).foldl (fun s i => s + a[i]!.toUInt64.toNat) 0 + (List.range b.size).foldl (fun s i => s + (b.get! i).toNat) 0 + a.size + b.size
+''')

@@ -399,8 +399,43 @@ floatOfNat = fromIntegral
 floatOfInt :: Integer -> Double
 floatOfInt = fromInteger
 
+-- A decimal literal such as 0.25 or 1.5e3 reaches here as (mantissa, negative exponent?, exponent). When the mantissa
+-- is at most 2^53 and the power of ten at most 10^22 both are exact doubles, so one correctly rounded division or
+-- multiplication gives the correctly rounded result (Clinger's fast path); with literal arguments GHC folds the
+-- whole expression to a constant. Anything else takes the exact rational route.
 floatOfSciN :: ZNat -> Bool -> ZNat -> Double
-floatOfSciN m neg e = floatOfSci (toInteger m) neg (toInteger e)
+floatOfSciN m neg e
+  | m <= 9007199254740992 && e <= 22 = if neg then fromIntegral m / pow10 e else fromIntegral m * pow10 e
+  | otherwise = floatOfSci (toInteger m) neg (toInteger e)
+{-# INLINE floatOfSciN #-}
+
+pow10 :: ZNat -> Double
+pow10 e = case e of
+  0 -> 1.0
+  1 -> 10.0
+  2 -> 100.0
+  3 -> 1000.0
+  4 -> 10000.0
+  5 -> 100000.0
+  6 -> 1000000.0
+  7 -> 10000000.0
+  8 -> 100000000.0
+  9 -> 1000000000.0
+  10 -> 10000000000.0
+  11 -> 100000000000.0
+  12 -> 1000000000000.0
+  13 -> 10000000000000.0
+  14 -> 100000000000000.0
+  15 -> 1000000000000000.0
+  16 -> 1e16
+  17 -> 1e17
+  18 -> 1e18
+  19 -> 1e19
+  20 -> 1e20
+  21 -> 1e21
+  22 -> 1e22
+  _ -> 1.0e22
+{-# INLINE pow10 #-}
 
 floatToU8 :: Double -> Word8
 floatToU8 x = fromInteger (floatToUnsigned 255 x)
@@ -413,30 +448,130 @@ floatToU64 x = fromInteger (floatToUnsigned 18446744073709551615 x)
 floatToUsz :: Double -> Word
 floatToUsz x = fromInteger (floatToUnsigned 18446744073709551615 x)
 
--- ByteArray, kept in the same shared buffer as strings (bytes only).
+-- ByteArray and FloatArray are ordinary arrays (Zempic.Arr) in an unboxed buffer of their own element type
+-- (kind 1, Word8; kind 7, Double), so they get the same persistent-or-in-place treatment as Array.
+-- An index past the end reads as 0 and writes nothing, as in Lean's C runtime.
 baEmpty :: ZNat -> Any
-baEmpty _ = strIO (zo <$> sFromText T.empty)
+baEmpty c = arrIO (zo <$> aEmptyK 1 (arrIdx c))
 {-# NOINLINE baEmpty #-}
 
 baSize :: Any -> ZNat
-baSize a = fromIntegral (sBytes (zu a :: Str))
+baSize a = fromIntegral (aLength (zu a :: Arr))
+{-# INLINE baSize #-}
 
 baPush :: Any -> Word8 -> Any
-baPush a b = strIO (zo <$> sPushByte (zu a) b)
+baPush a !v = arrIO (zo <$> aPush (zu a) (unsafeCoerce v))
 {-# NOINLINE baPush #-}
 
+baPushU :: Any -> Word8 -> Any
+baPushU a !v = arrIO (zo <$> aPushU8 (zu a) v)
+{-# INLINE baPushU #-}
+
 baGet :: Any -> ZNat -> Word8
-baGet a i = let s = zu a :: Str; k = arrIdx i in if k < sBytes s then sByteAt s k else 0
+baGet a !i = aGetPS8 (zu a) (arrIx i) 0
+{-# INLINE baGet #-}
 
 baGetF :: Any -> ZNat -> Any -> Word8
-baGetF a i _ = baGet a i
+baGetF a !i _ = aGetPS8 (zu a) (arrIx i) 0
+{-# INLINE baGetF #-}
 
 baUGet :: Any -> Word -> Any -> Word8
-baUGet a i _ = baGet a (fromIntegral i)
+baUGet a !i _ = aGetPS8 (zu a) (fromIntegral i) 0
+{-# INLINE baUGet #-}
 
 baSet :: Any -> ZNat -> Word8 -> Any
-baSet a i b = strIO (zo <$> sSetByte (zu a) (arrIdx i) b)
+baSet a !i !v = arrIO (zo <$> aSet (zu a) (arrIx i) (unsafeCoerce v))
 {-# NOINLINE baSet #-}
+
+baSetU :: Any -> ZNat -> Word8 -> Any
+baSetU a !i !v = arrIO (aSetF8 (zu a) (arrIx i) v >>= \ok -> if ok then return a else zo <$> aSetU8 (zu a) (arrIx i) v)
+{-# INLINE baSetU #-}
+
+baUSet :: Any -> Word -> Word8 -> Any -> Any
+baUSet a !i !v _ = arrIO (zo <$> aSet (zu a) (fromIntegral i) (unsafeCoerce v))
+{-# NOINLINE baUSet #-}
+
+baUSetU :: Any -> Word -> Word8 -> Any -> Any
+baUSetU a !i !v _ = arrIO (aSetF8 (zu a) (fromIntegral i) v >>= \ok -> if ok then return a else zo <$> aSetU8 (zu a) (fromIntegral i) v)
+{-# INLINE baUSetU #-}
+
+baSetH :: Any -> ZNat -> Word8 -> Any -> Any
+baSetH a i v _ = baSet a i v
+{-# INLINE baSetH #-}
+
+baSetHU :: Any -> ZNat -> Word8 -> Any -> Any
+baSetHU a i v _ = baSetU a i v
+{-# INLINE baSetHU #-}
+
+faEmpty :: ZNat -> Any
+faEmpty c = arrIO (zo <$> aEmptyK 7 (arrIdx c))
+{-# NOINLINE faEmpty #-}
+
+faSize :: Any -> ZNat
+faSize a = fromIntegral (aLength (zu a :: Arr))
+{-# INLINE faSize #-}
+
+faPush :: Any -> Double -> Any
+faPush a !v = arrIO (zo <$> aPush (zu a) (unsafeCoerce v))
+{-# NOINLINE faPush #-}
+
+faPushU :: Any -> Double -> Any
+faPushU a !v = arrIO (zo <$> aPushUD (zu a) v)
+{-# INLINE faPushU #-}
+
+faGet :: Any -> ZNat -> Double
+faGet a !i = aGetPD (zu a) (arrIx i) 0
+{-# INLINE faGet #-}
+
+faGetF :: Any -> ZNat -> Any -> Double
+faGetF a !i _ = aGetPD (zu a) (arrIx i) 0
+{-# INLINE faGetF #-}
+
+faUGet :: Any -> Word -> Any -> Double
+faUGet a !i _ = aGetPD (zu a) (fromIntegral i) 0
+{-# INLINE faUGet #-}
+
+faSet :: Any -> ZNat -> Double -> Any
+faSet a !i !v = arrIO (zo <$> aSet (zu a) (arrIx i) (unsafeCoerce v))
+{-# NOINLINE faSet #-}
+
+faSetU :: Any -> ZNat -> Double -> Any
+faSetU a !i !v = arrIO (zo <$> aSetUD (zu a) (arrIx i) v)
+{-# INLINE faSetU #-}
+
+faUSet :: Any -> Word -> Double -> Any -> Any
+faUSet a !i !v _ = arrIO (zo <$> aSet (zu a) (fromIntegral i) (unsafeCoerce v))
+{-# NOINLINE faUSet #-}
+
+faUSetU :: Any -> Word -> Double -> Any -> Any
+faUSetU a !i !v _ = arrIO (zo <$> aSetUD (zu a) (fromIntegral i) v)
+{-# INLINE faUSetU #-}
+
+faSetH :: Any -> ZNat -> Double -> Any -> Any
+faSetH a i v _ = faSet a i v
+{-# INLINE faSetH #-}
+
+faSetHU :: Any -> ZNat -> Double -> Any -> Any
+faSetHU a i v _ = faSetU a i v
+{-# INLINE faSetHU #-}
+
+-- IEEE bit patterns of a Float.
+floatToBits :: Double -> Word64
+floatToBits = castDoubleToWord64
+floatOfBits :: Word64 -> Double
+floatOfBits = castWord64ToDouble
+
+-- Integer to Float conversions.
+u8ToFloat :: Word8 -> Double
+u8ToFloat = fromIntegral
+u16ToFloat :: Word16 -> Double
+u16ToFloat = fromIntegral
+u32ToFloat :: Word32 -> Double
+u32ToFloat = fromIntegral
+u64ToFloat :: Word64 -> Double
+u64ToFloat = fromIntegral
+uszToFloat :: Word -> Double
+uszToFloat = fromIntegral
 """.split("\n")
 
 
@@ -565,6 +700,8 @@ def patch(path):
         s = s.replace("import Data.Bits", "import System.IO.Unsafe (unsafeDupablePerformIO)\nimport Zempic.Arr\nimport Data.Bits", 1)
     if "import Data.Word" not in s:
         s = s.replace("import Data.Bits", "import Data.Word (Word16, Word32, Word64, Word8)\nimport Data.Bits", 1)
+    if "import Unsafe.Coerce" not in s:
+        s = s.replace("import Data.Bits", "import Unsafe.Coerce (unsafeCoerce)\nimport GHC.Float (castDoubleToWord64, castWord64ToDouble)\nimport Data.Bits", 1)
     p.write_text(s)
 
 uint_module()

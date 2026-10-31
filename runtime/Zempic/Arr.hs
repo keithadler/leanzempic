@@ -23,6 +23,7 @@ module Zempic.Arr
   , aGetP8, aGetP16, aGetP32, aGetP64, aGetPS8, aGetPS16, aGetPS32, aGetPS64
   , aSwapU8, aSwapU16, aSwapU32, aSwapU64, aSwapUW, aSwapF8, aSwapF16, aSwapF32, aSwapF64, aSwapFW
   , aSetF8, aSetF16, aSetF32, aSetF64
+  , aGetPD, aPushUD, aSetUD
   , aPushU8, aPushU16, aPushU32, aPushU64, aSetU8, aSetU16, aSetU32, aSetU64
   , HB (..), aHoist8, aHoist16, aHoist32, aHoist64, aHoistW, aHoistBool, hGetD8, hGetD16, hGetD32, hGetD64, hGetDW, hGetBool, hSwap, hSet
   ) where
@@ -34,13 +35,13 @@ import Data.Array.IO.Internals (IOArray (..), IOUArray (..))
 import GHC.Arr (STArray (..))
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word16, Word32, Word64, Word8)
-import GHC.Exts (readWordArray#, readWord8Array#, readWord16Array#, readWord32Array#, readWord64Array#, Any, Int (I#), Int#, RealWorld, State#, Word (W#), Word#, copyMutableArray#, copyMutableByteArray#, isTrue#, newArray#, newByteArray#, reallyUnsafePtrEquality#, runRW#, setByteArray#, (+#), (-#), (*#), (<#))
+import GHC.Exts (Double (D#), Double#, readWordArray#, readWord8Array#, readWord16Array#, readWord32Array#, readWord64Array#, Any, Int (I#), Int#, RealWorld, State#, Word (W#), Word#, copyMutableArray#, copyMutableByteArray#, isTrue#, newArray#, newByteArray#, reallyUnsafePtrEquality#, runRW#, setByteArray#, (+#), (-#), (*#), (<#))
 import GHC.IO (IO (..))
 import GHC.Word (Word16 (W16#), Word32 (W32#), Word64 (W64#), Word8 (W8#))
 import Unsafe.Coerce (unsafeCoerce)
 
 -- | The element storage. Kind codes: 0 boxed, 1 Word8, 2 Word16, 3 Word32, 4 Word64, 5 Word,
--- 6 Bool. (@Word@ and @Word64@ are different types with different boxes, so they stay apart.)
+-- 6 Bool, 7 Double (a FloatArray). (@Word@ and @Word64@ are different types with different boxes, so they stay apart.)
 data Buf
   = BBox {-# UNPACK #-} !(IOArray Int Any)
   | B8 {-# UNPACK #-} !(IOUArray Int Word8)
@@ -49,6 +50,7 @@ data Buf
   | B64 {-# UNPACK #-} !(IOUArray Int Word64)
   | BW {-# UNPACK #-} !(IOUArray Int Word)
   | BBool {-# UNPACK #-} !(IOUArray Int Word8)
+  | BD {-# UNPACK #-} !(IOUArray Int Double)
 
 -- | How to get from the newer version this node points at to the version holding the node.
 data Op
@@ -84,6 +86,7 @@ bufNew kind n = case kind of
   4 -> B64 <$> newArray (0, m) 0
   5 -> BW <$> newArray (0, m) 0
   6 -> BBool <$> newArray (0, m) 0
+  7 -> BD <$> newArray (0, m) 0
   _ -> BBox <$> newArray (0, m) filler
   where m = max 0 (n - 1)
 
@@ -108,6 +111,7 @@ bufCap b = case b of
   B64 a -> getNumElements a
   BW a -> getNumElements a
   BBool a -> getNumElements a
+  BD a -> getNumElements a
 
 bufRead :: Buf -> Int -> IO Any
 bufRead b i = case b of
@@ -118,6 +122,7 @@ bufRead b i = case b of
   B64 a -> unsafeCoerce <$> unsafeRead a i
   BW a -> unsafeCoerce <$> unsafeRead a i
   BBool a -> (\w -> unsafeCoerce (w /= 0)) <$> unsafeRead a i
+  BD a -> unsafeCoerce <$> unsafeRead a i
 {-# INLINE bufRead #-}
 
 -- | Is this the unit value? Lean's library stores `box(0)` in a slot to drop a reference before a
@@ -141,6 +146,7 @@ bufWrite b i v = case b of
   B64 a -> raw (unsafeWrite a i (unsafeCoerce v))
   BW a -> raw (unsafeWrite a i (unsafeCoerce v))
   BBool a -> raw (unsafeWrite a i (if (unsafeCoerce v :: Bool) then 1 else 0))
+  BD a -> raw (unsafeWrite a i (unsafeCoerce v))
   where raw act = if isUnit v then return () else act
 {-# INLINE bufWrite #-}
 
@@ -154,6 +160,7 @@ bufSwap b i j = case b of
   B64 a -> sw a
   BW a -> sw a
   BBool a -> sw a
+  BD a -> sw a
   where
     sw :: (MArray a e IO) => a Int e -> IO ()
     sw a = do
@@ -175,6 +182,7 @@ bufGrow b n cap = case b of
   B64 (IOUArray a) -> B64 . IOUArray <$> growRaw 8 a n cap
   BW (IOUArray a) -> BW . IOUArray <$> growRaw 8 a n cap
   BBool (IOUArray a) -> BBool . IOUArray <$> growRaw 1 a n cap
+  BD (IOUArray a) -> BD . IOUArray <$> growRaw 8 a n cap
 
 -- | Grow an unboxed buffer whose elements are @sz@ bytes wide.
 growRaw :: Int -> STUArray RealWorld Int e -> Int -> Int -> IO (STUArray RealWorld Int e)
@@ -1069,6 +1077,7 @@ bufCopy d i s j = case d of
   B32 a | B32 b <- s -> mv a b
   B64 a | B64 b <- s -> mv a b
   BBool a | BBool b <- s -> mv a b
+  BD a | BD b <- s -> mv a b
   _ -> bufRead s j >>= bufWrite d i
   where
     mv :: (MArray a e IO) => a Int e -> a Int e -> IO ()
@@ -1207,3 +1216,54 @@ hSet (HB n a) arr i v
   | (fromIntegral i :: Word) >= fromIntegral n = arr
   | otherwise = unsafeDupablePerformIO (unsafeWrite a i v >> return arr)
 {-# INLINE hSet #-}
+
+-- * Double-typed operations (a FloatArray is an array in a 'BD' buffer, kind 7)
+
+-- | Read element @i@ as an unboxed @Double#@, or the default when out of range; the live version of a
+-- Double buffer is read in line, anything else (an old version, a lazy handle) through the generic read.
+aGetSD :: Arr -> Int -> Double -> State# RealWorld -> (# State# RealWorld, Double# #)
+aGetSD arr i d s0
+  | outOfRange i arr = case d of D# d# -> (# s0, d# #)
+  | otherwise = case readIORef (aRef arr) of
+      IO m -> case m s0 of
+        (# s1, node #) -> case node of
+          Direct (BD a) _ -> case unsafeRead a i of
+            IO r -> case r s1 of (# s2, D# w #) -> (# s2, w #)
+          _ -> case aGet arr i (unsafeCoerce d) of
+            IO r -> case r s1 of (# s2, v #) -> case (unsafeCoerce v :: Double) of D# w -> (# s2, w #)
+{-# INLINE aGetSD #-}
+
+aGetPD :: Arr -> Int -> Double -> Double
+aGetPD arr i !d = case runRW# (aGetSD arr i d) of (# _, r #) -> D# r
+{-# INLINE aGetPD #-}
+
+-- | `aPushU` for a @Double@ element: a live buffer of its kind with room is written in line.
+aPushUD :: Arr -> Double -> IO Arr
+aPushUD arr !v = do
+  node <- readIORef (aRef arr)
+  case node of
+    Direct (BD a) c | c >= 0 -> do
+      cap <- getNumElements a
+      let k = aLen arr
+      if k < cap then unsafeWrite a k v >> return (Arr (k + 1) (aRef arr)) else slowPushD arr v
+    _ -> slowPushD arr v
+{-# INLINE aPushUD #-}
+
+slowPushD :: Arr -> Double -> IO Arr
+slowPushD arr v = aPushU arr (unsafeCoerce v)
+{-# NOINLINE slowPushD #-}
+
+-- | `aSetU` for a @Double@ element.
+aSetUD :: Arr -> Int -> Double -> IO Arr
+aSetUD arr i !v
+  | outOfRange i arr = return arr
+  | otherwise = do
+      node <- readIORef (aRef arr)
+      case node of
+        Direct (BD a) c | c >= 0 -> unsafeWrite a i v >> return arr
+        _ -> slowSetD arr i v
+{-# INLINE aSetUD #-}
+
+slowSetD :: Arr -> Int -> Double -> IO Arr
+slowSetD arr i v = aSetU arr i (unsafeCoerce v)
+{-# NOINLINE slowSetD #-}

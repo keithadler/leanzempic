@@ -292,7 +292,8 @@ Details worth knowing:
 | `Char` | `Word32` | `Char.ofNat` applies Lean's scalar-value rule |
 | `Int` | `Integer` | `/` and `%` are Euclidean as in Lean; `Int.tdiv`, `fdiv` and friends too; `cases` on `ofNat`/`negSucc` works |
 | `Float` | `Double` | `Float.ofScientific` is correctly rounded, `toUInt*` saturates and sends NaN to 0 |
-| `ByteArray` | the string buffer, bytes only | `push`, `get!`, `set!`, `size` |
+| `ByteArray` | an array ([`Zempic.Arr`](runtime/Zempic/Arr.hs)) in an unboxed `Word8` buffer, held as `Any` | `empty`, `emptyWithCapacity`, `push`, `get!`, `get`, `uget`, `set!`, `set`, `uset`, `size`; a write to an unshared array is in place |
+| `FloatArray` | the same, in an unboxed `Double` buffer | the same operations; `UInt8/16/32/64.toFloat`, `USize.toFloat`, `Float.toBits` and `Float.ofBits` too |
 | `Thunk α` | a lazy box | |
 | a structure with one relevant field (`String.Pos`) | the field itself | Lean's own representation; declaring it as a constructor would be a type lie |
 | `String` | shared UTF-8 buffer ([`Zempic.Str`](runtime/Zempic/Str.hs)), held as `Any` | byte sizes and ordering match Lean |
@@ -347,7 +348,7 @@ on.** Set the option before the definitions (the pass runs when Lean compiles th
 prints them). Measured on the garden with identical answers: a list pipeline over a `UInt8` hash 5x
 faster (0.15 s to 0.03 s), a tuple-state fold 3x (0.26 s to 0.08 s), `Int` list work 2x, `Option` and
 sum-type folds 2x to 3x. It is not free everywhere: a list merge sort got slower (0.09 s to 0.12 s).
-All 223 garden programs give the same answers with it on (`GARDEN_FUSE=1 python3 garden/run.py`).
+All 241 garden programs give the same answers with it on (`GARDEN_FUSE=1 python3 garden/run.py`).
 `#zempic` prints a warning when the code contains Lean's own list loops and the pass is off, so the
 speedup is not missed.
 
@@ -513,7 +514,7 @@ Supported (each has tests that compare with native Lean):
 * `Nat` (exact), `Bool`, `UInt8/16/32/64`, `USize`, `Char`
 * user structures, enums, recursive inductives, `Option`, `MProd`, generic user inductives
 * `List` (as native lists) and `Prod`
-* `Array` (persistent, with in-place updates where proved safe)
+* `Array` (persistent, with in-place updates where proved safe), `ByteArray` and `FloatArray` (the primitive operations, same treatment)
 * `String` (the subset above)
 * closures (partial and over-application), join points, self-recursive functions
 * `for` and `while` loops (they compile to recursive functions over `MProd` state)
@@ -522,7 +523,7 @@ Supported (each has tests that compare with native Lean):
 Not supported (reported as an error, never dropped):
 
 * `IO`, `ST`, references, tasks
-* `FloatArray`, bitwise `Int` operations, `Float.toString`
+* bitwise `Int` operations, `Float.toString`; `FloatArray.mk`, `.data` and the library functions built on them (`copySlice`, `append`, `foldl`, ...)
 * any constant that is `@[extern]` and not in the primitive table
 
 Mutual recursion, type classes (with default methods), monad transformers (`StateT`, `ExceptT`,
@@ -644,7 +645,7 @@ An honest checklist, because "production" depends on what you need.
 |---|---|
 | Continuous integration | GitHub Actions runs the suite on Ubuntu and macOS 15 for every push, including the Cabal package build and a 52-program garden subset at `-O1` with fusion on |
 | Fails fast | an unsupported Lean version or a mistyped mode is a clear error; an unsupported Lean constant is an error that lists it, never silently dropped code |
-| Tested against Lean itself | the examples, 223 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
+| Tested against Lean itself | the examples, 241 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
 | Runtime tested against models | random operation sequences on arrays, strings, integers and the `Word`/`Natural` fast path, with deliberately broken runtimes caught |
 | Differential fuzzing | random Lean programs run by Lean and through leanzempic must agree (`tools/fuzz.py`) |
 | Machine-checked facts | Tenet verifies 265 of 265 declarations, including name-mangling injectivity |
@@ -658,7 +659,7 @@ An honest checklist, because "production" depends on what you need.
 | Pre-release | `v0.1.0-rc3` is tagged (`rc2` and `rc1` before it); there is no final `v0.1.0`, no package on Hackage or Reservoir, and the interface may change |
 | One Lean, one GHC | Lean 4.29.x and GHC 9.14.1 only. Windows is untested |
 | Pure functions only | no `IO`, so you compile functions and call them from Haskell; a Lean `main` cannot be compiled |
-| Missing | `IO`, `FloatArray`, `Float.toString`; any `@[extern]` constant that is not in the primitive table is reported, never dropped |
+| Missing | `IO`, `Float.toString`, `FloatArray`/`ByteArray` constructors and `data` (only the primitive operations exist); any `@[extern]` constant that is not in the primitive table is reported, never dropped |
 | In-place arrays are tested, not proved | the ownership analysis is the one component whose correctness rests on testing rather than on construction ([`SOUNDNESS.md`](SOUNDNESS.md)); `set_option zempic.own false` removes the risk at a speed cost |
 | Not thread safe | arrays and strings use mutable buffers |
 | Arrays and strings are slower than Lean's at scale | see [Benchmarks](#benchmarks) |
@@ -691,7 +692,7 @@ compile generated Haskell and compare it, value by value, with native Lean at se
 | `proptests` | random operation sequences on arrays, strings, fixed-width integers and the `Word`/`Natural` fast path, each step compared with a pure model |
 | `fuzz` | a short differential-fuzzing run: random Lean programs must give the same answers under Lean and leanzempic |
 | `aes` | AES-256 from the proved [lean-aes](https://github.com/keithadler/lean-aes) (`bench/aes`): Lean's C, the Haskell and OpenSSL (`tools/aes_oracle.py`) give the same ciphertext |
-| `garden` | the [garden](#the-garden): 223 programs locally, 52 in CI |
+| `garden` | the [garden](#the-garden): 241 programs locally, 52 in CI |
 
 ### The garden
 
@@ -881,7 +882,7 @@ Every Lean module is kept at: no `sorry`, every definition documented, no line o
 | `'inttypes.h' file not found` from GHC | Lean's bundled `clang` is first on `PATH`. Use `tools/zghc`, or keep Lean's `bin` off `PATH`. |
 | `Could not find module 'Zempic.Nat.Word'` | Pass `-iruntime` (and `-ibuild`) to GHC, or use `tools/zghc`, or `-package zempic-runtime`. |
 | `leanzempic: unsupported in this version: extern X` | `X` has no entry in the primitive table. See [Adding a primitive](#adding-a-primitive). |
-| `builtin type X` | That builtin type has no representation yet (`Int`, `Float`, `ByteArray`, `Thunk` do). |
+| `builtin type X` | That builtin type has no representation yet (`Int`, `Float`, `ByteArray`, `FloatArray`, `Thunk` do). |
 | Two outputs identical but empty | A build failed. Run the build command and read its errors. |
 | `Stack overflow detected` from the **Lean** binary | Lean's own `List.sum` / `List.zip` overflow around 1e6 elements. The Haskell side is fine. |
 | `panic! (the 'impossible' happened) ... StgToCmm.Env: variable not found co...` | A GHC 9.14.1 bug in the Float Inwards pass on cast-heavy code (found with `-dcore-lint`). Generated modules carry `-fno-float-in`, which avoids it; if you compile your own variant, pass the flag. |

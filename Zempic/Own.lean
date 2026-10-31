@@ -118,20 +118,35 @@ partial def jpFvs (c : Code .pure) (jf : Std.HashMap FVarId FVS := {}) :
       | .default k => jpFvs k jf) jf
   | _ => jf
 
+/-- The variables a join point body uses that it does not bind, in a fixed order: what its summary describes after
+its parameters. A captured array or loop-state cell that is owned at every jump to the join point stays owned
+inside it. -/
+def jpCaptures (jf : Std.HashMap FVarId FVS) (j : FVarId) : Array FVarId :=
+  (jf.getD j {}).toArray.qsort fun a b => Name.quickLt a.name b.name
+
 /-! ## Array operations -/
 
-/-- Operations that can update their array argument (argument 1) in place. -/
+/-- Operations that can update their array argument in place (`arrayPos` says which argument it is). -/
 def destructiveOps : List Name :=
-  [`Array.set!, `Array.uset, `Array.push, `Array.pop, `Array.swapIfInBounds, `Array.swap]
+  [`Array.set!, `Array.uset, `Array.push, `Array.pop, `Array.swapIfInBounds, `Array.swap,
+   `ByteArray.push, `ByteArray.set!, `ByteArray.set, `ByteArray.uset,
+   `FloatArray.push, `FloatArray.set!, `FloatArray.set, `FloatArray.uset]
 
 /-- Operations that produce a new array nobody else has. -/
 def freshOps : List Name :=
   [`Array.mkEmpty, `Array.emptyWithCapacity, `Array.replicate, `Array.range, `Array.mk,
-   `List.toArray, `List.toArrayImpl]
+   `List.toArray, `List.toArrayImpl, `ByteArray.emptyWithCapacity, `FloatArray.emptyWithCapacity]
 
 /-- Operations that only look at their arrays. -/
 def readOps : List Name :=
-  [`Array.size, `Array.usize, `Array.get!Internal, `Array.getInternal, `Array.uget, `Array.toList]
+  [`Array.size, `Array.usize, `Array.get!Internal, `Array.getInternal, `Array.uget, `Array.toList,
+   `ByteArray.size, `ByteArray.usize, `ByteArray.get!, `ByteArray.get, `ByteArray.uget,
+   `FloatArray.size, `FloatArray.usize, `FloatArray.get!, `FloatArray.get, `FloatArray.uget]
+
+/-- Where the array is among the arguments of a destructive operation: after the erased element type for
+`Array`, first for `ByteArray` and `FloatArray` (which have no type argument). -/
+def arrayPos (c : Name) : Nat :=
+  if c.getPrefix == `ByteArray || c.getPrefix == `FloatArray then 0 else 1
 
 /-! ## The analysis -/
 
@@ -234,7 +249,10 @@ partial def walk (f : Name) (jf : Std.HashMap FVarId FVS) (c : Code .pure) (env 
     walk f jf d.value {}
     walk f jf k env'
   | .jp d k =>
-    modify fun s => { s with jps := s.jps.insertIfNew (f, d.fvarId) (d.params.map fun _ => none) }
+    -- The summary has a slot for each parameter, then one for each variable the body captures (see `jpCaptures`).
+    let caps := jpCaptures jf d.fvarId
+    let slots : Array (Option AV) := (d.params.map fun _ => none) ++ caps.map fun _ => none
+    modify fun s => { s with jps := s.jps.insertIfNew (f, d.fvarId) slots }
     let sum := (← get).jps.getD (f, d.fvarId) #[]
     -- Until some jump supplies information the body is unreached; analyzing it now would
     -- pessimistically report `top` to everything it calls.
@@ -243,12 +261,21 @@ partial def walk (f : Name) (jf : Std.HashMap FVarId FVS) (c : Code .pure) (env 
         match v with
         | some av => if av.isTop then e else e.insert p.fvarId av
         | none => e) {}
+      let jenv : Env := (caps.zip (sum.extract d.params.size sum.size)).foldl (fun e (x, v) =>
+        match v with
+        | some av => if av.isTop then e else e.insert x av
+        | none => e) jenv
       walk f jf d.value jenv
     walk f jf k env
   | .jmp j args =>
     let later := jf.getD j {}
     for a in args, i in [0:args.size] do
       noteJp f j i (handOver env args later a)
+    -- A variable the join point body captures stays owned if it is owned here and not also an argument. Nothing
+    -- between the join point's definition and this jump can have handed it on: it is among the variables the
+    -- body uses later, so `handOver` refuses it, and any other use of it forgets its ownership.
+    for x in jpCaptures jf j, i in [args.size:args.size + (jpCaptures jf j).size] do
+      noteJp f j i (if occurrences args x == 0 then env.getD x .top else .top)
   | .return x => noteRet f (env.getD x .top)
   | .cases cs =>
     let av := env.getD cs.discr .top
@@ -275,8 +302,8 @@ partial def step (f : Name) (d : LetDecl .pure) (env : Env) (later : FVS) : OwnM
     if freshOps.contains c then
       return some ((eraseArgs env args).insert d.fvarId .own)
     else if destructiveOps.contains c then
-      -- The array is argument 1, after the erased element type.
-      match (args[1]? : Option (Arg .pure)) with
+      -- The array is argument 1, after the erased element type (argument 0 for `ByteArray` and `FloatArray`).
+      match (args[arrayPos c]? : Option (Arg .pure)) with
       | some (Arg.fvar a) =>
         let ok := env.getD a .top == .own && !later.contains a && occurrences args a == 1
         let env' := eraseArgs env args
@@ -299,7 +326,10 @@ partial def step (f : Name) (d : LetDecl .pure) (env : Env) (later : FVS) : OwnM
       | _ =>
         match (← get).params[c]? with
         | some ps =>
-          if ps.size == args.size then
+          -- A constant (a declaration without parameters) is evaluated once and shared by every use, so what it
+          -- returns is never owned, even when its body builds the array fresh.
+          if ps.isEmpty then return some (eraseArgs env args)
+          else if ps.size == args.size then
             for a in args, j in [0:args.size] do
               let ho := handOver env args later a
               -- A shared array handed to a parameter that gets updated: pass a lazy copy instead, which
@@ -377,7 +407,7 @@ partial def mutScan (pidx : Std.HashMap FVarId Nat) (mp : Std.HashMap Name (Arra
     let acc := match d.value with
       | .const g _ args =>
         if destructiveOps.contains g then
-          match (args[1]? : Option (Arg .pure)) with
+          match (args[arrayPos g]? : Option (Arg .pure)) with
           | some (Arg.fvar x) => match pidx[x]? with | some i => acc.insert i | none => acc
           | _ => acc
         else match mp[g]? with

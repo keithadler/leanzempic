@@ -367,6 +367,44 @@ at n = 2e6). `arrUSetBUW` therefore decides in line whether the write was done a
   of seeds, and missed "ownership handed over though the caller still uses it" entirely. The targeted
   tests catch all three.
 
+## `ByteArray`, `FloatArray`, join point captures and constants (2026-10-31)
+
+* `ByteArray` and `FloatArray` are `Arr` values in an unboxed `Word8` and `Double` buffer, so every argument above
+  applies unchanged: the same in-place primitives check that their array is the live version of its buffer, and the
+  persistent versions are the default. The ownership analysis names their operations (`ByteArray.push`, `set!`,
+  `set`, `uset`; the same for `FloatArray`; fresh: `emptyWithCapacity`) with the array as argument 0. `ByteArray.empty`
+  and `FloatArray.empty` are constants, so they are not fresh: the first push to them is persistent. An index past the
+  end reads as 0 and writes nothing, as in Lean's C runtime.
+* **Join point captures.** A join point's summary has a slot for each parameter and then one for each variable its body
+  captures (sorted by name). At each jump the slot gets the variable's ownership if the variable is owned there and is
+  not also an argument of the jump, else `top`; the body is analyzed with the met value. Why this is sound: a captured
+  variable is among the free variables of every jump to the join point, so any destructive use between the definition
+  and the jump finds it in `later` and is refused, and any other use of it (stored, passed on, captured by a closure)
+  removes its ownership from the environment, as before.
+* **Constants.** A declaration without parameters is evaluated once and shared. The analysis used to give its call the
+  summary of its body's return value, `own` for a body that builds an array, so `let a := tbl; a.set! i v` updated the
+  constant. A call to a declaration without parameters now returns `top`. This was a bug in `main` (`const_array_set`
+  printed other answers than native Lean).
+* **Hoisting and join points.** The hoisted-buffer scan (`hoistCheck`) required that after a jump that hands the array
+  to a join point parameter that is not hoisted, no hoisted variable is used. It tested the join point's free
+  variables, which leave out its own parameters, so a join point with one hoisted parameter and one unhoisted alias of
+  the same array passed. A persistent update through the alias then changed the buffer's node under the raw reads
+  (`hoist_join_bool` printed other answers than Lean). Found when the join point change above made that update count as in
+  place; the scan now refuses to hoist when such a jump meets a join point that has a hoisted parameter. Without the
+  refusal `hoist_join_bool` fails; with it, it and `hoist_join_{uint8,nat}` agree with Lean.
+* Mutation tests of this change (each edit applied, the named test fails, edit reverted):
+
+  | Deliberate bug | Detected by |
+  |---|---|
+  | a captured variable is `own` at every jump (no check) | `jp_capture_global` (wrong answers) |
+  | a constant's result is owned again | `const_array_set`, `jp_capture_global` (wrong answers) |
+  | persistent `FloatArray.set!` and `ByteArray.set!` write in place | `fa_shared` (wrong answers) |
+  | in-place `FloatArray` write without the bounds check | `fa_oob` (segmentation fault) |
+  | in-place `FloatArray` write stores `v + 1` | `proptests` (`arrDouble`, and `arrPersistent` at kind 7) |
+  | `Float.ofScientific` fast path accepts exponent 23 | `float_literals` |
+  | `Float.ofScientific` fast path accepts mantissas up to 2^54 | `float_literals` (after adding mantissas between 2^53 and 2^54; with the first set of literals this edit survived) |
+  | the hoist scan ignores a join point's own parameters after an unhoisted alias reaches it | `hoist_join_bool` (wrong answers) |
+
 ## Known imprecision (safe, but costs speed)
 
 * Tracking of nested constructor cells stops at depth 12; beyond that an array is treated as shared.

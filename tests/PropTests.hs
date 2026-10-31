@@ -17,6 +17,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.Word
 import GHC.Exts (Any)
+import GHC.Float (castDoubleToWord64)
 import Numeric.Natural (Natural)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
@@ -275,6 +276,7 @@ enc 3 v = unsafeCoerce (fromIntegral v :: Word32)
 enc 4 v = unsafeCoerce (fromIntegral v :: Word64)
 enc 5 v = unsafeCoerce (fromIntegral v :: Word)
 enc 6 v = unsafeCoerce (v /= 0)
+enc 7 v = unsafeCoerce (fromIntegral v :: Double)
 enc _ v = unsafeCoerce v
 
 dec :: Int -> Any -> Int
@@ -284,6 +286,7 @@ dec 3 a = fromIntegral (unsafeCoerce a :: Word32)
 dec 4 a = fromIntegral (unsafeCoerce a :: Word64)
 dec 5 a = fromIntegral (unsafeCoerce a :: Word)
 dec 6 a = if (unsafeCoerce a :: Bool) then 1 else 0
+dec 7 a = round (unsafeCoerce a :: Double)
 dec _ a = unsafeCoerce a
 
 -- | What a value becomes after one round trip through the kind's representation.
@@ -569,6 +572,63 @@ arrNarrow c g ops kind bits steps = do
       expect c "W.arrGetD32 at a huge index" (W.arrGetD32 undefined 5 anyA i) 5
     forM_ [2 ^ 64, 2 ^ 64 + 3, 2 ^ 70 :: Natural] $ \i ->
       expect c "E.arrGetD32 at a huge index" (E.arrGetD32 undefined 5 anyA i) 5
+
+-- | The `Double` buffer behind `FloatArray` (kind 7): in-place push, set and read against a list model, the lazy
+-- copy, stale versions, and out of range indices.
+arrDouble :: Check -> Gen -> Int -> IO ()
+arrDouble c g steps = do
+  let randV = do w <- next g
+                 r <- below g 6
+                 return (case r of 0 -> 0 / 0; 1 -> -0.0; 2 -> 1 / 0; _ -> fromIntegral (w `mod` 1000) / 8 :: Double)
+      mset k v m = if k < 0 || k >= length m then m else take k m ++ [v] ++ drop (k + 1) m
+      same :: [Double] -> [Double] -> Bool
+      same x y = length x == length y && and (zipWith (\p q -> castDoubleToWord64 p == castDoubleToWord64 q) x y)
+      contents a = map (\v -> unsafeCoerce v :: Double) <$> A.aToList a
+      check' s got want = unless (same got want) (failWith c (s ++ ": " ++ show got ++ " /= " ++ show want))
+      idx m = do r <- below g 8
+                 case r of
+                   0 -> return (-1)
+                   1 -> return (length m)
+                   2 -> return maxBound
+                   3 -> return minBound
+                   _ -> below g (length m + 1)
+  a0 <- A.aEmptyK 7 2
+  (aEnd, mEnd) <- foldM
+    (\(a, m) _ -> do
+        op <- below g 5
+        k <- idx m
+        v <- randV
+        (b, mb) <- case op of
+          0 -> do b <- A.aPushUD a v; return (b, m ++ [v])
+          1 -> do b <- A.aSetUD a k v; return (b, mset k v m)
+          2 -> do
+            let want = if k >= 0 && k < length m then m !! k else v
+            check' "double get" [A.aGetPD a k v] [want]
+            return (a, m)
+          3 -> do
+            h <- A.aShare a
+            h' <- A.aSetUD h 0 v
+            gsrc <- contents a
+            check' "source undisturbed by a write to its lazy copy" gsrc m
+            return (h', mset 0 v m)
+          _ -> do
+            b <- A.aPush a (unsafeCoerce v)
+            return (b, m ++ [v])
+        got <- contents b
+        check' "double ops" got mb
+        return (b, mb))
+    (a0, []) [1 .. steps]
+  newer <- A.aPush aEnd (unsafeCoerce (42 :: Double))
+  s1 <- A.aPushUD aEnd 7
+  gs1 <- contents s1
+  check' "stale double push falls back" gs1 (mEnd ++ [7])
+  s2 <- A.aSetUD aEnd 0 9
+  gs2 <- contents s2
+  check' "stale double set falls back" gs2 (mset 0 9 mEnd)
+  gn <- contents newer
+  check' "the newer version is undisturbed" gn (mEnd ++ [42])
+  g0 <- contents aEnd
+  check' "the stale version is undisturbed" g0 mEnd
 
 -- | `Array.range` and the element move behind `Array.append` / `Array.extract`.
 arrRangeMove :: Check -> Gen -> IO ()
@@ -938,7 +998,7 @@ main = do
   check <- newIORef []
   putStrLn ("proptests: seed " ++ show seed ++ ", " ++ show rounds ++ " rounds")
   forM_ [1 .. rounds] $ \_ -> do
-    forM_ [0 .. 6] $ \kind -> do
+    forM_ [0 .. 7] $ \kind -> do
       arrPersistent check gen kind 600
       arrInPlace check gen kind 400
       when (kind == 5 || kind == 0) $ arrWordShare check gen kind 400
@@ -954,6 +1014,7 @@ main = do
     arrHoisted check gen (HOps (\a -> A.aHoist64 a Just Nothing) A.hGetD64 (\b a i v -> A.hSet b a i v) (\b a i j -> A.hSwap b a i j) A.aPushU64) 4 64 400
     arrHoisted check gen (HOps (\a -> A.aHoistW a Just Nothing) A.hGetDW (\b a i v -> A.hSet b a i v) (\b a i j -> A.hSwap b a i j) A.aPushUW) 5 64 400
     arrHoistedBool check gen 400
+    arrDouble check gen 300
     forM_ [(0, 8), (1, 8), (0, 16), (2, 16), (0, 32), (3, 32), (0, 64), (4, 64)] $ \(kind, bits) ->
       case bits :: Int of
         8 -> arrNarrow check gen (NOps A.aPushU8 A.aSetU8 A.aGetP8 A.aGetPS8 A.aSwapU8) kind bits 300

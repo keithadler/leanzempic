@@ -739,7 +739,7 @@ first. With it set correctly, best of 3, identical answers:
 
 The reason is what tenet-hs found about copying collectors: live data is the cost, not allocation.
 A fused pipeline never builds the intermediate list, so there is nothing for the collector to copy.
-All 223 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
+All 241 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
 
 **A GHC panic, found by fusion.** `list_funcs` with fusion made GHC 9.14.1 panic ("the 'impossible'
 happened", `StgToCmm.Env: variable not found co5_Xc`). It was deterministic for a given invocation but
@@ -999,6 +999,69 @@ Limits and what is not done:
 * `Array.mapMUnsafe` (`Array.map`) is not hoisted; a loop that pushes or pops is not hoistable.
 * Only the cells `MProd` and `Prod` are followed; the array in a user structure is not.
 * The element kinds are those with an unboxed buffer. In exact mode (`Natural`) a `Nat` array is boxed and not hoisted.
+
+## FloatArray, ByteArray, Float literals and UInt64 loops (2026-10-31)
+
+Numbers in this section are **Ir (valgrind)**: guest instructions counted by `valgrind --tool=callgrind`, best of
+three, a deterministic stand-in for instructions retired on a VM with no hardware counters (it is not the same
+quantity and is not comparable with the "instructions retired" numbers elsewhere in this file). "native" is Lean's C
+backend (`leanc -O3`), "zempic" the Haskell output at `-A256m -O1g`; ratio is zempic over native, so below 1 is
+faster. Reproduce with `python3 garden/run.py NAME` then `python3 tools/ir_pair.py NAME N`. The programs are in
+`garden/programs.py`.
+
+**Before this change** `FloatArray` was unsupported (every use was reported as `unsupported ... extern
+FloatArray.*`), and `ByteArray` was kept in the string buffer, where `set!` copied the whole array: a sieve with
+`ByteArray.set!` was quadratic.
+
+| program | n | native | zempic before | zempic after | ratio after |
+|---|---|---|---|---|---|
+| `fa_matmul` (flat `FloatArray`, triple loop) | 100 | 296.1 M | unsupported | 201.6 M | 0.68 |
+| `fa_fft` (radix-2, re/im `FloatArray`s) | 13 | 241.8 M | unsupported | 173.6 M | 0.72 |
+| `fa_integrate` (Simpson, trapezoid on samples) | 200 | 162.7 M | unsupported | 8.7 M | 0.05 |
+| `ba_sieve` (`ByteArray.set!` in nested loops) | 1000 | 6.9 M | 741.0 M | 7.6 M | 1.10 |
+| `ba_sieve` | 20000 | 106.3 M | not run (quadratic) | 108.4 M | 1.02 |
+| `ba_xor_buf` (push, get!/set! passes, FNV) | 20000 | 12.1 M | 1253.1 M | 14.0 M | 1.15 |
+| `ba_xor_buf` | 300000 | 153.7 M | not run | 173.1 M | 1.13 |
+| `bytearray` (push loop, get! loop; chart-style row) | 500000 | 72.0 M | 85.5 M | 67.9 M | 0.94 |
+| `u64_prng` (splitmix + xorshift state in `UInt64`) | 1000000 | 2002.1 M | 137.6 M | 137.6 M | 0.07 |
+| `u64_hash_loop` (murmur mix, FNV over a computed byte stream) | 1000000 | 167.0 M | 69.6 M | 69.6 M | 0.42 |
+
+What shipped, in order of size:
+
+* **`ByteArray` and `FloatArray` are `Zempic.Arr` arrays** (kind 1 `Word8` and new kind 7 `Double` buffers), so they get
+  Baker versioning and the ownership analysis: a write to an unshared array is in place, a write to a shared one
+  persistent, and an array handed to a callee that updates it is shared lazily, as for `Array`. The ownership analysis
+  knows the `ByteArray.*` and `FloatArray.*` operations (array argument 0, not 1). `FloatArray` support is new;
+  `ByteArray.set!` on a loop-owned array went from copying every time (107x native on the sieve) to in place.
+  `ba_xor_buf` before/after at n = 20000: 1253.1 M to 14.0 M.
+* **Join points keep the ownership of what they capture.** The continuation after an `if` or `match` is a join point
+  that uses the loop's array. The analysis used to forget everything about captured variables in the join point body, so
+  the sieve's inner `set!` stayed persistent (2.19x native, 232.4 M at n = 20000). The summary of a join point now also
+  has a slot per captured variable, met over all jumps. `ba_sieve` at n = 20000: 232.4 M to 108.4 M.
+  This reaches `Array` too: in the garden, `array_qsort`, `string_compare`, `string_sort_unique`, `array_option`,
+  `arr_nested_types` and the `*_bool` hoist programs now pass the array on without a lazy copy or update it in place.
+  `array_qsort` at n = 20000 went from 87.0 M to 86.7 M (-0.4%); `bytearray` 85.5 M to 67.9 M.
+* **`Float.ofScientific` has a fast path.** A decimal literal such as `0.5` reached the runtime as an arbitrary
+  precision rational on every evaluation. With a mantissa of at most 2^53 and an exponent of at most 22, one division
+  or multiplication by an exact power of ten is correctly rounded (Clinger's fast path), and for literal arguments GHC
+  folds it to a constant. `fa_integrate` at n = 200 with the old conversion: 91.0 M; with it: 8.7 M. Anything outside
+  that range takes the old exact path. The new garden program `float_literals` checks 29 literals on both paths, and
+  `Float.toBits`/`Float.ofBits`, against Lean bit for bit.
+* **UInt64 loops needed nothing.** PRNG and hashing loops over `UInt64` state are already 0.07x and 0.42x native, so
+  no change was made; the rows are in the table for the record.
+
+Not done, and why. `ba_xor_buf` stays 13% over native: the get/set loops still look the array's node up on every
+access, as `Array` loops did before hoisting (the hoisted-buffer scan in `Zempic/Emit.lean` knows `Array.*` primitives
+and `Array e` parameter types; teaching it `ByteArray` and `FloatArray` was not attempted). `FloatArray.mk`, `.data`
+and the library functions defined through them are unsupported, as they were.
+
+Regression check for the ownership change: the generated Haskell of the 152 garden programs that use arrays and the
+seven real-world programs was compared between `main` and this branch. The seven real-world programs (default and fusion settings) and the chart
+examples (`examples/Arrays.lean`, `Arrays2`, `Aliasing`, `Bench`, ...) generate identical Haskell, checked on the final
+build; in the first comparison (before the constant and hoist-scan fixes in `CHANGELOG.md`) 20 garden programs
+differ (the ones named above, `ba_*`, `bytearray`, `hoist_*_bool` and two `hoist_match_*`), all in the direction of more
+in-place updates. `bench/StrAliasMain.hs` (the only changed example, `StringAliasing`) is within 0.1% in Ir at n = 3000
+on all six functions.
 
 ## Peak memory: where it comes from, and what it costs to reduce (2026-10-29)
 

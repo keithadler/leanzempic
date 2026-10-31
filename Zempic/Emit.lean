@@ -188,7 +188,19 @@ def prims : List (Name × String × List String × String) :=
   , (`ByteArray.push, "baPush", ["Any", "Word8"], "Any")
   , (`ByteArray.get!, "baGet", ["Any", "ZNat"], "Word8"), (`ByteArray.get, "baGetF", ["Any", "ZNat", "Any"], "Word8")
   , (`ByteArray.uget, "baUGet", ["Any", "Word", "Any"], "Word8")
-  , (`ByteArray.set!, "baSet", ["Any", "ZNat", "Word8"], "Any"), (`ByteArray.set, "baSet", ["Any", "ZNat", "Word8"], "Any")
+  , (`ByteArray.set!, "baSet", ["Any", "ZNat", "Word8"], "Any"), (`ByteArray.set, "baSetH", ["Any", "ZNat", "Word8", "Any"], "Any")
+  , (`ByteArray.uset, "baUSet", ["Any", "Word", "Word8", "Any"], "Any")
+  , (`FloatArray.emptyWithCapacity, "faEmpty", ["ZNat"], "Any")
+  , (`FloatArray.size, "faSize", ["Any"], "ZNat"), (`FloatArray.usize, "faSize", ["Any"], "ZNat")
+  , (`FloatArray.push, "faPush", ["Any", "Double"], "Any")
+  , (`FloatArray.get!, "faGet", ["Any", "ZNat"], "Double"), (`FloatArray.get, "faGetF", ["Any", "ZNat", "Any"], "Double")
+  , (`FloatArray.uget, "faUGet", ["Any", "Word", "Any"], "Double")
+  , (`FloatArray.set!, "faSet", ["Any", "ZNat", "Double"], "Any"), (`FloatArray.set, "faSetH", ["Any", "ZNat", "Double", "Any"], "Any")
+  , (`FloatArray.uset, "faUSet", ["Any", "Word", "Double", "Any"], "Any")
+  , (`Float.toBits, "floatToBits", ["Double"], "Word64"), (`Float.ofBits, "floatOfBits", ["Word64"], "Double")
+  , (`UInt8.toFloat, "u8ToFloat", ["Word8"], "Double"), (`UInt16.toFloat, "u16ToFloat", ["Word16"], "Double")
+  , (`UInt32.toFloat, "u32ToFloat", ["Word32"], "Double"), (`UInt64.toFloat, "u64ToFloat", ["Word64"], "Double")
+  , (`USize.toFloat, "uszToFloat", ["Word"], "Double")
   , (`Bool.true, "True", [], "Bool"), (`Bool.false, "False", [], "Bool") ]
 
 /-- Fixed-width integer types: Lean name, runtime prefix, Haskell type. Must match
@@ -975,7 +987,12 @@ partial def hoistCheck (f : Name) (kidx : Nat) (path : List Nat) (destr : Std.Ha
       if let .fvar y := x then
         if let some q := st.amap[y]? then
           if (pars[i]?).getD none != some q then bad := true
-    if bad then gone (jf.getD j {})
+    if bad then
+      gone (jf.getD j {})
+      -- The array also reaches the join point under a name that is not hoisted. If the join point has a hoisted
+      -- parameter as well, its body works on the same buffer through both, and the unhoisted name may be updated
+      -- persistently (which changes the buffer's node). `gone` does not see this: parameters are not free variables.
+      if pars.any Option.isSome then modify fun s => { s with ok := false }
   | .cases cs =>
     if (← get).amap[cs.discr]? == some [] then modify fun s => { s with ok := false }
     for alt in cs.alts do
