@@ -1874,3 +1874,84 @@ def entry (n : Nat) : Nat :=
   let s5 := sumWith (poke a1) a1 z z
   s1 + s2 * 3 + s3 * 5 + s4 * 7 + s5 * 11 + sumL a0 + sumL a1 * 9
 ''')
+
+# Non-ASCII strings: one-, two-, three- and four-byte characters, read by position and by fold.
+add("str_unicode_iter", '''
+def pick (i : Nat) : Char :=
+  match i % 5 with
+  | 0 => 'a'
+  | 1 => Char.ofNat 0xE9
+  | 2 => Char.ofNat 0x20AC
+  | 3 => Char.ofNat 0x1F600
+  | _ => Char.ofNat (0x4E00 + i % 50)
+
+def build (n : Nat) : String :=
+  (List.range (n + 3)).foldl (fun s i => s.push (pick (i * 7 + n))) ""
+
+def walk (s : String) (p : String.Pos.Raw) (fuel : Nat) (acc : Nat) : Nat :=
+  match fuel with
+  | 0 => acc
+  | f + 1 => if s.utf8ByteSize ≤ p.byteIdx then acc else walk s (s.next p) f ((acc * 31 + (s.get p).toNat) % 1000000007)
+
+def entry (n : Nat) : Nat :=
+  let s := build n
+  let folded := s.foldl (fun acc c => (acc * 131 + c.toNat) % 1000000007) 7
+  let w := walk s 0 100000 3
+  let e : String.Pos.Raw := ⟨s.utf8ByteSize⟩
+  let back := (s.prev e).byteIdx + (s.get (s.prev e)).toNat
+  let mid := (String.Pos.Raw.extract s ⟨2⟩ ⟨s.utf8ByteSize - 1⟩)
+  let cut := s.drop 2 |>.take 3
+  let t := s ++ "é€" ++ s
+  folded + w + back + s.length * 3 + s.utf8ByteSize * 5 + mid.length + mid.utf8ByteSize
+    + (cut.foldl (fun a c => a + c.toNat) 0) + t.length + t.utf8ByteSize
+    + (if s < t then 1 else 0) + (if s == build n then 2 else 0) + (s.get ⟨s.utf8ByteSize + 3⟩).toNat + (s.get e).toNat + (s.next e).byteIdx
+    + ((String.ofList s.toList.reverse).foldl (fun a c => (a * 3 + c.toNat) % 99991) 1)
+''')
+# Non-ASCII hash map keys, long enough to use the 8-byte blocks of the string hash.
+add("str_unicode_hash", '''
+import Std.Data.HashMap
+def key (i : Nat) : String :=
+  match i % 4 with
+  | 0 => s!"café-{i % 13}"
+  | 1 => s!"€€€-{i % 11}-tail"
+  | 2 => s!"x{i % 9}" ++ String.singleton (Char.ofNat 0x1F600) ++ "yz"
+  | _ => toString (i % 7)
+
+def entry (n : Nat) : Nat :=
+  let m : Std.HashMap String Nat := (List.range (n + 1)).foldl (fun m i => m.insert (key i) (m.getD (key i) 0 + i)) {}
+  let ks := m.toList.map (·.1) |>.toArray.qsort (· < ·)
+  m.size + m.fold (fun a k v => a + k.length * 3 + k.utf8ByteSize * 5 + v) 0
+    + ks.foldl (fun a k => (a * 17 + k.hash.toNat) % 1000003) 5
+    + (if m.contains "café-3" then 1 else 0) + (m.getD "€€€-3-tail" 0)
+''')
+# Decimal strings at the digit-count boundaries, built and read back.
+add("nat_repr_edge", '''
+-- every value stays below 2^64, so the word-sized path (not the exact-integer rerun) builds the strings
+def entry (n : Nat) : Nat :=
+  let ps := (List.range 20).map fun k => 10 ^ k
+  let xs := ps ++ ps.map (· - 1) ++ [2 ^ 63, 2 ^ 64 - 1, n, n * 1000003, n * n * n]
+  xs.foldl (fun a x => (a * 31 + (toString x).length * 7 + (toString x).foldl (fun b c => b * 3 + c.toNat) 0) % 1000000007) 1
+''')
+add("nat_repr_big", '''
+def entry (n : Nat) : Nat :=
+  let xs := [10 ^ 21, 2 ^ 64, 2 ^ 64 + 1, n * 10 ^ 20, 2 ^ 100 + n]
+  xs.foldl (fun a x => (a * 31 + (toString x).length * 7 + (toString x).foldl (fun b c => b * 3 + c.toNat) 0) % 1000000007) 1
+''')
+# Pushes onto old versions, empty strings, non-literal starts, substrings at the end, ByteArray set/push.
+add("str_alias_unicode", '''
+def entry (n : Nat) : Nat :=
+  let start := String.ofList ((List.range (n % 4)).map fun i => Char.ofNat (0x3B1 + i))
+  let a := start.push 'x'
+  let b := start.push (Char.ofNat 0x20AC)
+  let c := a.push (Char.ofNat 0x1F600)
+  let d := a ++ a ++ b
+  let e : String := ""
+  let f := e ++ e
+  let ba := (List.range (n + 2)).foldl (fun (acc : ByteArray) i => acc.push (UInt8.ofNat (i * 37))) ByteArray.empty
+  let ba2 := ba.set! 1 200
+  let tail := d.drop (d.length - 1)
+  a.length * 3 + b.utf8ByteSize * 5 + c.length * 7 + c.utf8ByteSize + d.length * 11 + f.length + (if e == f then 13 else 0)
+    + (if a < b then 17 else 0) + (if c == a then 19 else 0) + tail.utf8ByteSize + (d.drop (d.length + 2)).length
+    + (d.take 0).length + ba.size + (ba2.get! 1).toNat + (ba.get! 1).toNat + (String.ofList d.toList.reverse).length
+    + (d.hash.toNat % 1000)
+''')

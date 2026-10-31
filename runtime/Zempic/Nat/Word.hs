@@ -717,7 +717,7 @@ strOfList cs = strIO (zo <$> sFromText (T.pack (map (\c -> chr (fromIntegral (zu
 {-# NOINLINE strOfList #-}
 
 natRepr :: ZNat -> Any
-natRepr n = strIO (zo <$> sFromIntegral n)
+natRepr n = strIO (zo <$> sFromWord n)
 {-# NOINLINE natRepr #-}
 
 -- Lean's panic prints a message to stderr and carries on with the default value. This carries on
@@ -731,11 +731,11 @@ strLit lit = strIO (zo <$> sFromText (T.pack lit))
 
 -- Strings by byte position (a Pos is a byte offset).
 strGet :: Any -> ZNat -> Word32
-strGet s p = sCharAt (zu s :: Str) (arrIdx p)
+strGet s p = sCharAtW (zu s :: Str) p
 {-# INLINE strGet #-}
 
 strNext :: Any -> ZNat -> ZNat
-strNext s p = natAdd p (fromIntegral (sCharWidthAt (zu s :: Str) (arrIdx p)))
+strNext s p = natAdd p (fromIntegral (sCharWidthAtW (zu s :: Str) p))
 {-# INLINE strNext #-}
 
 strPrev :: Any -> ZNat -> ZNat

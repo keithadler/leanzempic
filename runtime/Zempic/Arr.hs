@@ -309,6 +309,21 @@ aSet :: Arr -> Int -> Any -> IO Arr
 aSet !arr !i v
   | i < 0 || i >= aLen arr = return arr
   | otherwise = do
+      nd <- readIORef (aRef arr)
+      -- The usual case, the newest version of a buffer with room in its undo chain, is handled here
+      -- without going through 'rerootN'.
+      case nd of
+        Direct buf c | c >= 0 && c < chainLimit (aLen arr) -> do
+          old <- bufRead buf i
+          bufWrite buf i v
+          ref <- newIORef (Direct buf (c + 1))
+          let arr' = Arr (aLen arr) ref
+          writeIORef (aRef arr) (Diff (OSet i old) arr')
+          return arr'
+        _ -> aSetSlow arr i v
+
+aSetSlow :: Arr -> Int -> Any -> IO Arr
+aSetSlow !arr !i v = do
       nd <- rerootN arr
       case nd of
         Direct buf c

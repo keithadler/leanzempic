@@ -1491,9 +1491,11 @@ partial def hsCode (c : Code .pure) (ind : Nat) (ret : String) : EmitM String :=
     return s!"case ({x} :: {ty}) of \{\n{pad (ind + 1)}{sep.intercalate alts.toList} }"
 end
 
-/-- The parameter names, with a bang on each one whose type is a machine word (`ZNat`, `Word`). -/
-def bangWords (tys : List String) (ps : Array String) : Array String :=
-  (ps.toList.zip tys).toArray.map fun (p, t) => if t == "ZNat" || t == "Word" then "!" ++ p else p
+/-- The parameter names, with a bang on each one whose type is a machine word (`ZNat`, `Word`) or a
+`String` (`strs`). -/
+def bangWords (tys : List String) (strs : List Bool) (ps : Array String) : Array String :=
+  (ps.toList.zip (tys.zip strs)).toArray.map fun (p, t, isStr) =>
+    if t == "ZNat" || t == "Word" || isStr then "!" ++ p else p
 
 /-- Print one declaration as a typed Haskell function. -/
 def hsDecl (d : Decl .pure) : EmitM String := do
@@ -1507,7 +1509,9 @@ def hsDecl (d : Decl .pure) : EmitM String := do
   let text ← hsCode body 1 ret
   -- A `ZNat`/`Word` parameter is always an evaluated value (every `let` is strict). The bang tells GHC to
   -- pass it unboxed even when the function returns it as it is (a loop whose accumulator is the result).
-  let bps := bangWords ptys ps
+  -- A `String` is also always evaluated. Without the bang, a loop that returns before it reads the string
+  -- (`s.foldl`: the end test comes first) is lazy in it, and GHC enters it on every step.
+  let bps := bangWords ptys (d.params.toList.map (·.type.isConstOf ``String)) ps
   let some h ← hoistPlan d body
     | return s!"{n} :: {sig}\n{n} {" ".intercalate bps.toList} =\n{pad 1}{text}\n"
   -- A loop over an unshared array: `n` checks once that the array is a live buffer and runs the worker on
