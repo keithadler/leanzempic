@@ -5,6 +5,12 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* The "Shared array, insertion sort" row (`array_misc`) ran 9 ms natively (n = 3000) and was bimodal, mostly process
+  start-up. Its size is now n = 13000 (`garden/perf.py`, `docs/refresh_chart.py`): 0.37 s native, 0.20 s here (plain
+  `time`, sizing only). Ir (valgrind), guest instructions: 1.007 G here against 1.855 G for Lean's C (-45.7%); at the old
+  n = 3000 it was 56.4 M against 102.2 M. No runtime change: the swap loop was already hoisted. `docs/chart-data.json`
+  and the chart image still hold the old 9 ms measurement until `docs/refresh_chart.py` is rerun on a quiet machine.
+
 * `Array.map` and read-only loops (`foldl`, `foldr`, `any`, `all`, `contains`, hand-written loops) read and write the
   raw buffer like the other hoisted loops. The map's write has an in-line fast path that returns its own argument (an
   inlined function that rebuilds `Arr` allocated 24 bytes per element under `-fno-cse`), and `ZNat` and `Word`

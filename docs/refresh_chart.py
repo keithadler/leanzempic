@@ -21,7 +21,7 @@ GARDEN = {
     "functor_tree": ("Tree map and sum", 200000), "struct_update": ("Record update loop", 5000000),
     "list_mergesort": ("List merge sort", 300000), "hashmap": ("HashMap inserts", 3000000),
     "string_chars": ("String iteration", 1000000), "list_funcs": ("List functions", 1000000),
-    "array_funcs": ("Array map/filter/fold", 2000000), "array_misc": ("Shared array, insertion sort", 3000),
+    "array_funcs": ("Array map/filter/fold", 2000000), "array_misc": ("Shared array, insertion sort", 13000),
     "uint64_hash": ("List of UInt8, hashed", 3000000), "tuples": ("Tuple-state fold", 5000000),
     "option_chain": ("Option chain", 5000000),
 }

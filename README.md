@@ -592,8 +592,8 @@ Reading these honestly:
   10x slower down to about 1x, and hoisting the buffer of a loop that updates an unshared unboxed array in place
   (see [Hoisted buffers](#hoisted-buffers)) made the sieve and the reversal faster than Lean's. What is left: the
   library `filter`, `zip`, `append`, `extract` and `reverse` (`array_funcs` is 1.9x Lean's instructions, and the chart's 2.3x
-  was measured before `map` and read-only loops were hoisted), loops that push or pop (1.1x), and a shared array mutated in a loop (2.9x in the chart, on an 8 ms native run that is mostly
-  start-up for the Haskell program too), where the persistent fallback runs.
+  was measured before `map` and read-only loops were hoisted), loops that push or pop (1.1x), and a shared array mutated in a loop (`array_misc`) was
+  measured on a 9 ms run that was mostly start-up; at n = 13000 (0.37 s native) it is 1.01 G instructions (Ir, valgrind) against Lean's 1.85 G, because the swap loop is hoisted.
 * Allocation-heavy code (trees, lists of pairs) is where GHC's copying collector and Lean's
   in-place reuse differ most.
 * Compile time was not optimized or compared with Lean's. GHC `-O2` on generated modules is

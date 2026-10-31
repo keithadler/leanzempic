@@ -788,7 +788,7 @@ measurements) so the columns are comparable. All answers match native Lean.
 | `HashMap` inserts | 3e6 | 3.1x slower | 1.6x slower |
 | list functions | 1e6 | 4.3x slower | 2.7x slower |
 | array map/filter/fold | 2e6 | 5.4x slower | 3.8x slower |
-| shared array, insertion sort | 3e3 | 23x slower | 5x to 9.5x slower (a 9 ms run, noisy) |
+| shared array, insertion sort | 3e3 | 23x slower | 5x to 9.5x slower (a 9 ms run, noisy; at 1.3e4 see "Shared-array row resized") |
 | list merge sort | 3e5 | 1.2x slower | 1.7x slower |
 | `Float` loop, tree map, `Nat` sum loop, AES-256 | | unchanged | unchanged |
 
@@ -1132,3 +1132,19 @@ Garden, 23 programs, 3 runs each, instructions retired (the four combinations, `
 Reproduce: `python3 bench/realworld/rts.py 3 all rec=@/recommended/m 'low=@/recommended/m::-A64m'`.
 The garden half used `GARDEN_FUSE=0/1 python3 garden/run.py`, then the generated `Out.hs` compiled with
 `ghc -O2 -rtsopts` and run with `+RTS` options under `/usr/bin/time -l`.
+
+## Shared-array row resized
+
+The chart row "Shared array, insertion sort" (`array_misc`) was a 9 ms native run (n = 3000) with bimodal timing, dominated
+by process start-up. It is now n = 13000 (0.37 s native, 0.20 s leanzempic, plain `time`, used for sizing only; the VM is shared and noisy).
+Instructions are Ir (valgrind) guest instruction counts, a stand-in for instructions retired, best of 3:
+
+| n | leanzempic | Lean C backend | change |
+|---|---|---|---|
+| 3000 | 56.4 M | 102.2 M | -44.8% |
+| 13000 | 1.007 G | 1.855 G | -45.7% |
+
+At n = 13000 the sort makes 38.4 M swaps, so the hoisted `swapLoop` costs about 26 instructions per step (Lean: 48). Its
+object code has two bounds checks per read pair and again in the swap, plus register shuffles; removing them needs the
+emitter to carry the read's bounds fact into the swap, which was not built. `docs/chart-data.json` still holds the old
+measurement until `docs/refresh_chart.py` is rerun.

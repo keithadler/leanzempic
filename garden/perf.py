@@ -22,7 +22,7 @@ N = {
  "int_arith": 3000000, "float_math": 5000000, "array_funcs": 2000000, "array_2d_loop": 600,
  "matrix_mul": 60, "string_split": 1000000, "string_chars": 1000000, "nat_repr": 500000,
  "list_funcs": 1000000, "typeclass": 3000000, "hashmap_str": 1500000, "hashset": 2000000,
- "functor_tree": 200000, "array_misc": 3000, "uint_conv": 30000000, "nested_loops_break": 8000,
+ "functor_tree": 200000, "array_misc": 13000, "uint_conv": 30000000, "nested_loops_break": 8000,
  "list_misc": 3000, "deriving": 3000000, "sum_type": 3000000, "prod_arrays": 300000,
  "shared_rare_write": 20000, "shared_always_write": 10000, "shared_twice": 1000000,
  "string_sort_unique": 300000,  "int_repr": 1000000, "parser_monad": 1000000,
