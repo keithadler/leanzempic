@@ -5,7 +5,7 @@ shaped like GHC Core, so that GHC's optimizer (strictness analysis, worker/wrapp
 list fusion, unboxing) decides how your Lean program runs, instead of Lean's C backend.
 
 * License: Apache-2.0, public
-* Status: pre-release (`v0.1.0-rc2` is the latest tag), single maintainer
+* Status: pre-release (`v0.1.0-rc3` is the latest tag), single maintainer
 * Tested on: macOS arm64 (Apple M3, and macOS 15 in CI) and Linux x86_64 (Ubuntu, in CI); Lean 4.29.1
   and GHC 9.14.1 only. CI runs the test suite on both, with a 52-program subset of the garden.
 * Honest one-line summary: up to 9x faster than Lean's C backend on numeric, `Int`, `Float`, record and
@@ -655,7 +655,7 @@ An honest checklist, because "production" depends on what you need.
 
 | | |
 |---|---|
-| Pre-release | `v0.1.0-rc2` is tagged (`rc1` before it); there is no final `v0.1.0`, no package on Hackage or Reservoir, and the interface may change |
+| Pre-release | `v0.1.0-rc3` is tagged (`rc2` and `rc1` before it); there is no final `v0.1.0`, no package on Hackage or Reservoir, and the interface may change |
 | One Lean, one GHC | Lean 4.29.x and GHC 9.14.1 only. Windows is untested |
 | Pure functions only | no `IO`, so you compile functions and call them from Haskell; a Lean `main` cannot be compiled |
 | Missing | `IO`, `FloatArray`, `Float.toString`; any `@[extern]` constant that is not in the primitive table is reported, never dropped |
@@ -691,7 +691,7 @@ compile generated Haskell and compare it, value by value, with native Lean at se
 | `proptests` | random operation sequences on arrays, strings, fixed-width integers and the `Word`/`Natural` fast path, each step compared with a pure model |
 | `fuzz` | a short differential-fuzzing run: random Lean programs must give the same answers under Lean and leanzempic |
 | `aes` | AES-256 from the proved [lean-aes](https://github.com/keithadler/lean-aes) (`bench/aes`): Lean's C, the Haskell and OpenSSL (`tools/aes_oracle.py`) give the same ciphertext |
-| `garden` | the [garden](#the-garden): 155 programs locally, 48 in CI |
+| `garden` | the [garden](#the-garden): 223 programs locally, 52 in CI |
 
 ### The garden
 
