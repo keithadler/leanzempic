@@ -154,6 +154,13 @@ narrow widths, hoisting ignores the stale mark, swap bound off by one, read with
 range check (crash), hoisting a lazy handle; for the `Word` and `Bool` buffers, an off-by-one in the read, an
 inverted or unchecked `Bool` read, the stale mark ignored for either, and a `Word` buffer accepted as `Bool`.
 
+Unrolled copies and `INLINE`. A pragma changes how GHC compiles a function, not what it computes, so it cannot change
+an answer; the risk is compile time and code size, which `unrollChainBudget` and `unrollInlineBudget` (8000) bound.
+Which copies get `INLINE` is a performance rule checked by `tests/run.sh` on the AES build (`mul` and `mulLoop_u8` are
+`INLINE`, `expandFrom_ux_8` is `INLINABLE`): three edits (wrapper size 0, every copy treated as counting down, inline
+budget 0) each fail it. The garden program `unroll_wrapper` calls the wrapper with literals, with bytes read from an
+array built by pushes, and from a loop counter that starts at a non-literal.
+
 Garden programs for the emitter's scan (`hoist_*`). Each one builds its array by pushes and starts its loops at a
 value that is not a literal. Both matter: an array made by `map` keeps its source's boxed buffer, so the wrapper's
 check fails and the hoisted loop never runs (the older `hoist_set_*`, `hoist_shared_*` and `hoist_escape_*` built

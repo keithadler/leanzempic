@@ -5,6 +5,13 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* Unrolled copies of a recursive function that count down from a literal (`mulLoop 8`) are `INLINE` again, and so is a
+  small non-recursive wrapper around one (`mul`); copies that count up stay `INLINABLE`. AES-256 (`aes`): 165,400 to
+  96,900 Ir (valgrind) per block, -41% (Lean's C: 205,900; Ir (valgrind) is a stand-in for instructions retired). The
+  generated Haskell of every other garden program, real-world program and chart row is unchanged except `list_funcs`.
+  New garden program `unroll_wrapper` (224 in all); `tests/run.sh` checks the pragmas on the AES build; 3 deliberate edits
+  were each caught by that check. Wall time was not re-measured.
+
 * `Array.map` and read-only loops (`foldl`, `foldr`, `any`, `all`, `contains`, hand-written loops) read and write the
   raw buffer like the other hoisted loops. The map's write has an in-line fast path that returns its own argument (an
   inlined function that rebuilds `Arr` allocated 24 bytes per element under `-fno-cse`), and `ZNat` and `Word`

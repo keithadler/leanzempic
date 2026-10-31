@@ -291,6 +291,10 @@ structure St where
   vqueue : Array (Name × Array (Option Nat)) := #[]
   /-- Names of the specialized copies ever queued. -/
   vseen : Std.HashSet String := {}
+  /-- The declaration being printed calls an unrolled copy that counts down (see `tryUnroll`). -/
+  usedUnroll : Bool := false
+  /-- Names of the unrolled copies whose fixed arguments are all counters that the function counts down. -/
+  downVariants : Std.HashSet String := {}
   /-- How many copies each function has, to bound code growth. -/
   vcount : Std.HashMap Name Nat := {}
   /-- Unboxed array buffers are on (`zempic.typedArrays`). -/
@@ -631,6 +635,19 @@ partial def callsConst (n : Name) : Code .pure → Bool
     | .default k => callsConst n k
   | _ => false
 
+/-- Does the code subtract from the variable `x` (`Nat.sub x _`)? A recursion on a counter that is
+unrolled from a literal is one that counts down by such a subtraction; one that counts up adds. -/
+partial def subtractsFrom (x : FVarId) : Code .pure → Bool
+  | .let d k => (match d.value with
+      | .const c _ #[.fvar f, _] => c == ``Nat.sub && f == x
+      | _ => false) || subtractsFrom x k
+  | .fun d k => subtractsFrom x d.value || subtractsFrom x k
+  | .jp d k => subtractsFrom x d.value || subtractsFrom x k
+  | .cases cs => cs.alts.any fun
+    | .alt _ _ k => subtractsFrom x k
+    | .default k => subtractsFrom x k
+  | _ => false
+
 /-- How many times the code calls constant `n`. -/
 partial def countCallsTo (n : Name) : Code .pure → Nat
   | .let d k => (match d.value with | .const c _ _ => if c == n then 1 else 0 | _ => 0) + countCallsTo n k
@@ -645,6 +662,12 @@ partial def countCallsTo (n : Name) : Code .pure → Nat
 recursive call sites unrolled `k` deep becomes about `size * c^k`. Without this bound a loop with two
 branches and a counter of 16 made GHC run out of memory compiling the result. -/
 def unrollChainBudget : Nat := 8000
+
+/-- Largest chain estimate (see `unrollChainBudget`) for which an unrolled copy is marked `INLINE`. -/
+def unrollInlineBudget : Nat := 8000
+
+/-- Most bindings a function may have to be `INLINE` because it wraps a call to an unrolled copy. -/
+def unrollWrapperSize : Nat := 8
 
 /-- Number of bindings in the code, and the constants it calls. -/
 partial def sizeCalls (c : Code .pure) (acc : Nat × Array Name) : Nat × Array Name :=
@@ -741,8 +764,13 @@ def tryUnroll (c : Name) (letId : FVarId) (args : Array (Arg .pure)) :
     if size * calls ^ depth > unrollChainBudget then return none
     let cnt := s.vcount.getD c 0
     if cnt ≥ 64 then return none
+    -- a copy fixed only on counters that the function counts down is the head of a chain that ends at a
+    -- known base case (the whole chain folds away when GHC inlines it)
+    let down := ks.size > 0 && (d.params.zip ks).all fun (p, k) => k.isNone || subtractsFrom p.fvarId body
+    if down then modify fun s => { s with downVariants := s.downVariants.insert name }
     modify fun s => { s with vseen := s.vseen.insert name, vqueue := s.vqueue.push (c, ks),
                              vcount := s.vcount.insert c (cnt + 1) }
+  if (← get).downVariants.contains name then modify fun s => { s with usedUnroll := true }
   let tys ← d.params.toList.mapM (hsTyM ·.type)
   let mut ptys : List String := []
   let mut free : Array (String × String) := #[]
@@ -1504,12 +1532,17 @@ def hsDecl (d : Decl .pure) : EmitM String := do
   let ret ← declRetM d
   let ptys ← d.params.toList.mapM (hsTyM ·.type)
   let sig := " -> ".intercalate (ptys ++ [ret])
+  modify fun s => { s with usedUnroll := false }
   let text ← hsCode body 1 ret
+  -- A small function that only wraps a call to an unrolled copy (`mul` around `mulLoop 8`) is `INLINE`
+  -- too: GHC then sees the whole chain at each call, and a call with a literal argument folds away.
+  let wrapper := (← get).usedUnroll && (sizeCalls body (0, #[])).1 ≤ unrollWrapperSize && !callsConst d.name body
+  let pragma := if wrapper then s!"\{-# INLINE {n} #-}\n" else ""
   -- A `ZNat`/`Word` parameter is always an evaluated value (every `let` is strict). The bang tells GHC to
   -- pass it unboxed even when the function returns it as it is (a loop whose accumulator is the result).
   let bps := bangWords ptys ps
   let some h ← hoistPlan d body
-    | return s!"{n} :: {sig}\n{n} {" ".intercalate bps.toList} =\n{pad 1}{text}\n"
+    | return s!"{n} :: {sig}\n{n} {" ".intercalate bps.toList} =\n{pad 1}{text}\n{pragma}"
   -- A loop over an unshared array: `n` checks once that the array is a live buffer and runs the worker on
   -- the raw buffer; if it is not, the ordinary code `n_slow` runs one step, and its recursive calls come
   -- back to `n`, which checks again (a lazy handle becomes a live buffer at its first write).
@@ -1553,8 +1586,15 @@ def hsVariant (d : Decl .pure) (ks : Array (Option Nat)) : EmitM String := do
   let n := variantName d.name ks
   let args := " ".intercalate names.toList
   let text ← hsCode body 1 ret
+  -- INLINE when the whole chain below this copy stays small (same estimate as `tryUnroll`): GHC then
+  -- splices the chain into its caller, and a call with known arguments folds away. A bigger chain is
+  -- only INLINABLE, since forcing it made GHC run out of memory on some programs.
+  let depth := ks.foldl (fun m o => max m (o.getD 0)) 0
+  let size := (← deepSize d.name 3 #[]).1
+  let pragma := if (← get).downVariants.contains n && size * countCallsTo d.name body ^ depth ≤ unrollInlineBudget
+    then "INLINE" else "INLINABLE"
   let some h ← hoistPlan d body
-    | return s!"{n} :: {" -> ".intercalate (sig ++ [ret])}\n{n} {args} =\n{pad 1}{pre}{text}\n\{-# INLINABLE {n} #-}\n"
+    | return s!"{n} :: {" -> ".intercalate (sig ++ [ret])}\n{n} {args} =\n{pad 1}{pre}{text}\n\{-# {pragma} {n} #-}\n"
   let (_, names2, pre2) ← prepare
   modify fun s => { s with hoist := some h }
   let fast ← hsCode body 1 ret

@@ -347,10 +347,32 @@ Things that did not help, measured by patching the generated Haskell by hand: re
 persistent-array S-box with an immutable unboxed array (2.27 s to 2.11 s, within noise of the
 remaining overhead), and rewriting `mulLoop` as a tighter local loop (no change).
 
-Remaining gap, 1.8x. I did not profile this further; the likely causes, unmeasured, are boxed `Any` elements on the S-box lookups, the key schedule held as a `List`
-of words rebuilt for every block, and `Word.map sbox` / `mapCols mixColumn` going through closures.
-The honest summary is that a proved, byte-oriented, table-driven cipher is a workload where
-the C backend wins, and where this project's strengths (Nat loops, fusion) do not apply.
+Profiling the 1.8x gap (2026-10-31, Ir (valgrind) = guest instructions under callgrind, a stand-in for
+instructions retired; this VM has no hardware counters, so wall time was not used). Per block, taken as
+(Ir at n=1000 minus Ir at n=300) / 700:
+
+| | Ir (valgrind) per block | Ir (valgrind) at n=1000 |
+|---|---|---|
+| Lean C | 205,900 | 370.8 M |
+| leanzempic before | 165,400 | 167.0 M |
+| leanzempic after | 96,900 | 98.5 M |
+
+The profile of the old build showed 48% of the instructions in the eight `mulLoop_u8 .. u1` copies, 22% in
+`List.get?Internal` (`roundKey` walks the 60-word key list for every word), 9% in `stg_BLACKHOLE` and 7% in
+`stg_ap_0_fast`. The copies of `mulLoop` were not inlined, although the emitter's comment said they were: since
+`3217c15` they carry `INLINABLE`, which GHC does not splice, so every `mul 2 b` ran the whole eight-step chain
+with the multiplier in a register instead of folding to `xtime b`. Two changes: a copy that is fixed on a
+counter the function counts down (`Nat.sub` of that counter in its body) and whose chain estimate
+`size * calls^depth` is at most 8000 is `INLINE` again; and a small non-recursive function (at most 8 bindings) that
+calls such a copy (`mul`) is `INLINE` too, so a call with a literal multiplier folds. Copies that count up
+(`expandFrom` from index 8) stay `INLINABLE`, since inlining them only grows the code (Ir 94.6k per block with
+them inline, 96.9k without; the 2.3k difference is not worth the compile time). Of the 224 garden programs,
+the real-world programs and the chart rows' programs, only `list_funcs` (`List.drop` with a literal) and the new
+`unroll_wrapper` change their generated Haskell; all others are byte-identical to `main`. The remaining cost is
+the `List` walk and its thunks, which Lean's C pays too (`List.get?Internal` is 8.7% of its profile). Native
+wall time was not re-measured (the VM is shared and noisy): the 1.8x figure above is from the earlier run, and the
+instruction count by itself already put leanzempic below Lean's C on this program, so the wall-time gap is not
+in instructions (allocation and cache behavior are the candidates, unmeasured).
 
 
 ## The garden, profiled (2026-10-28)
@@ -739,7 +761,7 @@ first. With it set correctly, best of 3, identical answers:
 
 The reason is what tenet-hs found about copying collectors: live data is the cost, not allocation.
 A fused pipeline never builds the intermediate list, so there is nothing for the collector to copy.
-All 223 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
+All 224 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
 
 **A GHC panic, found by fusion.** `list_funcs` with fusion made GHC 9.14.1 panic ("the 'impossible'
 happened", `StgToCmm.Env: variable not found co5_Xc`). It was deterministic for a given invocation but
@@ -1057,7 +1079,7 @@ Recommended build, the seven real-world programs (instructions in billions, peak
 `deriv` was 8.47 G, so its `deriv` ratio is +11%.) `-A128m` passes the gate on six programs and fails `deriv`;
 every smaller area fails `deriv` too and, below 64 MB, `const_fold`. `deriv` allocates only 0.66 GB, nearly all of
 it survives, and with a 256 MB area just two collections copy it (533 MB copied); at `-A16m` it copies 867 MB.
-It is also erratic in `-A`: `-A224m` retires 7.9 G and `-A340m` 6.6 G with 582 MB, while `-A192m` retires 10.1 G
+It is also erratic in `-A`: `-A223m` retires 7.9 G and `-A340m` 6.6 G with 582 MB, while `-A192m` retires 10.1 G
 and `-A208m` 10.5 G, because the result depends on which allocation the collections happen to land on. A value
 picked from that sweep would be overfitting to these inputs, so I did not take one. `const_fold` allows
 `-A64m` only at exactly the limit (+3.0%).

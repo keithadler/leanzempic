@@ -1874,3 +1874,26 @@ def entry (n : Nat) : Nat :=
   let s5 := sumWith (poke a1) a1 z z
   s1 + s2 * 3 + s3 * 5 + s4 * 7 + s5 * 11 + sumL a0 + sumL a1 * 9
 ''')
+
+# A small wrapper around an unrolled literal-counter loop (`gmul` around `gloop 8`) is marked INLINE, so a call
+# with a literal multiplier folds away. Called here with literals, with values read from an array built by
+# pushes, and from a loop counter that starts at a non-literal (so that loop is not unrolled).
+add("unroll_wrapper", '''
+def xt (b : UInt8) : UInt8 := if b &&& 0x80 = 0 then b <<< 1 else (b <<< 1) ^^^ 0x1b
+def gloop : Nat → UInt8 → UInt8 → UInt8 → UInt8
+  | 0, _, _, acc => acc
+  | k + 1, a, b, acc => gloop k (a >>> 1) (xt b) (if a &&& 1 = 0 then acc else acc ^^^ b)
+def gmul (a b : UInt8) : UInt8 := gloop 8 a b 0
+def col (w : Array UInt8) (i : Nat) : UInt8 :=
+  gmul 2 w[i]! ^^^ gmul 3 w[i + 1]! ^^^ w[i + 2]! ^^^ w[i + 3]!
+def entry (n : Nat) : Nat :=
+  let z := n / 1000 -- 0, but not a literal
+  let w := Id.run do
+    let mut a : Array UInt8 := Array.mkEmpty 4
+    for i in [0:4 * n + 8] do a := a.push (UInt8.ofNat (i * 37 + z + 11))
+    return a
+  let s1 := (List.range (n + 1)).foldl (fun acc i => (acc * 31 + (col w (4 * i)).toNat) % 1000003) z
+  let s2 := (List.range 256).foldl (fun acc a => (acc * 7 + (gmul (UInt8.ofNat a) (UInt8.ofNat (n + a))).toNat) % 1000003) 0
+  let s3 := (gloop (z + 5) (UInt8.ofNat n) 3 0).toNat + (gloop (z + 8) 0xff 0x57 0).toNat
+  s1 + s2 * 3 + s3 * 5
+''')

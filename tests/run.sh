@@ -140,6 +140,12 @@ if command -v openssl >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; the
     eq "$want" "$(.lake/build/bin/aesbench "$1" "$2")" && eq "$want" "$(build/AesMain "$1" "$2")" \
       || { echo "FAIL aes n=$1 seed=$2"; exit 1; }
   done
+  # the unrolled GF multiply and its wrapper must be INLINE (GHC then folds `mul 2 b` to a few instructions)
+  grep -q "INLINE z_AES_mul #-}" build/AesBench/AesBench/Fast.hs && grep -q "INLINE z_AES_mulLoop_u8_x_x_x #-}" build/AesBench/AesBench/Fast.hs \
+    || { echo "FAIL aes: mul or its unrolled loop is not INLINE"; exit 1; }
+  # a chain that counts up (expandFrom from index 8) must stay INLINABLE: inlining it only grows the code
+  grep -q "INLINABLE z_AES_expandFrom_ux_8_x #-}" build/AesBench/AesBench/Fast.hs \
+    || { echo "FAIL aes: a counting-up unrolled copy is not INLINABLE"; exit 1; }
   echo "ok aes (AES-256 from lean-aes: Lean C, Haskell and OpenSSL agree)"
 fi
 
