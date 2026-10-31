@@ -1142,8 +1142,8 @@ a `Diff` node of three words plus an `Op` value of three words. The record is no
 (40000 `aSet`s on a shared 1000-element boxed array, then a read of the first version): 5.61 MB to 4.96 MB allocated
 (-11.7%), 9.41 G to 9.09 G Ir (-3.4%). Real-world programs, recommended build, relinked against the new runtime
 (Ir, valgrind, sizes cut to run under the profiler: binarytrees 14, const_fold 50, deriv 8, qsort 60,
-rbmap and rbmap_checkpoint 200000; `unionfind` was not measured): none moves by more than 0.1%, because they use the in-place
-paths. Peak resident memory is unchanged for the same reason.
+rbmap and rbmap_checkpoint 200000): none moves by more than 0.1%. `unionfind` (300000) falls from 1.403 G to 1.349 G Ir (-3.8%): it must take the persistent path for some writes (not traced).
+Peak resident memory is unchanged in all seven.
 
 Rejected or not built (diagnosis, `+RTS -s`, no change shipped):
 

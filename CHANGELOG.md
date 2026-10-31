@@ -8,8 +8,8 @@ everything is pre-release (`0.1.0`).
 * The persistent array's undo records are constructors of `Node` (`DSet`, `DPop`, `DPush`, `DSwap`) instead of a
   `Diff` node pointing at a separate `Op` value, so a persistent `set`, `push`, `pop` or `swap` allocates two words
   fewer. Microbenchmark `bench/PersistSetMain.hs` (40000 persistent `aSet`s on a 1000-element boxed array): 5.61 MB to
-  4.96 MB allocated (-11.7%) and 9.41 G to 9.09 G Ir (valgrind; -3.4%). Six of the seven real-world programs (recommended
-  build, reduced sizes; `unionfind` was not measured) change by -0.1% to +0.1% Ir (valgrind); peak resident memory does not change (it is set by
+  4.96 MB allocated (-11.7%) and 9.41 G to 9.09 G Ir (valgrind; -3.4%). `unionfind` (n = 300000) retires 1.403 G instead of 1.349 G Ir (valgrind; -3.8%); the other six real-world programs (recommended
+  build, reduced sizes) change by -0.1% to +0.1%; peak resident memory does not change (it is set by
   the allocation area, see `BENCH.md`, "Peak memory"). New garden program `persist_versions` (224 in all).
 * `Array.map` and read-only loops (`foldl`, `foldr`, `any`, `all`, `contains`, hand-written loops) read and write the
   raw buffer like the other hoisted loops. The map's write has an in-line fast path that returns its own argument (an
