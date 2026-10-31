@@ -175,3 +175,54 @@ Native peak MB for reference: 35, 8, 549, 3, 95, 366, 134. With `lowmem` the rat
 default. List fusion as a default and `-A256m -O1g` as a default were also evaluated over 23 garden programs and
 rejected; the data, and every RTS option tried (`-O`, `-F`, `-n`, `-xn`, `-c`, `-G3`, `-H`), is in `BENCH.md`,
 "Peak memory".
+
+## Three more Lean benchmark programs (2026-10-31, branch `cloud-realworld`)
+
+Same source repository and tag (`v4.29.1`, commit `f72c35b3`), same method (pure `entry` adapters in
+`adapt.py`, one `src/<name>.lean` for both sides, native `lean -c` plus `leanc -O3`, leanzempic default and
+recommended builds). Instruction counts here are **Ir (valgrind)**: callgrind guest instructions of the whole
+process, best of 3, from a Linux VM with no hardware counters. They are a deterministic stand-in for instructions
+retired and are NOT comparable in absolute terms with the "instructions retired" tables above (those are Apple
+M3 counters); only the ratios to native within this table mean anything. Inputs are small because valgrind is
+about 50x slower than native. Wall times were not measured (the VM was shared by 13 workers, load average above 15).
+Outputs of native, default and recommended are identical at the Ir size and at larger sizes (`verify.py` checks the
+three answers: OK).
+
+| program (upstream file) | n | Ir (valgrind) native | default, ratio | recommended, ratio |
+|---|---|---|---|---|
+| rbmap_fbip (`rbmap_fbip.lean`, frame-limited-reuse red-black tree with a zipper) | 200000 | 821,952,917 | 344,034,930, 0.42x | 280,327,847, 0.34x |
+| qsort_core (`qsort/Main.lean`, core `Array.qsort` on `Array UInt32`) | 200000 | 554,220,497 | 3,222,137,099, **5.81x** | 3,222,889,391, **5.81x** |
+| mergesort (`mergeSort/Bench.lean`, `List.MergeSort.Internal.mergeSortTR₂`) | 20000 | 171,913,288 | 121,598,643, 0.71x | 122,851,166, 0.71x |
+
+Adapter changes: `rbmap_fbip` only the `main` plumbing (n from argv upstream; no upstream `.expected.out`, the check is
+that the count of true values is n/10). `qsort_core` builds n elements instead of 4,000,000 and packs size, first and
+last element (upstream prints the size). `mergesort`: upstream sorts four lists of length `i * 10^5`; here n is the
+length, and the third list uses a fixed LCG instead of `IO.rand 0 1000` (no `IO`), so this is NOT upstream's random
+data. Upstream prints elapsed time, so there is no expected output; the answer packs "all four outputs have the
+right length and are ordered".
+
+**The loss: qsort_core, 5.81x native in both builds.** This is core `Array.qsort` with a comparison closure, a
+different program from the earlier `qsort` row (which defines its own `partitionAux` and is at 0.96x). From the
+generated Haskell (`out/qsort_core/default/Out/Fast.hs`): the comparison `(· < ·)` is not specialized into
+`qpartition`/`qpartition.loop`; it is passed as an `Any` closure (`z_UInt32_decLt`) and applied with `zap (zap lt a) b`
+for every comparison, with both elements read by the generic `arrGetI` from an `Any`-typed array (boxed `UInt32`),
+and the loop returns an allocated pair. Native Lean specializes the closure away and works on unboxed scalars.
+Fusion does not apply (no list), so the recommended build is the same. This is a diagnosis from reading the
+generated code and the counts, not a measured profile, and I did not try a fix (`Zempic/` was out of scope).
+Probable fix direction: specialize `Array.qsort`'s `lt` argument when it is a known constant function, as Lean's
+`@[specialize]` does, and use the typed `Word32` array path the own-`qsort` row already gets.
+
+Wins: `rbmap_fbip` (0.42x and 0.34x) is consistent with `rbmap` (0.29x) and `rbmap_checkpoint` (0.46x), the same
+allocation-heavy tree shape; `mergesort` is 0.71x in both builds (list code, not helped by fusion either).
+
+Not added, with reasons: `rbmap2`, `rbmap3`, `rbmap500k`, `rbmap_checkpoint2` begin with `prelude` and `import init.*`
+(old-style sources that do not elaborate against `import Zempic`, and duplicates of rbmap with different syntax);
+`binarytrees.st` is `binarytrees` with the Task removed (the existing adapter already does that); `hashmap`,
+`phashmap`, `treemap`, `liasolver` are IO timing harnesses over `Std` iterators (`Std.HashMap` itself does emit, a
+10-line probe with `insert`/`contains` produced Haskell, but that is not upstream's program, so it is not a row);
+the remaining files (`big_*`, `bv_decide_*`, `simp_*`, `omega_stress`, `parser`, `channel`, `mvcgen`, ...) benchmark
+the Lean elaborator or need `import Lean`/`IO`.
+
+Reproduce (Linux, no `/usr/bin/time -l`): `python3 bench/realworld/run.py build rbmap_fbip qsort_core mergesort`,
+then `ir.sh out/<name>/native N`, `ir.sh out/<name>/default/m N`, `ir.sh out/<name>/recommended/m N` with the N above.
+`run.py bench` and `rts.py` parse macOS `time -l` output and do not work on Linux.

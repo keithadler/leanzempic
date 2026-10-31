@@ -8,8 +8,8 @@ def digits(x):
     while x: d.append(x % B); x //= B
     return d[::-1]
 ok = True
-for p in ["binarytrees", "const_fold", "deriv", "qsort", "rbmap", "rbmap_checkpoint", "unionfind"]:
-    a = open(f"{H}/upstream/{p}.lean.args").read().split()[0]
+for p in ["binarytrees", "const_fold", "deriv", "qsort", "rbmap", "rbmap_checkpoint", "unionfind", "rbmap_fbip", "qsort_core", "mergesort"]:
+    a = (open(f"{H}/upstream/{p}.lean.args").read().split() or ["0"])[0] if os.path.exists(f"{H}/upstream/{p}.lean.args") else {"rbmap_fbip": "100000", "qsort_core": "100000", "mergesort": "10000"}[p]
     if p == "const_fold": a = "1"          # reps=1 reproduces upstream's single tree of depth 15
     got = int(subprocess.run([f"{H}/out/{p}/native", a], capture_output=True, text=True).stdout)
     exp = open(f"{H}/upstream/{p}.lean.expected.out").read() if os.path.exists(f"{H}/upstream/{p}.lean.expected.out") else None
@@ -23,5 +23,8 @@ for p in ["binarytrees", "const_fold", "deriv", "qsort", "rbmap", "rbmap_checkpo
     elif p == "rbmap_checkpoint":     # no upstream expected file; "10001 10000" is upstream's own main run natively at "100000 10"
         res = digits(got) == [10001, 10000]
     elif p == "unionfind": res = got == int(exp.split()[1])
+    elif p == "rbmap_fbip": res = got == int(a) // 10      # no upstream expected file; every 10th key maps to true
+    elif p == "qsort_core": res = got >> 64 == int(a)       # core Array.qsort; size is the high digit (upstream prints the size only)
+    elif p == "mergesort": res = digits(got) == [4, int(a) // 1000 * 1000]  # all four lists sorted; last list has n/1000 blocks of 1000
     else: res = None                                                         # no expected file upstream
     print(f"{p:12} arg {a:>6} packed->{'OK' if res else ('no upstream expected file' if res is None else 'MISMATCH')}")

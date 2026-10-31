@@ -9,6 +9,7 @@ CUT = {  # name -> regex of the line where upstream's IO section starts
  "binarytrees": r"^-- generate many trees", "const_fold": r"^open Expr\n\nunsafe def main",
  "deriv": r"^nestAux|^def nestAux", "qsort": r"^def main", "rbmap": r"^def main", "unionfind": r"^def main",
  "rbmap_checkpoint": r"^def main", "nat_repr": r"^def main",
+ "rbmap_fbip": r"^def main", "qsort_core": r"^def main", "mergesort": r"^def main",
 }
 ADAPT = {
 "binarytrees": """
@@ -99,6 +100,49 @@ def entry (n : Nat) : Nat := Id.run do
     for j in *...i do
       s := s + j.repr.length
   return s
+""",
+"rbmap_fbip": """
+-- ADAPTER (pure): upstream main prints the count of true values (n comes from argv upstream).
+def entry (n : Nat) : Nat :=
+  fold (fun _ v r => if v then r + 1 else r) (mkMap n) 0
+""",
+"qsort_core": """
+-- ADAPTER (pure): upstream (tests/bench/qsort/Main.lean) builds 4000000 elements, runs core `Array.qsort`
+-- and prints the size.  Here n is the length; the result packs size, first and last element.
+def entry (n : Nat) : Nat :=
+  let a := mkRandomArray n 0 (Array.mkEmpty n)
+  let s := a.qsort (· < ·)
+  (s.size * 4294967296 + s[0]!.toNat) * 4294967296 + s[s.size - 1]!.toNat
+""",
+"mergesort": """
+-- ADAPTER (pure): upstream (tests/bench/mergeSort/Bench.lean) sorts four lists of length i*10^5 with
+-- `List.MergeSort.Internal.mergeSortTR₂`, one of them filled by `IO.rand 0 1000`.  Here n is the length and
+-- the random list uses a fixed LCG (IO.rand does not exist in pure code).  The result counts lists whose
+-- length survived and that came out ordered, packed with the length of the last one.
+def lcgList (n : Nat) : List Nat := Id.run do
+  let mut seed : Nat := 12345
+  let mut l : List Nat := []
+  for _ in [0:n] do
+    seed := (seed * 1103515245 + 12345) % 2147483648
+    l := (seed / 65536 % 1001) :: l
+  return l
+
+def sortedOk : List Nat → Bool
+  | a :: (b :: t) => decide (a ≤ b) && sortedOk (b :: t)
+  | _ => true
+
+def entry (n : Nat) : Nat :=
+  let i₁ := (List.range' 1 n).reverse
+  let i₂ := List.range n
+  let i₃ := lcgList n
+  let i₄ := (List.range (n / 1000)).flatMap (fun k => (k * 1000 + 1) :: (k * 1000) :: List.range' (k * 1000 + 2) 998)
+  let o₁ := mergeSortTR₂ i₁
+  let o₂ := mergeSortTR₂ i₂
+  let o₃ := mergeSortTR₂ i₃
+  let o₄ := mergeSortTR₂ i₄
+  let ok := (if o₁.length == n && sortedOk o₁ then 1 else 0) + (if o₂.length == n && sortedOk o₂ then 1 else 0)
+          + (if o₃.length == n && sortedOk o₃ then 1 else 0) + (if o₄.length == i₄.length && sortedOk o₄ then 1 else 0)
+  ok * 1099511627776 + o₄.length
 """,
 "unionfind": """
 -- ADAPTER (pure): upstream main prints "ok <v>"; here v (or 0 on Error) is the result.

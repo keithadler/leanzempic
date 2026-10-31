@@ -5,6 +5,7 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* `bench/realworld` gains three more of Lean's own benchmark programs (`rbmap_fbip`, `qsort_core` = `tests/bench/qsort/Main.lean`, `mergesort` = `tests/bench/mergeSort/Bench.lean`, tag v4.29.1). Ir (valgrind, a stand-in for instructions retired) against native Lean: 0.42x, 5.81x and 0.71x (default build; recommended 0.34x, 5.81x, 0.71x). `qsort_core` is a real loss: core `Array.qsort` keeps its comparison closure unspecialized; diagnosis in `bench/realworld/RESULTS.md`, no fix attempted.
 * `Array.map` and read-only loops (`foldl`, `foldr`, `any`, `all`, `contains`, hand-written loops) read and write the
   raw buffer like the other hoisted loops. The map's write has an in-line fast path that returns its own argument (an
   inlined function that rebuilds `Arr` allocated 24 bytes per element under `-fno-cse`), and `ZNat` and `Word`
