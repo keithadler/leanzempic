@@ -7,7 +7,7 @@ list fusion, unboxing) decides how your Lean program runs, instead of Lean's C b
 * License: Apache-2.0, public
 * Status: pre-release (`v0.1.0-rc3` is the latest tag), single maintainer
 * Tested on: macOS arm64 (Apple M3, and macOS 15 in CI) and Linux x86_64 (Ubuntu, in CI); Lean 4.29.1
-  and GHC 9.14.1 only. CI runs the test suite on both, with a 52-program subset of the garden.
+  and GHC 9.14.1 only. CI runs the test suite on both, with a 53-program subset of the garden.
 * Honest one-line summary: up to 9x faster than Lean's C backend on numeric, `Int`, `Float`, record and
   fused-list code; with the recommended settings, between level and 3x slower on lists, tuples,
   strings and hash maps (up to 4x slower with defaults); between 1.3x faster and 5.1x slower on arrays (loops that
@@ -139,7 +139,7 @@ PATH=/opt/homebrew/bin:/usr/bin:/bin:$HOME/.elan/bin sh tests/run.sh
 It builds every example, compiles the generated Haskell, and checks each result against native
 Lean, then runs the garden, the AES check and the fuzzer. Each check prints `ok` (the plugin check only
 if Cabal is installed); any failure aborts with `FAIL`. The whole garden takes about 15 CPU-minutes;
-`GARDEN_SET=ci GARDEN_OPT=-O1 GARDEN_FUSE=1 sh tests/run.sh` runs the 52-program subset CI uses.
+`GARDEN_SET=ci GARDEN_OPT=-O1 GARDEN_FUSE=1 sh tests/run.sh` runs the 53-program subset CI uses.
 
 ## How it works
 
@@ -642,7 +642,7 @@ An honest checklist, because "production" depends on what you need.
 
 | | |
 |---|---|
-| Continuous integration | GitHub Actions runs the suite on Ubuntu and macOS 15 for every push, including the Cabal package build and a 52-program garden subset at `-O1` with fusion on |
+| Continuous integration | GitHub Actions runs the suite on Ubuntu and macOS 15 for every push, including the Cabal package build and a 53-program garden subset at `-O1` with fusion on |
 | Fails fast | an unsupported Lean version or a mistyped mode is a clear error; an unsupported Lean constant is an error that lists it, never silently dropped code |
 | Tested against Lean itself | the examples, 224 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
 | Runtime tested against models | random operation sequences on arrays, strings, integers and the `Word`/`Natural` fast path, with deliberately broken runtimes caught |
@@ -703,7 +703,7 @@ compiles it through leanzempic and GHC, and compares the outputs for several inp
 than `OK` names the stage that failed: `NATIVE` (the program itself does not run), `EMIT` (leanzempic
 cannot compile it, with the missing primitive), `GHC` (the generated Haskell does not typecheck),
 `RUNERR` (the Haskell crashed) or `DIFF` (different answers). `tests/run.sh` runs the whole garden
-(about 15 CPU-minutes); CI runs a 52-program subset that touches every area, at `-O1` (`GARDEN_SET=ci
+(about 15 CPU-minutes); CI runs a 53-program subset that touches every area, at `-O1` (`GARDEN_SET=ci
 GARDEN_OPT=-O1 GARDEN_FUSE=1`, the recommended configuration; `-O0` would hide the crash class the garden once found).
 
 The garden is how the features above were found: the first run compiled 27 of 48 programs, and every
