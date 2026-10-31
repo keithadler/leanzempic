@@ -19,7 +19,7 @@ module Zempic.Arr
   ( Arr, aEmpty, aEmptyK, aReplicate, aReplicateK, aLength, aGet, aSet, aPush, aPop, aSwap
   , aToList, aFromList, aFromListK
   , aSetU, aPushU, aPopU, aSwapU, aDeopt, aShare
-  , aRangeW, aDeoptW, aGetW, aGetWU, aGetWI, aGetWIS, aPushFromU, aPushUW, aSetUW, aSetUWB, aSetUWBF
+  , aAppend, aAppendU, aExtract, aReverse, aReverseU, aRangeW, aDeoptW, aGetW, aGetWU, aGetWI, aGetWIS, aPushFromU, aPushUW, aSetUW, aSetUWB, aSetUWBF
   , aGetP8, aGetP16, aGetP32, aGetP64, aGetPS8, aGetPS16, aGetPS32, aGetPS64
   , aSwapU8, aSwapU16, aSwapU32, aSwapU64, aSwapUW, aSwapF8, aSwapF16, aSwapF32, aSwapF64, aSwapFW
   , aSetF8, aSetF16, aSetF32, aSetF64
@@ -1093,6 +1093,215 @@ aPushFromU arr src i = do
           writeIORef (aRef arr) (Direct b c)
       return (Arr (n + 1) (aRef arr))
     _ -> aGet src i (error "leanzempic: array index out of range") >>= aPushU arr
+
+-- * Bulk operations
+--
+-- `Array.append`, `Array.extract` and `Array.reverse` move whole runs of elements, so they are
+-- block copies (or one swap loop) instead of one primitive call per element. The plain versions leave
+-- every argument unchanged and return a fresh array (or the argument itself when there is nothing to
+-- do); the @U@ versions are used only where the ownership analysis proved the first array unshared.
+
+-- | The element kind code of a buffer (see 'Buf').
+bufKind :: Buf -> Int
+bufKind b = case b of
+  BBox _ -> 0
+  B8 _ -> 1
+  B16 _ -> 2
+  B32 _ -> 3
+  B64 _ -> 4
+  BW _ -> 5
+  BBool _ -> 6
+
+-- | A buffer of kind @kind@ and capacity @cap@ whose first @c@ slots are about to be overwritten: they are
+-- not cleared (the generic 'newArray' writes every slot one at a time), the rest are, as in 'bufNew'.
+bufAlloc :: Int -> Int -> Int -> IO Buf
+bufAlloc kind cap0 c0 = case kind of
+  1 -> B8 . IOUArray <$> raw 1
+  2 -> B16 . IOUArray <$> raw 2
+  3 -> B32 . IOUArray <$> raw 4
+  4 -> B64 . IOUArray <$> raw 8
+  5 -> BW . IOUArray <$> raw 8
+  6 -> BBool . IOUArray <$> raw 1
+  _ -> bufNew 0 cap
+  where
+    cap = max 1 cap0
+    c = max 0 (min c0 cap)
+    raw :: Int -> IO (STUArray RealWorld Int e)
+    raw (I# sz) = case (cap, c) of
+      (I# cp, I# cc) -> IO $ \s0 -> case newByteArray# (cp *# sz) s0 of
+        (# s1, a #) -> case setByteArray# a (cc *# sz) ((cp -# cc) *# sz) 0# s1 of
+          s2 -> (# s2, STUArray 0 (I# (cp -# 1#)) (I# cp) a #)
+
+-- | The buffer that holds this version's elements, for reading. A lazy handle reads through to the
+-- version it was made from without copying; an old version is rerooted. The result is valid only until
+-- some other version of the same array is rerooted, so a caller copies out of it before touching one.
+readBuf :: Arr -> IO Buf
+readBuf arr = do
+  node <- readIORef (aRef arr)
+  case node of
+    Direct b _ -> return b
+    Lazy s -> readBuf s
+    Diff _ _ -> reroot arr
+
+-- | Copy @n@ elements from slot @si@ of one buffer to slot @di@ of another, which do not overlap. Two
+-- buffers of the same kind are moved as one block, whatever the element.
+bufCopyN :: Buf -> Int -> Buf -> Int -> Int -> IO ()
+bufCopyN d di s si n
+  | n <= 0 = return ()
+  | otherwise = case d of
+      BBox (IOArray a) | BBox (IOArray b) <- s -> boxedN a di b si n
+      B8 (IOUArray a) | B8 (IOUArray b) <- s -> rawN 1 a di b si n
+      B16 (IOUArray a) | B16 (IOUArray b) <- s -> rawN 2 a di b si n
+      B32 (IOUArray a) | B32 (IOUArray b) <- s -> rawN 4 a di b si n
+      B64 (IOUArray a) | B64 (IOUArray b) <- s -> rawN 8 a di b si n
+      BW (IOUArray a) | BW (IOUArray b) <- s -> rawN 8 a di b si n
+      BBool (IOUArray a) | BBool (IOUArray b) <- s -> rawN 1 a di b si n
+      _ -> let go :: Int -> IO ()
+               go !k | k >= n = return ()
+                     | otherwise = bufRead s (si + k) >>= bufWrite d (di + k) >> go (k + 1)
+           in go 0
+
+rawN :: Int -> STUArray RealWorld Int e -> Int -> STUArray RealWorld Int e -> Int -> Int -> IO ()
+rawN (I# sz) (STUArray _ _ _ dst) (I# di) (STUArray _ _ _ src) (I# si) (I# n) = IO $ \s0 ->
+  case copyMutableByteArray# src (si *# sz) dst (di *# sz) (n *# sz) s0 of s1 -> (# s1, () #)
+{-# INLINE rawN #-}
+
+boxedN :: STArray RealWorld Int Any -> Int -> STArray RealWorld Int Any -> Int -> Int -> IO ()
+boxedN (STArray _ _ _ dst) (I# di) (STArray _ _ _ src) (I# si) (I# n) = IO $ \s0 ->
+  case copyMutableArray# src si dst di n s0 of s1 -> (# s1, () #)
+{-# INLINE boxedN #-}
+
+-- | Reverse the first @n@ elements of a buffer in place.
+bufRev :: Buf -> Int -> IO ()
+bufRev b n = case b of
+  BBox a -> revInPlace a n
+  B8 a -> revInPlace a n
+  B16 a -> revInPlace a n
+  B32 a -> revInPlace a n
+  B64 a -> revInPlace a n
+  BW a -> revInPlace a n
+  BBool a -> revInPlace a n
+
+revInPlace :: (MArray a e IO) => a Int e -> Int -> IO ()
+revInPlace a n = go 0 (n - 1)
+  where
+    go !i !j
+      | i >= j = return ()
+      | otherwise = do
+          x <- unsafeRead a i
+          y <- unsafeRead a j
+          unsafeWrite a i y
+          unsafeWrite a j x
+          go (i + 1) (j - 1)
+{-# SPECIALIZE revInPlace :: IOArray Int Any -> Int -> IO () #-}
+{-# SPECIALIZE revInPlace :: IOUArray Int Word8 -> Int -> IO () #-}
+{-# SPECIALIZE revInPlace :: IOUArray Int Word16 -> Int -> IO () #-}
+{-# SPECIALIZE revInPlace :: IOUArray Int Word32 -> Int -> IO () #-}
+{-# SPECIALIZE revInPlace :: IOUArray Int Word64 -> Int -> IO () #-}
+{-# SPECIALIZE revInPlace :: IOUArray Int Word -> Int -> IO () #-}
+
+-- | Fill the first @n@ slots of a buffer with the first @n@ elements of another of the same kind, reversed.
+bufRevInto :: Buf -> Buf -> Int -> IO ()
+bufRevInto d s n = case d of
+  BBox a | BBox b <- s -> revInto a b n
+  B8 a | B8 b <- s -> revInto a b n
+  B16 a | B16 b <- s -> revInto a b n
+  B32 a | B32 b <- s -> revInto a b n
+  B64 a | B64 b <- s -> revInto a b n
+  BW a | BW b <- s -> revInto a b n
+  BBool a | BBool b <- s -> revInto a b n
+  _ -> let go :: Int -> IO ()
+           go !k | k >= n = return ()
+                 | otherwise = bufRead s (n - 1 - k) >>= bufWrite d k >> go (k + 1)
+       in go 0
+
+revInto :: (MArray a e IO) => a Int e -> a Int e -> Int -> IO ()
+revInto a b n = go 0
+  where
+    go !k | k >= n = return ()
+          | otherwise = unsafeRead b (n - 1 - k) >>= unsafeWrite a k >> go (k + 1)
+{-# SPECIALIZE revInto :: IOArray Int Any -> IOArray Int Any -> Int -> IO () #-}
+{-# SPECIALIZE revInto :: IOUArray Int Word8 -> IOUArray Int Word8 -> Int -> IO () #-}
+{-# SPECIALIZE revInto :: IOUArray Int Word16 -> IOUArray Int Word16 -> Int -> IO () #-}
+{-# SPECIALIZE revInto :: IOUArray Int Word32 -> IOUArray Int Word32 -> Int -> IO () #-}
+{-# SPECIALIZE revInto :: IOUArray Int Word64 -> IOUArray Int Word64 -> Int -> IO () #-}
+{-# SPECIALIZE revInto :: IOUArray Int Word -> IOUArray Int Word -> Int -> IO () #-}
+
+-- | @as ++ bs@ as a fresh array; @as@ itself when @bs@ is empty. Neither argument changes.
+aAppend :: Arr -> Arr -> IO Arr
+aAppend arr src
+  | m == 0 = return arr
+  | n == 0 = do
+      -- nothing to keep of the first array: take the second's buffer kind
+      sbuf <- readBuf src
+      dst <- bufAlloc (bufKind sbuf) (max 4 m) m
+      bufCopyN dst 0 sbuf 0 m
+      Arr m <$> newIORef (Direct dst 0)
+  | otherwise = do
+      abuf <- readBuf arr
+      dst <- bufAlloc (bufKind abuf) (max 4 (n + m)) (n + m)
+      bufCopyN dst 0 abuf 0 n
+      sbuf <- readBuf src
+      bufCopyN dst n sbuf 0 m
+      Arr (n + m) <$> newIORef (Direct dst 0)
+  where
+    n = aLen arr
+    m = aLen src
+
+-- | 'aAppend' where the first array is unshared: its buffer takes the new elements, grown once if need be.
+aAppendU :: Arr -> Arr -> IO Arr
+aAppendU arr src
+  | m == 0 = return arr
+  | otherwise = do
+      _ <- ownNode arr
+      sbuf <- readBuf src
+      -- Reading the second array may have rerooted a version of the same buffer; look at the first again.
+      node <- readIORef (aRef arr)
+      case node of
+        Direct buf c | c >= 0 -> do
+          cap <- bufCap buf
+          buf' <- if n + m <= cap then return buf else do
+            b <- bufGrow buf n (max (n + m) (2 * cap))
+            writeIORef (aRef arr) (Direct b c)
+            return b
+          bufCopyN buf' n sbuf 0 m
+          return (Arr (n + m) (aRef arr))
+        _ -> aAppend arr src
+  where
+    n = aLen arr
+    m = aLen src
+
+-- | The @cnt@ elements from @start@ of an array, in a fresh buffer of kind @kind@ (the element kind the compiler chose, or 0 for the source's own). The range must lie inside the array.
+aExtract :: Int -> Int -> Int -> Arr -> IO Arr
+aExtract kind start cnt src = do
+  sbuf <- readBuf src
+  let st = max 0 start
+      c = max 0 (min cnt (aLen src - st))
+  dst <- bufAlloc (if kind <= 0 then bufKind sbuf else kind) (max 4 c) c
+  bufCopyN dst 0 sbuf st c
+  Arr c <$> newIORef (Direct dst 0)
+
+-- | The elements in the opposite order, in a fresh array; the array itself when it has fewer than two.
+aReverse :: Arr -> IO Arr
+aReverse arr
+  | n <= 1 = return arr
+  | otherwise = do
+      abuf <- readBuf arr
+      dst <- bufAlloc (bufKind abuf) (max 4 n) n
+      bufRevInto dst abuf n
+      Arr n <$> newIORef (Direct dst 0)
+  where n = aLen arr
+
+-- | 'aReverse' where the array is unshared: reversed in its own buffer.
+aReverseU :: Arr -> IO Arr
+aReverseU arr
+  | n <= 1 = return arr
+  | otherwise = do
+      node <- ownNode arr
+      case node of
+        Direct buf c | c >= 0 -> bufRev buf n >> return arr
+        _ -> aReverse arr
+  where n = aLen arr
 
 -- * Hoisted buffers
 --

@@ -5,6 +5,14 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* `Array.append`, `Array.extract` and `Array.reverse` are runtime primitives (`arrAppend`, `arrExtractK`,
+  `arrReverse`) instead of the library's loop of one push or swap per element. A block copy (or one swap loop) does the
+  work, for every buffer kind; the in-place forms (`arrAppendU`, `arrReverseU`) are chosen by the ownership analysis
+  like `arrPushU`. `Array.extract` is clipped as Lean's is, and its result gets an unboxed buffer when the element type
+  is known. Ir (valgrind, a stand-in for instructions retired) on `array_funcs` at n = 2e5, recommended settings:
+  101.1 M to 72.7 M (-28.2%). The generated Haskell of the seven real-world programs is byte-identical to `main`'s, and
+  the chart's example sources do not use the three operations. 11 new garden programs `bulk_*` (234 in all); the
+  mutation results are in `SOUNDNESS.md`, the per-operation numbers in `BENCH.md`.
 * `Array.map` and read-only loops (`foldl`, `foldr`, `any`, `all`, `contains`, hand-written loops) read and write the
   raw buffer like the other hoisted loops. The map's write has an in-line fast path that returns its own argument (an
   inlined function that rebuilds `Arr` allocated 24 bytes per element under `-fno-cse`), and `ZNat` and `Word`

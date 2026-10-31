@@ -124,6 +124,19 @@ partial def jpFvs (c : Code .pure) (jf : Std.HashMap FVarId FVS := {}) :
 def destructiveOps : List Name :=
   [`Array.set!, `Array.uset, `Array.push, `Array.pop, `Array.swapIfInBounds, `Array.swap]
 
+/-- Bulk operations that update their array in place when it is owned, with the position of that array
+among the arguments (the element type is already dropped from these forms). Their result is that
+array when it was owned, and otherwise possibly the array itself (an empty append), so it is shared. -/
+def bulkOps : List (Name × Nat) :=
+  [(`Array.append._redArg, 0), (`Array.reverse._redArg, 0)]
+
+/-- Bulk operations that only read their array and return a new one nobody else has. -/
+def bulkFresh : List Name := [`Array.extract._redArg]
+
+/-- The position of the array an operation may update in place, if it is one that may. -/
+def destIdx (c : Name) : Option Nat :=
+  if destructiveOps.contains c then some 1 else bulkOps.lookup c
+
 /-- Operations that produce a new array nobody else has. -/
 def freshOps : List Name :=
   [`Array.mkEmpty, `Array.emptyWithCapacity, `Array.replicate, `Array.range, `Array.mk,
@@ -274,12 +287,16 @@ partial def step (f : Name) (d : LetDecl .pure) (env : Env) (later : FVS) : OwnM
   | .const c _ args =>
     if freshOps.contains c then
       return some ((eraseArgs env args).insert d.fvarId .own)
-    else if destructiveOps.contains c then
-      -- The array is argument 1, after the erased element type.
-      match (args[1]? : Option (Arg .pure)) with
+    else if bulkFresh.contains c then
+      -- A fresh copy of a range: the source is only read, so it keeps its ownership.
+      return some (env.insert d.fvarId .own)
+    else if let some idx := destIdx c then
+      -- The array is argument 1, after the erased element type (argument 0 in the bulk forms).
+      match (args[idx]? : Option (Arg .pure)) with
       | some (Arg.fvar a) =>
         let ok := env.getD a .top == .own && !later.contains a && occurrences args a == 1
-        let env' := eraseArgs env args
+        -- A bulk operation reads its other array and does not keep it.
+        let env' := if idx == 0 then env.erase a else eraseArgs env args
         if ok then
           modify fun s => { s with destr := s.destr.insert (f, d.fvarId) }
           return some (env'.insert d.fvarId .own)
@@ -376,8 +393,8 @@ partial def mutScan (pidx : Std.HashMap FVarId Nat) (mp : Std.HashMap Name (Arra
   | .let d k =>
     let acc := match d.value with
       | .const g _ args =>
-        if destructiveOps.contains g then
-          match (args[1]? : Option (Arg .pure)) with
+        if let some idx := destIdx g then
+          match (args[idx]? : Option (Arg .pure)) with
           | some (Arg.fvar x) => match pidx[x]? with | some i => acc.insert i | none => acc
           | _ => acc
         else match mp[g]? with

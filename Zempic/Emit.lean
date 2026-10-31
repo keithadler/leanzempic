@@ -84,6 +84,9 @@ def prims : List (Name × String × List String × String) :=
   , (`Array.size, "arrSize", ["Any", "Any"], "ZNat")
   , (`Array.usize, "arrUSize", ["Any", "Any"], "Word")
   , (`Array.push, "arrPush", ["Any", "Any", "Any"], "Any")
+  , (`Array.append._redArg, "arrAppend", ["Any", "Any"], "Any")
+  , (`Array.reverse._redArg, "arrReverse", ["Any"], "Any")
+  , (`Array.extract._redArg, "arrExtract", ["Any", "ZNat", "ZNat"], "Any")
   , (`Array.get!Internal, "arrGetD", ["Any", "Any", "Any", "ZNat"], "Any")
   , (`Array.getInternal, "arrGetI", ["Any", "Any", "ZNat", "Any"], "Any")
   , (`Array.uget, "arrUGet", ["Any", "Any", "Word", "Any"], "Any")
@@ -1209,7 +1212,7 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
         | _, _ => pure none
       let hs := match swapSfx? with | some sfx => hs ++ sfx | none => hs
       -- A new array of a known numeric element type gets an unboxed buffer.
-      let hs ← if hs == "arrMkEmpty" || hs == "arrReplicate" || hs == "arrOfList" then
+      let hs ← if hs == "arrMkEmpty" || hs == "arrReplicate" || hs == "arrOfList" || hs == "arrExtract" then
           match elem? with
           | some elem =>
             let k ← if (← get).mixedArrs.contains letId then pure 0 else elemKind elem

@@ -347,6 +347,37 @@ arrPushGetIU :: Any -> Any -> Any -> ZNat -> Any
 arrPushGetIU _ !a !s !j = arrIO (zo <$> aPushFromU (zu a) (zu s) (arrIdx j))
 {-# NOINLINE arrPushGetIU #-}
 
+-- Bulk operations (see Zempic.Arr "Bulk operations"). The @U@ versions are used only where the ownership
+-- analysis proved the first array unshared. @Array.extract@ clips the range as Lean does: the count is
+-- (min stop size) - start, taken as a Nat.
+arrAppend :: Any -> Any -> Any
+arrAppend !a !b = arrIO (zo <$> aAppend (zu a) (zu b))
+{-# NOINLINE arrAppend #-}
+
+arrAppendU :: Any -> Any -> Any
+arrAppendU !a !b = arrIO (zo <$> aAppendU (zu a) (zu b))
+{-# NOINLINE arrAppendU #-}
+
+arrReverse :: Any -> Any
+arrReverse !a = arrIO (zo <$> aReverse (zu a))
+{-# NOINLINE arrReverse #-}
+
+arrReverseU :: Any -> Any
+arrReverseU !a = arrIO (zo <$> aReverseU (zu a))
+{-# NOINLINE arrReverseU #-}
+
+arrExtractK :: Int -> Any -> ZNat -> ZNat -> Any
+arrExtractK k !a !start !stop =
+  let len = aLength (zu a :: Arr)
+      n = fromIntegral len :: ZNat
+      sz = natSub (if natLe stop n then stop else n) start
+  in arrIO (zo <$> aExtract k (arrIdx start) (arrIdx sz) (zu a))
+{-# NOINLINE arrExtractK #-}
+
+arrExtract :: Any -> ZNat -> ZNat -> Any
+arrExtract = arrExtractK 0
+{-# INLINE arrExtract #-}
+
 arrOfList :: Any -> [Any] -> Any
 arrOfList _ xs = arrIO (zo <$> aFromList xs)
 {-# NOINLINE arrOfList #-}

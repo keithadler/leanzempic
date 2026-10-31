@@ -1874,3 +1874,129 @@ def entry (n : Nat) : Nat :=
   let s5 := sumWith (poke a1) a1 z z
   s1 + s2 * 3 + s3 * 5 + s4 * 7 + s5 * 11 + sumL a0 + sumL a1 * 9
 ''')
+
+# Bulk `Array.append`, `Array.extract` and `Array.reverse` (one block copy or swap loop each, SOUNDNESS.md "Bulk array
+# operations"), for every buffer kind (UInt8/16/32/64, USize, Nat in word mode, Bool, Char) and for boxed elements
+# (String, Array Nat). Arrays are built by pushes and loops start at a value that is not a literal. The program covers
+# an owned accumulator updated in place, a shared array handed to a callee that mutates it on one branch and appends
+# on the other (a lazy handle as either operand), older versions read after newer ones, edge indices (empty ranges,
+# start past stop, stop past the size, start past the size, the largest word), empty operands and an array
+# appended to itself.
+_BULK_BODY = '''
+def mk (k off : Nat) : Array {T} := Id.run do
+  let mut a : Array {T} := Array.mkEmpty 4
+  for i in [0:k] do a := a.push (el (i + off))
+  return a
+
+def sum (v : Array {T}) : Nat := v.foldl (fun acc w => (acc * 13 + val w) % 1000003) 0
+def sumS (v : Array {T}) : Nat := (v.size * 1009 + sum v) % 1000003
+
+-- a shared array is the first or the second operand and is written on the other branch: a lazy handle either way
+@[noinline] def viaA (a b : Array {T}) (f : Bool) : Array {T} :=
+  if f then (b.set! 0 (el 77)) ++ a else a ++ b
+@[noinline] def viaB (a b : Array {T}) (f : Bool) : Array {T} :=
+  if f then b ++ a else a ++ (b.set! 0 (el 5))
+@[noinline] def viaR (a : Array {T}) (f : Bool) : Array {T} :=
+  if f then a.reverse.push (el 3) else a.set! 0 (el 4)
+@[noinline] def viaE (a : Array {T}) (i j : Nat) : Array {T} × Array {T} := (a.extract i j, a.extract i j)
+
+-- an owned accumulator: appended, reversed, pushed and written in place
+partial def accum (acc : Array {T}) (i fuel : Nat) : Array {T} :=
+  if i < fuel then
+    let c := mk (i % 4) i
+    let acc := if i % 5 == 4 then acc.reverse else acc ++ c
+    let acc := acc.push (el i)
+    accum (acc.set! (i % (acc.size + 1)) (el (i * 3))) (i + 1) fuel
+  else acc
+
+-- old versions are read after the new ones are made
+partial def mixed (a : Array {T}) (i fuel acc : Nat) : Nat × Array {T} :=
+  if i < fuel then
+    let b := a ++ mk 2 i
+    let c := b.extract (i % 3) (b.size - i % 2)
+    let d := c.reverse
+    let a2 := if i % 4 == 0 then d
+      else if i % 4 == 1 then a.push (el i)
+      else if i % 4 == 2 then (a ++ d).reverse
+      else (if a.size > 30 then a.extract 2 9 else a.extract 1 a.size)
+    mixed a2 (i + 1) fuel ((acc + sum b + sum c * 3 + sum d * 5 + a.size + sum a * 7) % 1000003)
+  else (acc, a)
+
+-- a loop that writes the array in place (a raw buffer when it can) and also appends, reverses and extracts
+partial def hl (a : Array {T}) (i fuel : Nat) : Array {T} :=
+  if i < fuel then
+    let a := a.set! (i % a.size) (el (i * 7))
+    let a := if i % 3 == 0 then a.reverse else if i % 3 == 1 then a ++ #[el i] else a.extract 0 (a.size - 1 + 1)
+    hl a (i + 1) fuel
+  else a
+
+-- an owned array that an append of nothing, or a reverse of fewer than two, returns as it is: a later in-place
+-- push must not show through the result
+def alias (k : Nat) (e : Array {T}) : Nat :=
+  let a := mk k 3
+  let r := a ++ e
+  let a2 := a.push (el 9)
+  let q := mk k 5
+  let s := q.reverse
+  let q2 := q.push (el 8)
+  sumS r * 3 + sumS a2 + sumS s * 5 + sumS q2 * 7
+
+def edges (a : Array {T}) : Nat :=
+  let ks := [0, 1, 2, a.size, a.size + 1, a.size + 5, a.size - 1, a.size / 2, 18446744073709551615]
+  ks.foldl (fun acc s => ks.foldl (fun acc t => (acc * 31 + sumS (a.extract s t)) % 1000003) acc) 0
+
+def stale (a : Array {T}) : Nat :=
+  let a1 := a.push (el 9)
+  let a2 := a1.set! 0 (el 88)
+  let a3 := a2.push (el 4)
+  -- a, a1, a2 and a3 are versions of one buffer; the oldest are read after the newest
+  let r1 := a3 ++ a1
+  let r2 := a1.reverse
+  let r3 := a.extract 0 (a.size - 1)
+  let r4 := a2 ++ a
+  let r5 := a ++ a3
+  let r6 := a3.reverse
+  (sumS r1 * 3 + sumS r2 * 5 + sumS r3 * 7 + sumS r4 * 11 + sumS r5 * 13 + sumS r6 + sumS a + sumS a1 * 17
+    + sumS a2 * 19 + sumS a3 * 23) % 1000003
+
+def entry (n : Nat) : Nat :=
+  let z := n / 1000 -- 0, but not a literal
+  let a := mk (n + 3) 1
+  let b := mk (n % 7) (z + 2)
+  let e := mk z 4
+  let t1 := sumS (a ++ b) + sumS (b ++ a) * 3 + sumS (a ++ e) * 5 + sumS (e ++ a) * 7 + sumS (e ++ e) * 9
+  let t2 := sumS a.reverse + sumS b.reverse * 3 + sumS e.reverse * 5 + sumS (a ++ a) * 7 + sumS (a ++ a).reverse * 11
+  let t3 := sumS (viaA a b true) + sumS (viaA a b false) * 3 + sumS (viaB a b true) * 5 + sumS (viaB a b false) * 7
+    + sumS (viaR a true) * 11 + sumS (viaR a false) * 13 + sumS (viaR e true) * 17 + sumS (viaR e false)
+  let (p, q) := viaE a z (n + 1)
+  let t4 := sumS p + sumS q * 3 + edges a + edges b * 3 + edges e * 5 + stale a + stale e * 7
+  let t5 := sumS (accum (mk z 6) z (n * 3 + 4)) + sumS (accum a z (n + 4))
+  let (m, r) := mixed a z (n + 6) z
+  let t6 := m + sumS r * 3 + sumS (hl a z (n * 2 + 5)) + sumS (hl (mk 1 z) z 7) + alias (n % 3) e + alias (z + 1) e * 3
+  -- the arrays are intact after all of that
+  (t1 + t2 * 3 + t3 * 5 + t4 * 7 + t5 * 11 + t6 * 13 + sumS a + sumS b * 3 + sumS e) % 1000003
+'''
+def _bulk(name, T, pre, el, val):
+    add(name, (pre + f"\ndef el (i : Nat) : {T} := {el}\ndef val (x : {T}) : Nat := {val}\n" + _BULK_BODY).replace("{T}", T))
+
+for _T in ("UInt8", "UInt16", "UInt32", "UInt64", "USize"):
+    _bulk(f"bulk_{_T.lower()}", _T, "", f"{_T}.ofNat i", "x.toNat")
+_bulk("bulk_nat", "Nat", "", "i", "x")
+_bulk("bulk_bool", "Bool", "", "i % 3 != 0", "if x then 7 else 2")
+_bulk("bulk_char", "Char", "", "Char.ofNat (97 + i % 26)", "x.toNat")
+_bulk("bulk_string", "String", "", 's!"s{i}"', "x.length * 7 + (x.get 0).toNat")
+_bulk("bulk_arrnat", "(Array Nat)", "", "#[i, i + 1]", "x.foldl (· + ·) 0 + x.size")
+
+# Indices as big as a Nat can be: an exact-mode run (the word-mode attempt overflows and reruns)
+add("bulk_bignat", '''
+def mk (k off : Nat) : Array UInt8 := Id.run do
+  let mut a : Array UInt8 := Array.mkEmpty 4
+  for i in [0:k] do a := a.push (UInt8.ofNat (i + off))
+  return a
+def sumS (v : Array UInt8) : Nat := v.foldl (fun acc w => (acc * 13 + w.toNat) % 1000003) v.size
+def entry (n : Nat) : Nat :=
+  let a := mk (n + 3) (n / 1000 + 1)
+  let big := 2 ^ 70 + n
+  let ks := [0, 1, a.size, a.size + 1, big, big + 1, 2 ^ 64, 2 ^ 64 - 1]
+  ks.foldl (fun acc s => ks.foldl (fun acc t => (acc * 31 + sumS (a.extract s t)) % 1000003) acc) (sumS a.reverse)
+''')
