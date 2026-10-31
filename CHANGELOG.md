@@ -5,6 +5,12 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* Fixed: `String.get`, `String.set`, `String.modify` and `String.prev` disagreed with Lean at a byte position inside a
+  multi-byte character or past the end of the string (`get` returned a continuation byte instead of `'A'`, `set`
+  rewrote bytes of the character, `prev` past the end clamped instead of answering `p - 1`). Found by the new
+  `tools/fuzz2.py`; covered by the new garden program `string_midchar`.
+* New `tools/fuzz2.py`, a targeted differential fuzzer (hoisted buffers, in-place arrays, the `Nat` word/exact path,
+  UTF-8 strings) that runs each program under three configurations.
 * `Array.map` and read-only loops (`foldl`, `foldr`, `any`, `all`, `contains`, hand-written loops) read and write the
   raw buffer like the other hoisted loops. The map's write has an in-line fast path that returns its own argument (an
   inlined function that rebuilds `Arr` allocated 24 bytes per element under `-fno-cse`), and `ZNat` and `Word`

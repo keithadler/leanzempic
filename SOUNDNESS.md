@@ -366,6 +366,14 @@ at n = 2e6). `arrUSetBUW` therefore decides in line whether the write was done a
   broad net and not a sharp one: of three deliberate bugs it caught two, each in only a few percent
   of seeds, and missed "ownership handed over though the caller still uses it" entirely. The targeted
   tests catch all three.
+* `tools/fuzz2.py`: random programs aimed at hoisted buffers, in-place arrays, the `Nat` word/exact path and UTF-8
+  strings, each run under three configurations. It found one bug (string positions inside a character, below). A
+  14-seed campaign afterwards found none; that is a small sample and says little about the hoisted loops.
+* String positions: a `Pos` is a byte offset and need not be a character boundary. At one inside a character (or
+  past the end) Lean's `String.get` answers `'A'`, `String.set` and `String.modify` leave the string unchanged, and
+  `String.prev` past the end answers `p - 1`. The runtime matched Lean at boundaries only, and returned a
+  continuation byte (`get`), rewrote bytes (`set`) or clamped to the end (`prev`) elsewhere. `string_midchar` covers
+  all four at every position; reverting any of the three edits makes it fail.
 
 ## Known imprecision (safe, but costs speed)
 

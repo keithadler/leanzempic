@@ -183,14 +183,16 @@ sCharWidthAt (Str (Buf fp _) n _) i
       return $! widthOf b
 {-# INLINE sCharWidthAt #-}
 
--- | The character starting at byte @i@, or Lean's default character @A@ outside the string. One
+-- | The character starting at byte @i@, or Lean's default character @A@ outside the string or when
+-- @i@ is inside a character (a continuation byte; Lean's @get@ answers the default there). One
 -- read for ASCII; the continuation bytes are read only when there are any.
 sCharAt :: Str -> Int -> Word32
 sCharAt (Str (Buf fp _) n _) i
   | i < 0 || i >= n = 65
   | otherwise = unsafeDupablePerformIO $ unsafeWithForeignPtr fp $ \p -> do
       b0 <- peekByteOff p (hdr + i) :: IO Word8
-      if b0 < 0x80 then return $! fromIntegral b0 else do
+      if b0 < 0x80 then return $! fromIntegral b0
+      else if b0 .&. 0xC0 == 0x80 then return 65 else do
         let cont :: Int -> IO Word32
             cont k = if i + k < n then (\b -> fromIntegral (b .&. 0x3F)) <$> (peekByteOff p (hdr + i + k) :: IO Word8)
                      else return 0
@@ -204,10 +206,12 @@ sCharAt (Str (Buf fp _) n _) i
           _ -> return $! fromIntegral b0
 {-# INLINE sCharAt #-}
 
--- | The start of the character before byte @i@ (0 at the start), as Lean's @prev@.
+-- | The start of the character before byte @i@ (0 at the start), as Lean's @prev@. Past the end Lean
+-- answers @i - 1@.
 sPrev :: Str -> Int -> Int
 sPrev s@(Str _ n _) i
   | i <= 0 = 0
+  | i > n = i - 1
   | otherwise = go (min i n - 1)
   where go j | j <= 0 = 0
              | sByteAt s j .&. 0xC0 /= 0x80 = j

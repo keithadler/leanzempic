@@ -34,6 +34,34 @@ def entry (n : Nat) : Nat :=
   let s := String.join ((List.range (n + 1)).map fun i => toString (i * i))
   (s.drop 2).length + (s.take 5).length + (s.front.toNat) + (s.endPos.offset.byteIdx)
 ''')
+add("string_midchar", '''
+-- byte positions that are not at a character start (inside a multi-byte character) or are past the end: Lean's
+-- get answers the default character, set and modify leave the string alone, prev past the end gives p - 1,
+-- next steps one byte, extract has its own rules. Found by tools/fuzz2.py.
+set_option linter.deprecated false
+def sample (k : Nat) : String := match k % 3 with
+  | 0 => "a😀b€é日"
+  | 1 => "é€😀"
+  | _ => "😀😀x"
+
+def digest (s : String) : Nat := s.foldl (fun h c => (h * 1000003 + c.toNat) % 2305843009213693951) (s.utf8ByteSize + 11)
+
+def entry (n : Nat) : Nat := Id.run do
+  let s := sample n
+  let z := n / 1000
+  let mut acc := 0
+  for p in [z:s.utf8ByteSize + 4] do
+    let g := (s.get ⟨p⟩).toNat
+    let nx := (s.next ⟨p⟩).byteIdx
+    let pv := (s.prev ⟨p⟩).byteIdx
+    let st := digest (s.set ⟨p⟩ 'Q')
+    let md := digest (s.modify ⟨p⟩ (fun _ => 'Z'))
+    let ae := (if (⟨p⟩ : String.Pos.Raw).atEnd s then 1 else 0)
+    acc := (acc * 31 + g + nx * 3 + pv * 5 + st + md * 7 + ae) % 2305843009213693951
+    for q in [z:s.utf8ByteSize + 4] do
+      acc := (acc * 31 + digest (String.Pos.Raw.extract s ⟨p⟩ ⟨q⟩)) % 2305843009213693951
+  return acc
+''')
 add("list_mergesort", '''
 def gen (n : Nat) : List Nat := (List.range (n + 1)).map fun i => (i * 7919 + 13) % 1009
 def entry (n : Nat) : Nat :=
