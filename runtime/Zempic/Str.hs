@@ -237,7 +237,8 @@ sCharAt s@(Str a n _) i
 
 multiByte :: Str -> Int -> Word8 -> Word32
 multiByte (Str a n _) !i !b0 =
-  case widthOf b0 of
+  if b0 .&. 0xC0 == 0x80 then 65  -- inside a character: Lean's @get@ answers the default character
+  else case widthOf b0 of
     2 -> (fromIntegral (b0 .&. 0x1F) * 64) .|. cont 1
     3 -> (fromIntegral (b0 .&. 0x0F) * 4096) .|. (cont 1 * 64) .|. cont 2
     4 -> (fromIntegral (b0 .&. 0x07) * 262144) .|. (cont 1 * 4096) .|. (cont 2 * 64) .|. cont 3
@@ -268,6 +269,7 @@ sCharWidthAtW (Str a n _) w
 sPrev :: Str -> Int -> Int
 sPrev s@(Str _ n _) i
   | i <= 0 = 0
+  | i > n = i - 1  -- past the end Lean answers @i - 1@
   | otherwise = go (min i n - 1)
   where go j | j <= 0 = 0
              | sByteAt s j .&. 0xC0 /= 0x80 = j

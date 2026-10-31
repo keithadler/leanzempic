@@ -1955,3 +1955,54 @@ def entry (n : Nat) : Nat :=
     + (d.take 0).length + ba.size + (ba2.get! 1).toNat + (ba.get! 1).toNat + (String.ofList d.toList.reverse).length
     + (d.hash.toNat % 1000)
 ''')
+add("string_midchar", '''
+-- byte positions that are not at a character start (inside a multi-byte character) or are past the end: Lean's
+-- get answers the default character, set and modify leave the string alone, prev past the end gives p - 1,
+-- next steps one byte, extract has its own rules. Found by tools/fuzz2.py.
+set_option linter.deprecated false
+def sample (k : Nat) : String := match k % 3 with
+  | 0 => "a😀b€é日"
+  | 1 => "é€😀"
+  | _ => "😀😀x"
+
+def digest (s : String) : Nat := s.foldl (fun h c => (h * 1000003 + c.toNat) % 2305843009213693951) (s.utf8ByteSize + 11)
+
+def entry (n : Nat) : Nat := Id.run do
+  let s := sample n
+  let z := n / 1000
+  let mut acc := 0
+  for p in [z:s.utf8ByteSize + 4] do
+    let g := (s.get ⟨p⟩).toNat
+    let nx := (s.next ⟨p⟩).byteIdx
+    let pv := (s.prev ⟨p⟩).byteIdx
+    let st := digest (s.set ⟨p⟩ 'Q')
+    let md := digest (s.modify ⟨p⟩ (fun _ => 'Z'))
+    let ae := (if (⟨p⟩ : String.Pos.Raw).atEnd s then 1 else 0)
+    acc := (acc * 31 + g + nx * 3 + pv * 5 + st + md * 7 + ae) % 2305843009213693951
+    for q in [z:s.utf8ByteSize + 4] do
+      acc := (acc * 31 + digest (String.Pos.Raw.extract s ⟨p⟩ ⟨q⟩)) % 2305843009213693951
+  return acc
+''')
+# Same positions as string_midchar, with small arithmetic so the word-sized path runs to the end (string_midchar's
+# 61-bit hash overflows a word and reruns in exact mode, which would hide a fault in the word-sized string code).
+add("string_midchar_w", '''
+set_option linter.deprecated false
+def sample (k : Nat) : String := match k % 3 with
+  | 0 => "a😀b€é日"
+  | 1 => "é€😀"
+  | _ => "😀😀x"
+
+def digest (s : String) : Nat := s.foldl (fun h c => (h * 31 + c.toNat) % 1000003) (s.utf8ByteSize + 11)
+
+def entry (n : Nat) : Nat := Id.run do
+  let s := sample n
+  let mut acc := 0
+  for p in [0:s.utf8ByteSize + 4] do
+    let g := (s.get ⟨p⟩).toNat
+    let nx := (s.next ⟨p⟩).byteIdx
+    let pv := (s.prev ⟨p⟩).byteIdx
+    let st := digest (s.set ⟨p⟩ 'Q')
+    let md := digest (s.modify ⟨p⟩ (fun _ => 'Z'))
+    acc := (acc * 7 + g + nx * 3 + pv * 5 + st + md * 11) % 1000003
+  return acc
+''')

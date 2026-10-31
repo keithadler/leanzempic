@@ -789,7 +789,7 @@ strSetAt :: Any -> ZNat -> Word32 -> Any
 strSetAt s p c =
   let st = zu s :: Str
       i = arrIdx p
-  in if i >= sBytes st || p < 0 then s
+  in if i >= sBytes st || p < 0 || sByteAt st i .&. 0xC0 == 0x80 then s   -- past the end or inside a character: unchanged
      else strIO (do pre <- sExtract st 0 i
                     mid <- sPush pre c
                     rest <- sExtract st (i + sCharWidthAt st i) (sBytes st)
