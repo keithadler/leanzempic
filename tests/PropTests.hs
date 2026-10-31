@@ -610,6 +610,98 @@ arrRangeMove c g = do
     enc' k v = if k == 0 then unsafeCoerce (fromIntegral v :: Word) else enc k v
     dec' k a = if k == 0 then fromIntegral (unsafeCoerce a :: Word) else dec k a
 
+-- | The bulk operations behind `Array.append`, `Array.extract` and `Array.reverse`: the persistent forms on any
+-- pool of versions (an array with itself, with an older or newer version of its own family, lazy handles), the
+-- in-place forms on an owner (including an array appended to itself) and on a version that is no longer the live
+-- one (they must fall back and leave the newer version alone).
+arrBulk :: Check -> Gen -> Int -> Int -> IO ()
+arrBulk c g kind steps = do
+  a0 <- A.aEmptyK kind 2
+  pool <- newIORef [(a0, [] :: [Int])]
+  let build vals = foldM (\x v -> A.aPush x (enc kind v)) a0 vals
+      clip st cnt m = let st' = max 0 st; k = max 0 (min cnt (length m - st')) in take k (drop st' m)
+      keep a m = modifyIORef pool (take 12 . ((a, m) :))
+      pick = do vs <- readIORef pool; i <- below g (length vs); return (vs !! i)
+      verify what a m = do got <- arrContents kind a; expect c what got m
+  forM_ [1 .. steps] $ \_ -> do
+    (a, m) <- pick
+    (b, mb) <- pick
+    op <- below g 9
+    case op of
+      0 -> do
+        v <- below g (lim kind)
+        a' <- A.aPush a (enc kind v)
+        keep a' (m ++ [norm kind v])
+      1 -> do
+        r <- A.aAppend a b
+        verify "append" r (m ++ mb)
+        keep r (m ++ mb)
+      2 -> do
+        r <- A.aAppend a a
+        verify "append to itself" r (m ++ m)
+        keep r (m ++ m)
+      3 -> do
+        st <- subtract 2 <$> below g (length m + 5)
+        cnt <- subtract 2 <$> below g (length m + 5)
+        k <- (\x -> if x == 0 then 0 else kind) <$> below g 2
+        r <- A.aExtract k st cnt a
+        verify "extract" r (clip st cnt m)
+        keep r (clip st cnt m)
+      4 -> do
+        r <- A.aReverse a
+        verify "reverse" r (reverse m)
+        keep r (reverse m)
+      5 -> do
+        sh <- A.aShare a
+        r <- A.aAppend sh b
+        verify "append on a lazy handle" r (m ++ mb)
+        sh2 <- A.aShare b
+        r2 <- A.aAppend a sh2
+        verify "append of a lazy handle" r2 (m ++ mb)
+        r3 <- A.aReverse sh
+        verify "reverse of a lazy handle" r3 (reverse m)
+      6 -> do
+        i <- below g (length m + 2)
+        v <- below g (lim kind)
+        a' <- A.aSet a i (enc kind v)
+        keep a' (modelSet i v m)
+      7 -> do
+        -- an owner: appended to, reversed, appended to itself, written, in place
+        n0 <- below g 6
+        vals <- replicateM n0 (below g (lim kind))
+        o0 <- build vals
+        o1 <- A.aAppendU o0 b
+        verify "in-place append" o1 (vals ++ mb)
+        o2 <- A.aReverseU o1
+        verify "in-place reverse" o2 (reverse (vals ++ mb))
+        -- the second operand is an older version of the first array's buffer: reading it moves the buffer, so
+        -- the in-place append must look at the first array again afterwards (and fall back)
+        olderOwner <- build vals
+        newerOwner <- A.aPush olderOwner (enc kind 1)
+        rr <- A.aAppendU newerOwner olderOwner
+        verify "in-place append of an older version of itself" rr (vals ++ [norm kind 1] ++ vals)
+        let r1 = reverse (vals ++ mb)
+        o3 <- A.aAppendU o2 o2
+        verify "in-place append to itself" o3 (r1 ++ r1)
+        o4 <- A.aPushU o3 (enc kind 1)
+        o5 <- A.aReverseU o4
+        verify "in-place push and reverse" o5 (reverse (r1 ++ r1 ++ [norm kind 1]))
+      _ -> do
+        -- a version that stopped being the live one: the in-place forms fall back
+        n0 <- below g 8
+        vals <- replicateM n0 (below g (lim kind))
+        o0 <- build vals
+        newer <- A.aPush o0 (enc kind 7)
+        r <- A.aAppendU o0 b
+        verify "stale in-place append" r (vals ++ mb)
+        verify "stale in-place append leaves the newer version" newer (vals ++ [norm kind 7])
+        newer2 <- A.aPush o0 (enc kind 8)
+        r2 <- A.aReverseU o0
+        verify "stale in-place reverse" r2 (reverse vals)
+        verify "stale in-place reverse leaves the newer version" newer2 (vals ++ [norm kind 8])
+    vs <- readIORef pool
+    forM_ vs $ \(x, mx) -> verify "an older version is undisturbed" x mx
+
 -- | The in-place variants on a single owner, then on a stale version (they must fall back).
 arrInPlace :: Check -> Gen -> Int -> Int -> IO ()
 arrInPlace c g kind steps = do
@@ -941,6 +1033,7 @@ main = do
     forM_ [0 .. 6] $ \kind -> do
       arrPersistent check gen kind 600
       arrInPlace check gen kind 400
+      arrBulk check gen kind 300
       when (kind == 5 || kind == 0) $ arrWordShare check gen kind 400
       when (kind == 5 || kind == 0) $ arrSetBW check gen kind 400
       arrShared check gen kind
