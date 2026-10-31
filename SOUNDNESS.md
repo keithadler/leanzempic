@@ -268,7 +268,7 @@ in-place update to show that the array is unshared, and the array may well be sh
 older version of it exists. Reading the buffer raw is still sound if nothing can change the array's *node* or the
 buffer's contents while the worker runs. That needs no ownership, because the node is `Direct` with count >= 0 at
 entry (checked at run time) and only four things change a live node or its buffer: a persistent update of the array
-or of a version of its family (the new version takes the buffer and the array becomes a `Diff`), an in-place update
+or of a version of its family (the new version takes the buffer and the array becomes an undo record (`DSet`, `DPop`, `DPush` or `DSwap`)), an in-place update
 (an owner), a read of an older version of the family (it reroots the buffer), and a copy (it marks the node stale,
 which leaves the contents alone). `hoistReadOnly` therefore accepts a function only if it calls nothing but: itself,
 passing the array on at its place; reads (`size`, `usize`, `get`, `uget`, `toList`) of the array itself; the cell

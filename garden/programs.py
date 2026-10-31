@@ -597,6 +597,23 @@ def entry (n : Nat) : Nat :=
   let t := (List.range (n + 20)).foldl (fun acc i => acc + (bump a i)[i % a.size]!) 0
   t + a.foldl (· + ·) 0
 ''')
+add("persist_versions", '''
+-- versions of a boxed array kept alive and read in reverse order, so every read reroots through set, push,
+-- pop and swap undo records; the start index is not a literal and the arrays are built by pushes
+def build (a : Array Nat) (i : Nat) : Nat → Array Nat
+  | 0 => a
+  | k + 1 => build ((a.push (i * 3 + 1)).set! (i % (a.size + 1)) (i + 7)) (i + 1) k
+def entry (n : Nat) : Nat :=
+  let a0 := build #[] (n % 3 + 1) (n + 6)
+  let a1 := a0.set! 1 500
+  let a2 := a1.swapIfInBounds 0 (a1.size - 1)
+  let a3 := a2.pop
+  let a4 := a3.push 77
+  let a5 := a4.set! 0 9
+  let a6 := (a5.push 1).pop.pop
+  let vs := [a6, a5, a4, a3, a2, a1, a0, a3, a6, a0]
+  vs.foldl (fun acc v => acc * 31 + v.size + v.foldl (fun x y => x * 7 + y) 1) 17 % 1000003
+''')
 add("shared_twice", '''
 def swapEnds (a : Array Nat) : Array Nat := if a.size < 2 then a else a.swapIfInBounds 0 (a.size - 1)
 def twice (a : Array Nat) : Nat := (swapEnds a)[0]! + (swapEnds a)[0]! + a[0]!

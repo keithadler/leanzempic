@@ -50,13 +50,6 @@ data Buf
   | BW {-# UNPACK #-} !(IOUArray Int Word)
   | BBool {-# UNPACK #-} !(IOUArray Int Word8)
 
--- | How to get from the newer version this node points at to the version holding the node.
-data Op
-  = OSet !Int Any  -- ^ same length, element @i@ was this value
-  | OPop           -- ^ one element shorter
-  | OPush Any      -- ^ one element longer, ending in this value
-  | OSwap !Int !Int -- ^ same length, elements @i@ and @j@ were exchanged (its own inverse)
-
 -- | A live buffer carries the number of undo records hanging off it. When that outgrows the array a
 -- write starts a fresh copy instead, so a long-lived old version never pins an unbounded chain. The
 -- version a copy was taken from is marked with count -1: it still reads correctly, but the in-place
@@ -66,7 +59,18 @@ data Op
 -- was made from, and copies the buffer the first time it is written. It is how a shared array is
 -- handed to code that will mutate it (`aShare`): Lean does the same copy-on-first-write with its
 -- reference counts, and a function that never writes costs nothing.
-data Node = Direct !Buf !Int | Diff !Op !Arr | Lazy !Arr
+--
+-- An undo record says how to get from the newer version it points at to the version holding the node.
+-- It is a constructor of 'Node' itself, not a separate type, so a write allocates one record, not two.
+-- 'DSet': same length, element @i@ was this value. 'DPop': one element shorter. 'DPush': one element
+-- longer, ending in this value. 'DSwap': same length, elements @i@ and @j@ were exchanged (its own inverse).
+data Node
+  = Direct !Buf !Int
+  | DSet !Int Any !Arr
+  | DPop !Arr
+  | DPush Any !Arr
+  | DSwap !Int !Int !Arr
+  | Lazy !Arr
 
 -- | One version of an array: its length never changes, its contents live behind the reference.
 data Arr = Arr { aLen :: !Int, aRef :: !(IORef Node) }
@@ -235,35 +239,37 @@ rerootN arr = do
           writeIORef (aRef arr) d
           return d
         _ -> error "rerootN"
-    Diff op next -> do
+    DSet i old next -> undo next (\buf -> do
+      cur <- bufRead buf i
+      bufWrite buf i old
+      writeIORef (aRef next) (DSet i cur arr))
+    DPop next -> undo next (\buf -> do
+      v <- bufRead buf (aLen arr)
+      writeIORef (aRef next) (DPush v arr))
+    DPush v next -> undo next (\buf -> do
+      bufWrite buf (aLen arr - 1) v
+      writeIORef (aRef next) (DPop arr))
+    DSwap i j next -> undo next (\buf -> do
+      bufSwap buf i j
+      writeIORef (aRef next) (DSwap i j arr))
+  where
+    undo next act = do
       nn <- rerootN next
       case nn of
         Direct buf c -> do
-          case op of
-            OSet i old -> do
-              cur <- bufRead buf i
-              bufWrite buf i old
-              writeIORef (aRef next) (Diff (OSet i cur) arr)
-            OPop -> do
-              v <- bufRead buf (aLen arr)
-              writeIORef (aRef next) (Diff (OPush v) arr)
-            OPush v -> do
-              bufWrite buf (aLen arr - 1) v
-              writeIORef (aRef next) (Diff OPop arr)
-            OSwap i j -> do
-              bufSwap buf i j
-              writeIORef (aRef next) (Diff (OSwap i j) arr)
+          act buf
           let d = Direct buf c
           writeIORef (aRef arr) d
           return d
-        Diff _ _ -> return nn  -- cannot happen: rerootN returns a Direct node
+        _ -> return nn  -- cannot happen: rerootN returns a Direct node
+    {-# INLINE undo #-}
 
 reroot :: Arr -> IO Buf
 reroot arr = do
   nd <- rerootN arr
   case nd of
     Direct buf _ -> return buf
-    Diff _ _ -> error "reroot"
+    _ -> error "reroot"
 
 -- | The version a chain of lazy handles ends at.
 lazyEnd :: Arr -> IO Arr
@@ -322,9 +328,9 @@ aSet !arr !i v
               bufWrite buf i v
               ref <- newIORef (Direct buf (c + 1))
               let arr' = Arr (aLen arr) ref
-              writeIORef (aRef arr) (Diff (OSet i old) arr')
+              writeIORef (aRef arr) (DSet i old arr')
               return arr'
-        Diff _ _ -> return arr
+        _ -> return arr
 
 aPush :: Arr -> Any -> IO Arr
 aPush arr v = do
@@ -343,9 +349,9 @@ aPush arr v = do
           bufWrite buf n v
           ref <- newIORef (Direct buf (c + 1))
           let arr' = Arr (n + 1) ref
-          writeIORef (aRef arr) (Diff OPop arr')
+          writeIORef (aRef arr) (DPop arr')
           return arr'
-    Diff _ _ -> return arr
+    _ -> return arr
 
 aPop :: Arr -> IO Arr
 aPop arr
@@ -361,9 +367,9 @@ aPop arr
               v <- bufRead buf (aLen arr - 1)
               ref <- newIORef (Direct buf (c + 1))
               let arr' = Arr (aLen arr - 1) ref
-              writeIORef (aRef arr) (Diff (OPush v) arr')
+              writeIORef (aRef arr) (DPush v arr')
               return arr'
-        Diff _ _ -> return arr
+        _ -> return arr
 
 aSwap :: Arr -> Int -> Int -> IO Arr
 aSwap !arr !i !j
@@ -381,9 +387,9 @@ aSwap !arr !i !j
               bufSwap buf i j
               ref <- newIORef (Direct buf (c + 1))
               let arr' = Arr (aLen arr) ref
-              writeIORef (aRef arr) (Diff (OSwap i j) arr')
+              writeIORef (aRef arr) (DSwap i j arr')
               return arr'
-        Diff _ _ -> return arr
+        _ -> return arr
 
 aToList :: Arr -> IO [Any]
 aToList arr = do
@@ -435,7 +441,6 @@ aPushU :: Arr -> Any -> IO Arr
 aPushU arr v = do
   node <- ownNode arr
   case node of
-    Diff _ _ -> aPush arr v
     Direct _ c | c < 0 -> aPush arr v
     Direct buf c -> do
       cap <- bufCap buf
@@ -447,6 +452,7 @@ aPushU arr v = do
           bufWrite b n v
           writeIORef (aRef arr) (Direct b c)
       return (Arr (n + 1) (aRef arr))
+    _ -> aPush arr v
 
 aPopU :: Arr -> IO Arr
 aPopU arr
@@ -473,7 +479,6 @@ aDeopt :: Arr -> IO ()
 aDeopt arr = do
   nd <- rerootN arr
   case nd of
-   Diff _ _ -> return ()
    Direct buf c -> case buf of
     BBox _ -> return ()
     _ -> do
@@ -484,6 +489,7 @@ aDeopt arr = do
                   | otherwise = bufRead buf k >>= unsafeWrite b k >> copy (k + 1)
       copy 0
       writeIORef (aRef arr) (Direct (BBox b) c)
+   _ -> return ()
 
 -- * Word-typed operations
 --
@@ -590,7 +596,6 @@ aPushUWFull :: Arr -> Word -> IO Arr
 aPushUWFull arr !v = do
   node <- ownNode arr
   case node of
-    Diff _ _ -> slowPushW arr v
     Direct _ c | c < 0 -> slowPushW arr v
     Direct buf c -> do
       cap <- bufCap buf
@@ -602,6 +607,7 @@ aPushUWFull arr !v = do
           bufWriteW b n v
           writeIORef (aRef arr) (Direct b c)
       return (Arr (n + 1) (aRef arr))
+    _ -> slowPushW arr v
 {-# NOINLINE aPushUWFull #-}
 
 slowPushW :: Arr -> Word -> IO Arr

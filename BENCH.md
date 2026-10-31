@@ -739,7 +739,7 @@ first. With it set correctly, best of 3, identical answers:
 
 The reason is what tenet-hs found about copying collectors: live data is the cost, not allocation.
 A fused pipeline never builds the intermediate list, so there is nothing for the collector to copy.
-All 223 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
+All 224 garden programs agree with native Lean with fusion on (`GARDEN_FUSE=1`).
 
 **A GHC panic, found by fusion.** `list_funcs` with fusion made GHC 9.14.1 panic ("the 'impossible'
 happened", `StgToCmm.Env: variable not found co5_Xc`). It was deterministic for a given invocation but
@@ -1132,3 +1132,24 @@ Garden, 23 programs, 3 runs each, instructions retired (the four combinations, `
 Reproduce: `python3 bench/realworld/rts.py 3 all rec=@/recommended/m 'low=@/recommended/m::-A64m'`.
 The garden half used `GARDEN_FUSE=0/1 python3 garden/run.py`, then the generated `Out.hs` compiled with
 `ghc -O2 -rtsopts` and run with `+RTS` options under `/usr/bin/time -l`.
+
+### Persistent array undo records as `Node` constructors (2026-10-31)
+
+Measured with Ir (valgrind) as a stand-in for instructions retired; this VM has no hardware counters. The
+persistent write (`aSet`, `aPush`, `aPop`, `aSwap` on a version that is kept) used to allocate `Diff (OSet i old) arr'`:
+a `Diff` node of three words plus an `Op` value of three words. The record is now one constructor of `Node`
+(`DSet i old arr'`, four words), so each persistent write allocates two words fewer. `bench/PersistSetMain.hs`
+(40000 `aSet`s on a shared 1000-element boxed array, then a read of the first version): 5.61 MB to 4.96 MB allocated
+(-11.7%), 9.41 G to 9.09 G Ir (-3.4%). Real-world programs, recommended build, relinked against the new runtime
+(Ir, valgrind, sizes cut to run under the profiler: binarytrees 14, const_fold 50, deriv 8, qsort 60,
+rbmap and rbmap_checkpoint 200000; `unionfind` was not measured): none moves by more than 0.1%, because they use the in-place
+paths. Peak resident memory is unchanged for the same reason.
+
+Rejected or not built (diagnosis, `+RTS -s`, no change shipped):
+
+* Peak memory of the real-world programs is the allocation area `-A` plus live data (see "Peak memory" above); no
+  representation change moves it. `binarytrees` allocates 24 bytes per tree node, the same as Lean's object.
+* `qsort` allocates 1.51 GB for 90000 sorts of about 150 elements. Building one array by 150 in-place pushes
+  allocates 6.4 KB (577 MB for the 90000 arrays, 38% of the total): 24 bytes of `Arr` per push (the length lives in
+  `Arr`, so an in-place push returns a new one) and the buffer doublings. Making the length mutable would add a load
+  to every `aLength` in the hoisted loops, so I did not build it.

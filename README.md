@@ -347,7 +347,7 @@ on.** Set the option before the definitions (the pass runs when Lean compiles th
 prints them). Measured on the garden with identical answers: a list pipeline over a `UInt8` hash 5x
 faster (0.15 s to 0.03 s), a tuple-state fold 3x (0.26 s to 0.08 s), `Int` list work 2x, `Option` and
 sum-type folds 2x to 3x. It is not free everywhere: a list merge sort got slower (0.09 s to 0.12 s).
-All 223 garden programs give the same answers with it on (`GARDEN_FUSE=1 python3 garden/run.py`).
+All 224 garden programs give the same answers with it on (`GARDEN_FUSE=1 python3 garden/run.py`).
 `#zempic` prints a warning when the code contains Lean's own list loops and the pass is off, so the
 speedup is not missed.
 
@@ -644,7 +644,7 @@ An honest checklist, because "production" depends on what you need.
 |---|---|
 | Continuous integration | GitHub Actions runs the suite on Ubuntu and macOS 15 for every push, including the Cabal package build and a 52-program garden subset at `-O1` with fusion on |
 | Fails fast | an unsupported Lean version or a mistyped mode is a clear error; an unsupported Lean constant is an error that lists it, never silently dropped code |
-| Tested against Lean itself | the examples, 223 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
+| Tested against Lean itself | the examples, 224 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
 | Runtime tested against models | random operation sequences on arrays, strings, integers and the `Word`/`Natural` fast path, with deliberately broken runtimes caught |
 | Differential fuzzing | random Lean programs run by Lean and through leanzempic must agree (`tools/fuzz.py`) |
 | Machine-checked facts | Tenet verifies 265 of 265 declarations, including name-mangling injectivity |
@@ -691,7 +691,7 @@ compile generated Haskell and compare it, value by value, with native Lean at se
 | `proptests` | random operation sequences on arrays, strings, fixed-width integers and the `Word`/`Natural` fast path, each step compared with a pure model |
 | `fuzz` | a short differential-fuzzing run: random Lean programs must give the same answers under Lean and leanzempic |
 | `aes` | AES-256 from the proved [lean-aes](https://github.com/keithadler/lean-aes) (`bench/aes`): Lean's C, the Haskell and OpenSSL (`tools/aes_oracle.py`) give the same ciphertext |
-| `garden` | the [garden](#the-garden): 223 programs locally, 52 in CI |
+| `garden` | the [garden](#the-garden): 224 programs locally, 52 in CI |
 
 ### The garden
 
