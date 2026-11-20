@@ -91,6 +91,10 @@ def prims : List (Name × String × List String × String) :=
   , (`Array.uset, "arrUSet", ["Any", "Any", "Word", "Any", "Any"], "Any")
   , (`Array.swapIfInBounds, "arrSwap", ["Any", "Any", "ZNat", "ZNat"], "Any")
   , (`Array.pop, "arrPop", ["Any", "Any"], "Any")
+  -- Lean 4.36: moves a linearity marker of Lean's runtime; the identity on the second array here.
+  , (`Array.propagateMark, "propagateMark", ["Any", "Any", "Any", "Any"], "Any")
+  , (`String.propagateMark, "propagateMark2", ["Any", "Any"], "Any")
+  , (`ByteArray.propagateMark, "propagateMark2", ["Any", "Any"], "Any")
   , (`String.length, "strLen", ["Any"], "ZNat")
   , (`String.utf8ByteSize, "strBytes", ["Any"], "ZNat")
   , (`String.append, "strAppend", ["Any", "Any"], "Any")
@@ -1158,6 +1162,33 @@ def hsLetValue (v : LetValue .pure) (letTy : Expr) (letId : FVarId) : EmitM (Str
       return (s!"(case ({x} :: {full}) of \{ {pat} -> p{i} })", ftys.getD i "Any")
     | none => unsupported s!"projection on {t}"; return ("erased", "Any")
   | .const c _ argsRaw => do
+    -- Lean 4.36 implements a derived `T.ctorIdx` (several constructors, not a runtime built-in) as
+    -- `getObjTagNat T x`, the object's tag. Here every such `T` is a generated `data` type (or `Bool`,
+    -- or a list), so the tag is the constructor's position, found by a `case`.
+    if c == `getObjTagNat then
+      -- The type argument is usually erased by now; the value's own recorded type names it.
+      let tyOf? : Option Expr ← match argsRaw with
+        | #[.type e, .fvar _] => pure (some e)
+        | #[_, .fvar x] => pure (← get).exprTys[x]?
+        | _ => pure none
+      if let (some tyE, #[_, .fvar x]) := (tyOf?, argsRaw) then
+        if let .const ind _ := tyE.getAppFn then
+          if let some (.inductInfo v) := (← getEnv).find? ind then
+            if ind == `Bool then
+              return (s!"(if {← useAs x "Bool"} then (1 :: ZNat) else 0)", "ZNat")
+            if ind == `List then
+              return (s!"(case ({← useAs x "[Any]"} :: [Any]) of \{ [] -> (0 :: ZNat); _ -> 1 })", "ZNat")
+            if v.ctors.length ≥ 2 && !isPropInduct v then
+              let ty ← instTy tyE ind
+              let x ← useAs x ty
+              let alts := v.ctors.zipIdx.map fun (k, i) => s!"{ctorName k}\{} -> ({i} :: ZNat)"
+              return (s!"(case ({x} :: {ty}) of \{ {"; ".intercalate alts} })", "ZNat")
+      let shape := argsRaw.map fun a => match a with
+        | .type e => "type " ++ toString e
+        | .fvar f => "fvar " ++ toString f.name
+        | .erased => "erased"
+      unsupported s!"getObjTagNat with arguments {shape.toList}"
+      return ("erased", "ZNat")
     -- A call to the function being printed that hands on the hoisted array: it stays in the hoisted worker.
     let hoist? := (← get).hoist
     let cur := (← get).cur

@@ -6,8 +6,8 @@ list fusion, unboxing) decides how your Lean program runs, instead of Lean's C b
 
 * License: Apache-2.0, public
 * Status: pre-release (`v0.1.0-rc3` is the latest tag), single maintainer
-* Tested on: macOS arm64 (Apple M3, and macOS 15 in CI) and Linux x86_64 (Ubuntu, in CI); Lean 4.29.1
-  and GHC 9.14.1 only. CI runs the test suite on both, with a 52-program subset of the garden.
+* Tested on: macOS arm64 (Apple M3, and macOS 15 in CI) and Linux x86_64 (Ubuntu, in CI); Lean 4.36.0
+  and GHC 9.14.1 only (Lean 4.29.1 until 2026-11-20; the benchmark numbers below were measured there). CI runs the test suite on both, with a 52-program subset of the garden.
 * Honest one-line summary: up to 9x faster than Lean's C backend on numeric, `Int`, `Float`, record and
   fused-list code; with the recommended settings, between level and 3x slower on lists, tuples,
   strings and hash maps (up to 4x slower with defaults); between 1.3x faster and 5.1x slower on arrays (loops that
@@ -70,12 +70,12 @@ work for it (in-place arrays at scale). Both halves are measured below.
 
 | Tool | Version tested | Notes |
 |---|---|---|
-| elan + Lean | 4.29.1 (pinned in `lean-toolchain`) | The compiler API it uses (LCNF) changes between versions |
+| elan + Lean | 4.36.0 (pinned in `lean-toolchain`) | The compiler API it uses (LCNF) changes between versions |
 | GHC | 9.14.1 | Needs `base`, `text`, `bytestring`, `array` (all ship with GHC) |
 | Cabal | any recent | Only for the optional [Core plugin spike](plugin/README.md) |
 | Python 3 | 3.9+ | Only to regenerate part of the runtime (`tools/gen_runtime.py`) |
 
-`#zempic` checks the Lean version and refuses anything but 4.29.x with a clear message
+`#zempic` checks the Lean version and refuses anything but 4.36.x with a clear message
 (`set_option zempic.allowOtherLean true` tries anyway, at your own risk), and rejects an unknown mode
 instead of silently using `auto`.
 
@@ -347,7 +347,7 @@ on.** Set the option before the definitions (the pass runs when Lean compiles th
 prints them). Measured on the garden with identical answers: a list pipeline over a `UInt8` hash 5x
 faster (0.15 s to 0.03 s), a tuple-state fold 3x (0.26 s to 0.08 s), `Int` list work 2x, `Option` and
 sum-type folds 2x to 3x. It is not free everywhere: a list merge sort got slower (0.09 s to 0.12 s).
-All 223 garden programs give the same answers with it on (`GARDEN_FUSE=1 python3 garden/run.py`).
+All 223 garden programs gave the same answers with it on under Lean 4.29.1 (`GARDEN_FUSE=1 python3 garden/run.py`); not yet rerun on 4.36.0.
 `#zempic` prints a warning when the code contains Lean's own list loops and the pass is off, so the
 speedup is not missed.
 
@@ -502,7 +502,7 @@ Read this section before relying on the output.
 | **Auto mode may run a call twice** | If the fast `Word` run overflows, the same pure call is re-run exactly. Invisible semantically; costs time on programs that overflow late. |
 | **`panic!` is silent** | Returns the type's default value without printing Lean's message to stderr. |
 | **Not thread safe** | Arrays and strings use mutable buffers behind `unsafeDupablePerformIO`. Do not use one value from several Haskell threads at once. |
-| **Lean 4.29.x internals** | The backend reads LCNF and relies on compiler details (the `_redArg` suffix on specialized functions, private names such as `List.takeTR.go`, the pass names `specialize` and `eagerLambdaLifting`). Other Lean versions may break it, which is why `#zempic` refuses them unless told otherwise. |
+| **Lean 4.36.x internals** | The backend reads LCNF and relies on compiler details (the `_redArg` suffix on specialized functions, private names such as `List.takeTR.go`, the pass names `specialize` and `eagerLambdaLifting`). Other Lean versions may break it, which is why `#zempic` refuses them unless told otherwise. |
 | **Platform** | Tested on macOS arm64 and Linux x86_64 (CI). Windows is untested. `USize` is assumed to be 64 bits. |
 | **No `IO`** | A program's `main` cannot be compiled. You compile pure functions and call them from Haskell. |
 
@@ -533,7 +533,8 @@ box, so an unused thunk is not forced.
 
 ## Benchmarks
 
-Apple M3, Lean 4.29.1 (C backend, as built by `lake`), GHC 9.14.1 `-O2`. The tables below use
+Apple M3, Lean 4.29.1 (C backend, as built by `lake`), GHC 9.14.1 `-O2`. These numbers were measured before the
+move to Lean 4.36.0 and have not been re-measured on it; the test suite, not the timings, was rerun. The tables below use
 `-A128m` (a larger allocation area for the garbage collector) and no fusion; the chart also shows the
 recommended settings (fusion on, `-A256m -O1g`). Best of 3 wall-clock runs. Numbers are rounded; the full logs, with heap figures, the failed first attempts and how to
 reproduce each, are in [`BENCH.md`](BENCH.md). Every row prints the same value as Lean.
@@ -621,8 +622,8 @@ slower here, and `--nonmoving-gc`, `-c` and `-F4` did nothing.
 To check the numbers against something other than microbenchmarks, `bench/aes/` builds the AES-256
 specification from [lean-aes](https://github.com/keithadler/lean-aes) (the FIPS-197 cipher with its
 correctness and wide-trail theorems, 353 declarations verified by Tenet). The four spec files are
-copied unchanged and compile, proofs included, on Lean 4.29.1. Encrypting a block 1e6 times in a row
-takes 8.81 s in Lean's C backend and 15.63 s through leanzempic, and the answers match each other and
+copied unchanged and compile, proofs included, on Lean 4.36.0 (and on 4.29.1, where these timings were measured).
+Encrypting a block 1e6 times in a row takes 8.81 s in Lean's C backend and 15.63 s through leanzempic, and the answers match each other and
 OpenSSL (`tools/aes_oracle.py`, also part of `tests/run.sh`). Run it with `bench/aes/run.sh 100000`.
 
 This is the specification as written, with a bit-loop GF multiply, a table in an `Array` and a key
@@ -644,7 +645,7 @@ An honest checklist, because "production" depends on what you need.
 |---|---|
 | Continuous integration | GitHub Actions runs the suite on Ubuntu and macOS 15 for every push, including the Cabal package build and a 52-program garden subset at `-O1` with fusion on |
 | Fails fast | an unsupported Lean version or a mistyped mode is a clear error; an unsupported Lean constant is an error that lists it, never silently dropped code |
-| Tested against Lean itself | the examples, 223 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
+| Tested against Lean itself | the examples, 224 garden programs (one per language feature) and a proved AES-256 (also checked against OpenSSL) compare generated code with native Lean, value by value |
 | Runtime tested against models | random operation sequences on arrays, strings, integers and the `Word`/`Natural` fast path, with deliberately broken runtimes caught |
 | Differential fuzzing | random Lean programs run by Lean and through leanzempic must agree (`tools/fuzz.py`) |
 | Machine-checked facts | Tenet verifies 265 of 265 declarations, including name-mangling injectivity |
@@ -656,7 +657,7 @@ An honest checklist, because "production" depends on what you need.
 | | |
 |---|---|
 | Pre-release | `v0.1.0-rc3` is tagged (`rc2` and `rc1` before it); there is no final `v0.1.0`, no package on Hackage or Reservoir, and the interface may change |
-| One Lean, one GHC | Lean 4.29.x and GHC 9.14.1 only. Windows is untested |
+| One Lean, one GHC | Lean 4.36.x and GHC 9.14.1 only. Windows is untested |
 | Pure functions only | no `IO`, so you compile functions and call them from Haskell; a Lean `main` cannot be compiled |
 | Missing | `IO`, `FloatArray`, `Float.toString`; any `@[extern]` constant that is not in the primitive table is reported, never dropped |
 | In-place arrays are tested, not proved | the ownership analysis is the one component whose correctness rests on testing rather than on construction ([`SOUNDNESS.md`](SOUNDNESS.md)); `set_option zempic.own false` removes the risk at a speed cost |
@@ -691,7 +692,7 @@ compile generated Haskell and compare it, value by value, with native Lean at se
 | `proptests` | random operation sequences on arrays, strings, fixed-width integers and the `Word`/`Natural` fast path, each step compared with a pure model |
 | `fuzz` | a short differential-fuzzing run: random Lean programs must give the same answers under Lean and leanzempic |
 | `aes` | AES-256 from the proved [lean-aes](https://github.com/keithadler/lean-aes) (`bench/aes`): Lean's C, the Haskell and OpenSSL (`tools/aes_oracle.py`) give the same ciphertext |
-| `garden` | the [garden](#the-garden): 223 programs locally, 52 in CI |
+| `garden` | the [garden](#the-garden): 224 programs locally, 52 in CI |
 
 ### The garden
 
@@ -886,7 +887,7 @@ Every Lean module is kept at: no `sorry`, every definition documented, no line o
 | `Stack overflow detected` from the **Lean** binary | Lean's own `List.sum` / `List.zip` overflow around 1e6 elements. The Haskell side is fine. |
 | `panic! (the 'impossible' happened) ... StgToCmm.Env: variable not found co...` | A GHC 9.14.1 bug in the Float Inwards pass on cast-heavy code (found with `-dcore-lint`). Generated modules carry `-fno-float-in`, which avoids it; if you compile your own variant, pass the flag. |
 | `Could not find module 'Zempic.Plugin'` | The plugin must be loaded from a Cabal package database; see `plugin/README.md`. |
-| `leanzempic supports Lean 4.29.x, but this is Lean ...` | Use the pinned Lean (see `lean-toolchain`), or `set_option zempic.allowOtherLean true` to try anyway. |
+| `leanzempic supports Lean 4.36.x, but this is Lean ...` | Use the pinned Lean (see `lean-toolchain`), or `set_option zempic.allowOtherLean true` to try anyway. |
 | `unknown mode` | The mode is one of `auto`, `word`, `exact`, `core`. |
 
 ## Things that did not work

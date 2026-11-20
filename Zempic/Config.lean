@@ -8,9 +8,9 @@ import Lean
 
 namespace Zempic
 
-/-- The Lean version this backend was written and tested against: 4.29.x. It reads the compiler's
+/-- The Lean version this backend was written and tested against: 4.36.x. It reads the compiler's
 intermediate representation (LCNF), whose shape and function names change between releases. -/
-def supportedLean : Nat × Nat := (4, 29)
+def supportedLean : Nat × Nat := (4, 36)
 
 /-- Is this Lean version one the backend supports (or has the user said to try anyway)? -/
 def checkLean (major minor : Nat) (allowOther : Bool) : Except String Unit :=

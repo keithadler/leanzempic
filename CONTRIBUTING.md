@@ -5,7 +5,7 @@ to review.
 
 ## Setup
 
-* Lean 4.29.1 (the version in `lean-toolchain`; elan installs it), GHC 9.14.1, Cabal, Python 3.
+* Lean 4.36.0 (the version in `lean-toolchain`; elan installs it), GHC 9.14.1, Cabal, Python 3.
 * Build and test everything: `PATH=...:$HOME/.elan/bin sh tests/run.sh` (see the README for the
   `PATH` caveat about Lean's bundled clang, or use `tools/zghc`).
 

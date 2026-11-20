@@ -511,7 +511,7 @@ def entry (n : Nat) : Nat := g (n * 2)
 add("str_ops", '''
 def entry (n : Nat) : Nat :=
   let s := "  Hello, World " ++ toString n ++ "  "
-  let t := s.trim
+  let t := s.trimAscii.toString
   (t.toUpper.length) + (t.toLower.length) + (if t.startsWith "Hello" then 1 else 0) + (if t.endsWith "9" then 2 else 0)
     + (t.replace "o" "00").length + (if t.contains 'W' then 4 else 0) + (t.toList.reverse.length) + (String.join ["a", "b"]).length
 ''')
@@ -816,7 +816,7 @@ add("t_any", '''
 def entry (n : Nat) : Nat := (if "abcdef".any (· == 'c') then 1 else 0) + n
 ''')
 add("t_trim", '''
-def entry (n : Nat) : Nat := ("  ab  ".trim).length + n
+def entry (n : Nat) : Nat := ("  ab  ".trimAscii.toString).length + n
 ''')
 add("t_replace", '''
 def entry (n : Nat) : Nat := ("hello".replace "l" "LL").length + n
@@ -879,7 +879,7 @@ def entry (n : Nat) : Nat :=
 add("t_append3", '''
 def entry (n : Nat) : Nat :=
   let s := "  Hello, World " ++ toString n ++ "  "
-  s.trim.length
+  s.trimAscii.toString.length
 ''')
 
 add("t_replace2", '''
@@ -1873,4 +1873,45 @@ def entry (n : Nat) : Nat :=
   let s4 := a1.foldl (fun acc x => (acc + x * a4[z]!) % 1000003) z
   let s5 := sumWith (poke a1) a1 z z
   s1 + s2 * 3 + s3 * 5 + s4 * 7 + s5 * 11 + sumL a0 + sumL a1 * 9
+''')
+
+# Lean 4.36 compiles `T.ctorIdx` for a type with several constructors to `getObjTagNat`, the object's tag.
+# Derived `BEq`/`Ord`/`DecidableEq` reach it on enums; `ctorIdx` called directly reaches it on constructors
+# with fields and on a generic type. Every constructor position is weighed differently, so a wrong tag
+# for any of them changes the answer.
+add("ctor_idx", '''
+inductive Color where
+  | red | green | blue | black
+  deriving BEq, Ord, DecidableEq
+
+inductive Shape where
+  | dot
+  | circle (r : Nat)
+  | rect (w h : Nat)
+  | tri (a b c : Nat)
+
+inductive Tree (α : Type) where
+  | leaf
+  | node (l : Tree α) (x : α) (r : Tree α)
+
+def color (i : Nat) : Color :=
+  match i % 4 with
+  | 0 => .red | 1 => .green | 2 => .blue | _ => .black
+
+def shape (i : Nat) : Shape :=
+  match i % 4 with
+  | 0 => .dot | 1 => .circle i | 2 => .rect i (i + 1) | _ => .tri i i i
+
+def ordCode : Ordering → Nat
+  | .lt => 1 | .eq => 2 | .gt => 3
+
+def entry (n : Nat) : Nat :=
+  let is := List.range (n % 50 + 8)
+  let cs := is.map color
+  let a := cs.foldl (fun acc c => cs.foldl (fun acc d => acc * 3 + ordCode (compare c d)) acc % 1000003) 0
+  let b := (cs.filter (· == Color.blue)).length + (if decide (color 2 = color (n + 2)) then 1 else 0)
+  let c := is.foldl (fun acc i => (acc * 5 + (shape (i + n)).ctorIdx + 1) % 1000003) 0
+  let t1 : Tree Nat := .node .leaf n .leaf
+  let t2 : Tree Nat := .leaf
+  a + b * 7 + c * 11 + t1.ctorIdx * 13 + t2.ctorIdx * 17 + (if n % 3 == 0 then t1 else t2).ctorIdx * 19
 ''')

@@ -42,13 +42,13 @@ theorem coerce_from_any (x t : String) (h : t ≠ "Any") : coerce x "Any" t = s!
   simp [coerce, h, Ne.symm h]
 
 /-- The supported Lean version is accepted. -/
-theorem checkLean_supported : (checkLean 4 29 false).toBool = true := by decide
+theorem checkLean_supported : (checkLean 4 36 false).toBool = true := by decide
 
 /-- Another version is refused unless the user opts in. -/
-theorem checkLean_other : (checkLean 4 36 false).toBool = false := by decide
+theorem checkLean_other : (checkLean 4 29 false).toBool = false := by decide
 
 /-- ... and accepted when they do. -/
-theorem checkLean_override : (checkLean 4 36 true).toBool = true := by decide
+theorem checkLean_override : (checkLean 4 29 true).toBool = true := by decide
 
 /-- A mistyped mode is an error, not silently `auto`. -/
 theorem checkMode_typo : (checkMode "exatc").toBool = false := by decide

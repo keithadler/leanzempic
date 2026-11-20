@@ -5,6 +5,20 @@ everything is pre-release (`0.1.0`).
 
 ## Unreleased
 
+* Lean 4.36.0 (was 4.29.1). `#zempic` now accepts 4.36.x and refuses other versions unless
+  `zempic.allowOtherLean` is set. The library built unchanged; on the full suite three things in the newer Lean failed
+  in the garden (215 of 223 OK) and are fixed:
+  * `T.ctorIdx` for a type with several constructors is now `getObjTagNat`, the object's tag (derived `BEq`, `Ord`
+    and `DecidableEq` on enums use it, and so do `Std.Format`'s). It is emitted as a `case` that returns the
+    constructor's position. A new garden program `ctor_idx` reaches it on an enum, on constructors with fields and on a
+    generic type; numbering the constructors backwards makes `ctor_idx` and `deriving` give wrong answers.
+  * `Array.propagateMark`, `String.propagateMark` and `ByteArray.propagateMark` move a marker of Lean's runtime and
+    return their second argument; here they are the identity (hash maps and sets use the array one). The ownership
+    analysis does not know them, so their result is treated as shared: correct, possibly a copy where Lean updates in
+    place.
+  * `String.trim` is gone; the three garden programs that used it call `trimAscii.toString`.
+  The benchmark numbers were measured on 4.29.1 and have not been re-measured.
+
 * `Array.map` and read-only loops (`foldl`, `foldr`, `any`, `all`, `contains`, hand-written loops) read and write the
   raw buffer like the other hoisted loops. The map's write has an in-line fast path that returns its own argument (an
   inlined function that rebuilds `Arr` allocated 24 bytes per element under `-fno-cse`), and `ZNat` and `Word`
